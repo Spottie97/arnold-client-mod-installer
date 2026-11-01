@@ -50,6 +50,7 @@ jobs:
           releaseName: ${{ github.ref_name }}
           releaseDraft: true
           includeUpdaterJson: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+          # Never pass --features local-source. That flag is test-only.
           args: --bundles ${{ matrix.bundles }} ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' && '--features updater' || '' }}
       - name: Build slim AppImage (system WebKit, Discord-sized)
         if: matrix.platform == 'ubuntu-22.04'

@@ -2,6 +2,7 @@
 # Build and sign manifest.json + SHA512SUMS.txt for GitHub release tag mods-2026.11.1.
 # Usage:
 #   tools/release-manifest --test-key
+#   tools/release-manifest --from-folder /path/to/release-mods-2026.11.1
 #   MANIFEST_SIGNING_KEY=... tools/release-manifest --out dist/mods --assets tools/release-data
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"

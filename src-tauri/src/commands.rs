@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
 
 use crate::backup::{
@@ -19,10 +19,11 @@ use crate::errors::{AppError, ErrorPayload};
 use crate::fetch::UreqFetcher;
 use crate::import::{adopt_import, detect_import, ImportOffer};
 use crate::install::{repair_tracked, run_install, ProgressEvent};
+use crate::local_source::{load_local_manifest, LocalAwareFetcher, LOCAL_SOURCE_BANNER};
 use crate::log::{build_summary, diagnostics_text, export_log_zip};
 use crate::manifest::{
-    component_by_id, default_cache_dir, lite_preset, load_best_manifest, Manifest, ManifestLoad,
-    SNOW_LITE_PRESET,
+    component_by_id, default_cache_dir, lite_preset, load_best_manifest, load_bundled_manifest,
+    Manifest, ManifestLoad, SNOW_LITE_PRESET, TEST_MANIFEST_PUBLIC_KEY_HEX,
 };
 use crate::plan::{build_plan, InstallPlan, Selection};
 use crate::prefs::{load_prefs, save_prefs, Prefs};
@@ -35,6 +36,7 @@ pub struct AppState {
     pub game_dir: Mutex<Option<PathBuf>>,
     pub cancel_flag: Mutex<Arc<AtomicBool>>,
     pub manifest: Mutex<Option<ManifestLoad>>,
+    pub local_source: Mutex<Option<PathBuf>>,
 }
 
 impl Default for AppState {
@@ -45,11 +47,16 @@ impl Default for AppState {
 
 impl AppState {
     pub fn new() -> Self {
+        Self::with_local_source(None)
+    }
+
+    pub fn with_local_source(local_source: Option<PathBuf>) -> Self {
         let prefs = load_prefs().unwrap_or_default();
         Self {
             game_dir: Mutex::new(prefs.last_game_dir),
             cancel_flag: Mutex::new(Arc::new(AtomicBool::new(false))),
             manifest: Mutex::new(None),
+            local_source: Mutex::new(local_source),
         }
     }
 }
@@ -71,17 +78,59 @@ fn game_dir_of(state: &AppState) -> Result<PathBuf, AppError> {
         })
 }
 
+fn local_source_dir(state: &AppState) -> Option<PathBuf> {
+    state.local_source.lock().ok().and_then(|g| g.clone())
+}
+
+fn make_fetcher(state: &AppState) -> LocalAwareFetcher<UreqFetcher> {
+    let root = if crate::local_source::is_enabled() {
+        local_source_dir(state)
+    } else {
+        None
+    };
+    LocalAwareFetcher::new(UreqFetcher::new(), root)
+}
+
+fn require_local_folder(state: &AppState) -> Result<(), AppError> {
+    if crate::local_source::is_enabled() && local_source_dir(state).is_none() {
+        return Err(AppError::State(
+            "TEST BUILD: choose the folder that has manifest.json".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn pending_local_load() -> Result<ManifestLoad, AppError> {
+    let manifest = load_bundled_manifest()?;
+    Ok(ManifestLoad {
+        manifest,
+        source: "local".into(),
+        offline: false,
+        message: Some(format!(
+            "{LOCAL_SOURCE_BANNER}. Choose the folder that has manifest.json."
+        )),
+        local_source: true,
+        local_source_dir: None,
+    })
+}
+
 fn cached_or_load(state: &AppState) -> Result<ManifestLoad, AppError> {
     if let Ok(guard) = state.manifest.lock() {
         if let Some(loaded) = guard.clone() {
             return Ok(loaded);
         }
     }
-    let loaded = load_best_manifest(
-        &UreqFetcher::new(),
-        &default_cache_dir(),
-        crate::manifest::TEST_MANIFEST_PUBLIC_KEY_HEX,
-    );
+    let loaded = if let Some(dir) = local_source_dir(state) {
+        load_local_manifest(&dir, TEST_MANIFEST_PUBLIC_KEY_HEX)?
+    } else if crate::local_source::is_enabled() {
+        pending_local_load()?
+    } else {
+        load_best_manifest(
+            &UreqFetcher::new(),
+            &default_cache_dir(),
+            TEST_MANIFEST_PUBLIC_KEY_HEX,
+        )
+    };
     if let Ok(mut guard) = state.manifest.lock() {
         *guard = Some(loaded.clone());
     }
@@ -152,11 +201,12 @@ pub fn install(
     };
     let ram = probe_hardware().ram_gb;
     let replace = replace_collisions.unwrap_or(false);
+    require_local_folder(&state).map_err(|e| e.to_payload())?;
     run_install(
         &game,
         &plan,
         &loaded.manifest,
-        &UreqFetcher::new(),
+        &make_fetcher(&state),
         flag.as_ref(),
         replace,
         ram,
@@ -186,10 +236,11 @@ pub fn repair(app: AppHandle, state: State<AppState>) -> Result<String, ErrorPay
         }
         next
     };
+    require_local_folder(&state).map_err(|e| e.to_payload())?;
     repair_tracked(
         &game,
         &loaded.manifest,
-        &UreqFetcher::new(),
+        &make_fetcher(&state),
         flag.as_ref(),
         probe_hardware().ram_gb,
         &|event: ProgressEvent| {
@@ -515,6 +566,81 @@ pub async fn download_and_install(_app: AppHandle) -> Result<(), ErrorPayload> {
         }
         .to_payload())
     }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalSourceInfo {
+    pub enabled: bool,
+    pub dir: Option<String>,
+    pub banner: Option<String>,
+    pub needs_folder: bool,
+}
+
+fn local_source_info(state: &AppState) -> LocalSourceInfo {
+    let enabled = crate::local_source::is_enabled();
+    let dir = local_source_dir(state).map(|p| p.display().to_string());
+    LocalSourceInfo {
+        enabled,
+        dir: dir.clone(),
+        banner: enabled.then(|| LOCAL_SOURCE_BANNER.to_string()),
+        needs_folder: enabled && dir.is_none(),
+    }
+}
+
+fn store_local_source(state: &AppState, dir: PathBuf) -> Result<LocalSourceInfo, AppError> {
+    if !crate::local_source::is_enabled() {
+        return Err(AppError::NotImplemented {
+            what: "local-source test build".into(),
+        });
+    }
+    if !dir.is_dir() {
+        return Err(AppError::State(format!(
+            "TEST BUILD: not a folder: {}",
+            dir.display()
+        )));
+    }
+    let dir = dir.canonicalize()?;
+    {
+        let mut guard = state.local_source.lock().map_err(|_| lock_err())?;
+        *guard = Some(dir);
+    }
+    if let Ok(mut guard) = state.manifest.lock() {
+        *guard = None;
+    }
+    Ok(local_source_info(state))
+}
+
+#[tauri::command]
+pub fn get_local_source(state: State<AppState>) -> LocalSourceInfo {
+    local_source_info(&state)
+}
+
+#[tauri::command]
+pub fn pick_local_source(state: State<AppState>) -> Result<LocalSourceInfo, ErrorPayload> {
+    #[cfg(feature = "local-source")]
+    {
+        let Some(dir) = crate::local_source::pick_folder() else {
+            return Ok(local_source_info(&state));
+        };
+        store_local_source(&state, dir).map_err(|e| e.to_payload())
+    }
+    #[cfg(not(feature = "local-source"))]
+    {
+        let _ = state;
+        Err(AppError::NotImplemented {
+            what: "local-source test build".into(),
+        }
+        .to_payload())
+    }
+}
+
+#[tauri::command]
+pub fn set_local_source(
+    dir: String,
+    state: State<AppState>,
+) -> Result<LocalSourceInfo, ErrorPayload> {
+    store_local_source(&state, PathBuf::from(dir)).map_err(|e| e.to_payload())
 }
 
 #[tauri::command]

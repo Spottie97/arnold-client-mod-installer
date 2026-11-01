@@ -539,6 +539,10 @@ pub struct ManifestLoad {
     pub offline: bool,
     #[serde(default)]
     pub message: Option<String>,
+    #[serde(default)]
+    pub local_source: bool,
+    #[serde(default)]
+    pub local_source_dir: Option<String>,
 }
 
 pub fn cache_paths(cache_dir: &Path) -> (std::path::PathBuf, std::path::PathBuf) {
@@ -579,7 +583,7 @@ pub fn fetch_remote_manifest<F: Fetcher>(
     Ok((manifest, bytes, signature))
 }
 
-fn decode_signature(raw: &[u8]) -> Result<Vec<u8>, AppError> {
+pub(crate) fn decode_signature(raw: &[u8]) -> Result<Vec<u8>, AppError> {
     if raw.len() == 64 {
         return Ok(raw.to_vec());
     }
@@ -608,6 +612,8 @@ pub fn load_best_manifest<F: Fetcher>(
                 source: "remote".into(),
                 offline: false,
                 message: None,
+                local_source: false,
+                local_source_dir: None,
             }
         }
         Err(remote_err) => match load_cached_manifest(cache_dir, public_key_hex) {
@@ -618,6 +624,8 @@ pub fn load_best_manifest<F: Fetcher>(
                 message: Some(format!(
                     "Using the last good mod list (offline). {remote_err}"
                 )),
+                local_source: false,
+                local_source_dir: None,
             },
             Err(_) => match load_bundled_manifest() {
                 Ok(manifest) => ManifestLoad {
@@ -627,6 +635,8 @@ pub fn load_best_manifest<F: Fetcher>(
                     message: Some(format!(
                         "Using the bundled mod list. Remote fetch failed: {remote_err}"
                     )),
+                    local_source: false,
+                    local_source_dir: None,
                 },
                 Err(bundled_err) => ManifestLoad {
                     manifest: Manifest {
@@ -651,6 +661,8 @@ pub fn load_best_manifest<F: Fetcher>(
                     message: Some(format!(
                         "No signed mod list is available. {remote_err}; bundled: {bundled_err}"
                     )),
+                    local_source: false,
+                    local_source_dir: None,
                 },
             },
         },

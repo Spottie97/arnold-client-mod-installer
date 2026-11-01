@@ -15,6 +15,7 @@ use crate::errors::AppError;
 use crate::fabric::install_loader;
 use crate::fetch::Fetcher;
 use crate::import::{is_known_legacy_snow_jar, SNOW_LEGACY_GLOBS};
+use crate::local_source::copy_local_settings;
 use crate::log::append_install_log;
 use crate::manifest::{component_by_id, lite_preset, FileDest, Manifest};
 use crate::plan::{match_glob, InstallPlan, PlanFile};
@@ -440,6 +441,10 @@ pub fn run_install<F: Fetcher>(
                     fs::remove_file(dest)?;
                 }
             }
+        }
+
+        if let Some(root) = fetcher.local_root() {
+            copy_local_settings(root, game_dir)?;
         }
 
         let quality_existed: Vec<String> = quality_snapshot_paths(manifest, &plan.components)

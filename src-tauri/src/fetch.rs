@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::io::Read;
+use std::path::Path;
 use std::time::Duration;
 
 use crate::download::{classify_loader_url, classify_source_url, is_allowed_redirect};
@@ -16,6 +17,10 @@ pub trait Fetcher {
     }
 
     fn fetch_kind(&self, url: &str, kind: FetchKind) -> Result<Vec<u8>, AppError>;
+
+    fn local_root(&self) -> Option<&Path> {
+        None
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

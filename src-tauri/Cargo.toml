@@ -29,10 +29,13 @@ dirs = "5"
 ureq = { version = "2.12", default-features = false, features = ["tls"] }
 zip = { version = "2.2", default-features = false, features = ["deflate"] }
 tauri-plugin-updater = { version = "2", optional = true }
+rfd = { version = "0.15", optional = true }
 
 [features]
 default = []
 updater = ["dep:tauri-plugin-updater"]
+# Test-only. Never enable in the app-release workflow.
+local-source = ["dep:rfd"]
 
 [[bin]]
 name = "arnold-client-mods"

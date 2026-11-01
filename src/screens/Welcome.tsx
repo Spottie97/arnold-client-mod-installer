@@ -1,4 +1,5 @@
 import { StatusChip } from "../components/StatusChip";
+import type { LocalSourceInfo } from "../lib/localSource";
 import type { Detection, InstalledState, Recommendation, UpdateBadge } from "../types";
 
 export function Welcome({
@@ -6,15 +7,19 @@ export function Welcome({
   installed,
   recommendation,
   badges,
+  localSource,
   onHelp,
   onInstallRecommended,
+  onPickLocalSource,
 }: {
   detection: Detection;
   installed: InstalledState | null;
   recommendation: Recommendation;
   badges: UpdateBadge[];
+  localSource?: LocalSourceInfo | null;
   onHelp: () => void;
   onInstallRecommended: () => void;
+  onPickLocalSource?: () => void;
 }) {
   const already = Boolean(installed);
   return (
@@ -25,6 +30,21 @@ export function Welcome({
         packs. Vanilla clients can still join. Everything is checked with SHA-512 and backed up
         before anything changes.
       </p>
+      {localSource?.enabled ? (
+        <section className="panel mt-8 max-w-2xl border border-gold/40">
+          <h2 className="font-heading text-2xl text-gold">TEST BUILD - local source</h2>
+          <p className="mt-2 text-muted">
+            {localSource.dir
+              ? `Reading manifest.json, jars and settings from ${localSource.dir}.`
+              : "Double-click is enough: pick the folder that has manifest.json and the jars."}
+          </p>
+          {onPickLocalSource ? (
+            <button type="button" className="btn-primary mt-4" onClick={onPickLocalSource}>
+              {localSource.needsFolder ? "Choose mods folder" : "Change folder"}
+            </button>
+          ) : null}
+        </section>
+      ) : null}
       <div className="mt-8 flex flex-wrap gap-3">
         <StatusChip
           tone={detection.minecraftVersionInstalled ? "ok" : "warn"}

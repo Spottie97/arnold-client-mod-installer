@@ -9,12 +9,14 @@ import {
   detect,
   detectLegacy,
   exportLog,
+  getLocalSource,
   getManifest,
   getPrefs,
   listInstalled,
   listSnapshots,
   listenProgress,
   openLauncher,
+  pickLocalSource,
   plan,
   repairInstall,
   runInstall,
@@ -23,6 +25,7 @@ import {
   setQuality,
   setTourDone,
 } from "./lib/api";
+import { pickBanner, type LocalSourceInfo } from "./lib/localSource";
 import { parseQuality, snowLiteForQuality } from "./lib/quality";
 import { TOUR_TIPS } from "./lib/tour";
 import { updateBadges } from "./lib/updates";
@@ -92,6 +95,7 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>(screenFromHash);
   const [manifest, setManifest] = useState<Manifest | null>(null);
   const [offlineBanner, setOfflineBanner] = useState<string | null>(null);
+  const [localSource, setLocalSource] = useState<LocalSourceInfo | null>(null);
   const [detection, setDetection] = useState<Detection | null>(null);
   const [recommendation, setRecommendation] = useState<Recommendation | null>(null);
   const [installed, setInstalled] = useState<InstalledState | null>(null);
@@ -138,7 +142,7 @@ export default function App() {
   useEffect(() => {
     let alive = true;
     void (async () => {
-      const [load, d, r, inst, snaps, prefs, legacy] = await Promise.all([
+      const [load, d, r, inst, snaps, prefs, legacy, local] = await Promise.all([
         getManifest(),
         detect(),
         scanHardware(),
@@ -146,9 +150,11 @@ export default function App() {
         listSnapshots(),
         getPrefs(),
         detectLegacy().catch(() => null),
+        getLocalSource(),
       ]);
       if (!alive) return;
       setManifest(load.manifest);
+      setLocalSource(local);
       setOfflineBanner(load.offline ? load.message ?? "Using the last good mod list (offline)." : null);
       setDetection(d);
       setRecommendation(r);
@@ -358,8 +364,20 @@ export default function App() {
           installed={installed}
           recommendation={recommendation}
           badges={badges}
+          localSource={localSource}
           onHelp={() => go("help")}
           onInstallRecommended={() => void startRecommended()}
+          onPickLocalSource={() => {
+            void pickLocalSource().then(async (info) => {
+              setLocalSource(info);
+              const load = await getManifest();
+              setManifest(load.manifest);
+              setOfflineBanner(
+                load.offline ? load.message ?? "Using the last good mod list (offline)." : null,
+              );
+              setCurrentPlan(await plan(selection));
+            });
+          }}
         />
       );
       break;
@@ -504,7 +522,7 @@ export default function App() {
           }}
         />
       ) : null}
-      <AppShell screen={screen} footer={footer} banner={offlineBanner}>
+      <AppShell screen={screen} footer={footer} banner={pickBanner(localSource, offlineBanner)}>
         {body}
       </AppShell>
     </>

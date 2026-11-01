@@ -109,9 +109,11 @@ export interface Manifest {
 
 export interface ManifestLoad {
   manifest: Manifest;
-  source: "remote" | "cache" | "bundled" | "error" | string;
+  source: "remote" | "cache" | "bundled" | "local" | "error" | string;
   offline: boolean;
   message?: string | null;
+  localSource?: boolean;
+  localSourceDir?: string | null;
 }
 
 export interface Detection {

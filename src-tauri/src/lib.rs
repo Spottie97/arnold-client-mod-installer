@@ -10,11 +10,13 @@ pub mod gpu;
 pub mod import;
 pub mod install;
 pub mod launcher;
+pub mod local_source;
 pub mod log;
 pub mod manifest;
 pub mod plan;
 pub mod prefs;
 pub mod quality;
+pub mod release_tool;
 pub mod scan;
 pub mod state;
 pub mod updater;
@@ -23,7 +25,17 @@ use commands::AppState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let builder = tauri::Builder::default().manage(AppState::new());
+    #[cfg(feature = "local-source")]
+    let local_dir = match crate::local_source::resolve_startup() {
+        Ok(dir) => dir,
+        Err(err) => {
+            eprintln!("{err}");
+            None
+        }
+    };
+    #[cfg(not(feature = "local-source"))]
+    let local_dir = None;
+    let builder = tauri::Builder::default().manage(AppState::with_local_source(local_dir));
 
     #[cfg(feature = "updater")]
     let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
@@ -53,6 +65,9 @@ pub fn run() {
             commands::set_config,
             commands::set_config_keys,
             commands::set_quality,
+            commands::get_local_source,
+            commands::pick_local_source,
+            commands::set_local_source,
             commands::check_update,
             commands::download_and_install,
             commands::snapshot_now,

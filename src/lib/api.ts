@@ -1,3 +1,4 @@
+import type { LocalSourceInfo } from "./localSource";
 import type {
   Detection,
   ErrorPayload,
@@ -29,6 +30,31 @@ function isTauri(): boolean {
 async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   const { invoke: tauriInvoke } = await import("@tauri-apps/api/core");
   return tauriInvoke<T>(cmd, args);
+}
+
+export async function getLocalSource(): Promise<LocalSourceInfo> {
+  if (!isTauri()) {
+    return { enabled: false, dir: null, banner: null, needsFolder: false };
+  }
+  try {
+    return await invoke<LocalSourceInfo>("get_local_source");
+  } catch {
+    return { enabled: false, dir: null, banner: null, needsFolder: false };
+  }
+}
+
+export async function pickLocalSource(): Promise<LocalSourceInfo> {
+  if (!isTauri()) {
+    return { enabled: false, dir: null, banner: null, needsFolder: false };
+  }
+  return invoke<LocalSourceInfo>("pick_local_source");
+}
+
+export async function setLocalSource(dir: string): Promise<LocalSourceInfo> {
+  if (!isTauri()) {
+    return { enabled: true, dir, banner: "TEST BUILD - local source", needsFolder: false };
+  }
+  return invoke<LocalSourceInfo>("set_local_source", { dir });
 }
 
 export async function getManifest(): Promise<ManifestLoad> {

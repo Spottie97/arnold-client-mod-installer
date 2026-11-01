@@ -8,6 +8,9 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
+    "dev:local": "tauri dev --features local-source",
+    "build:local": "tauri build --features local-source --bundles msi",
+    "test:local": "cargo test --manifest-path src-tauri/Cargo.toml --features local-source --bins --lib --tests",
     "lint": "tsc --noEmit && eslint src --ext .ts,.tsx",
     "test": "vitest run"
   },
