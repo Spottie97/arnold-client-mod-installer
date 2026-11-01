@@ -849,6 +849,19 @@ mod tests {
             .presets
             .contains_key(SNOW_LITE_PRESET));
         assert_eq!(preset.marker.as_deref(), Some("# arnold-installer-lite"));
+        assert_eq!(
+            snow.config
+                .as_ref()
+                .unwrap()
+                .settings
+                .get("quality")
+                .and_then(|s| s.default.as_str()),
+            Some("normal")
+        );
+        assert_eq!(
+            preset.overrides.get("quality").and_then(|v| v.as_str()),
+            Some("lite")
+        );
     }
 
     #[test]

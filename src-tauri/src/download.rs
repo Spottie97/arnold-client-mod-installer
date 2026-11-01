@@ -165,7 +165,7 @@ mod tests {
             "https://cdn.modrinth.com/data/AANobbMI/versions/sodium.jar"
         ));
         assert!(is_allowed_source_url(
-            "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.1/arnold-snowfall-1.2.0.jar"
+            "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.1/arnold-snowfall-1.3.3.jar"
         ));
         assert!(is_allowed_source_url(
             "https://github.com/Spottie97/arnold-client-mod-installer/releases/latest/download/manifest.json"

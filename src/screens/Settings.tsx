@@ -36,7 +36,8 @@ export function Settings({
       <p className="mt-3 text-muted">
         Quality writes Sodium, Iris, Complementary, ships and snow keys. Missing keys only —
         values you already set stay put, except ship waterMask, rigidRoot and calmWhenAboard stay
-        on. Snowfall 1.3 uses a quality key; 1.2 still has the snow.lite fallback.
+        on. Snowfall 1.3 writes the quality key directly. The snow.lite file swap is
+        only for migrating old 1.2 installs.
       </p>
       <section className="panel mt-6">
         <QualityPicker
@@ -59,7 +60,7 @@ export function Settings({
               void setConfig("snow", next).then(() => setMessage(next ? "snow.lite on" : "normal snow"));
             }}
           />
-          <span>Use snow.lite (lighter flakes, marked # arnold-installer-lite)</span>
+          <span>Use snow.lite only when migrating an old 1.2 file (# arnold-installer-lite)</span>
         </label>
       </section>
       <section className="panel mt-4">

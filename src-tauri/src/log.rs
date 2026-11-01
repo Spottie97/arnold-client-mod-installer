@@ -169,7 +169,7 @@ mod tests {
         let tmp = tempdir().unwrap();
         let game = tmp.path();
         let mut state = InstalledState::new("installer", "2026.11.1");
-        record_file(&mut state, "mods/arnold-snowfall-1.2.0.jar", "abc", "snow");
+        record_file(&mut state, "mods/arnold-snowfall-1.3.3.jar", "abc", "snow");
         save_state(game, &state).unwrap();
         append_install_log(game, &serde_json::json!({"step":"done"})).unwrap();
         fs::write(game.join("secrets.txt"), b"do-not-pack").unwrap();
@@ -202,7 +202,7 @@ mod tests {
         let mut state_file = archive.by_name("state.json").unwrap();
         let mut text = String::new();
         std::io::Read::read_to_string(&mut state_file, &mut text).unwrap();
-        assert!(text.contains("arnold-snowfall-1.2.0.jar"));
+        assert!(text.contains("arnold-snowfall-1.3.3.jar"));
     }
 
     #[test]

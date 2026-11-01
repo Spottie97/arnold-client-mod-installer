@@ -166,9 +166,9 @@ fn default_adaptive_fps() -> bool {
     true
 }
 
-/// 1.3 jar name. The signed list still ships `arnold-snowfall-1.2.0.jar`;
-/// potato/lite keep the 1.2 `# arnold-installer-lite` fallback until the list moves.
-pub const SNOW_V13_JAR: &str = "arnold-snowfall-1.3.0.jar";
+/// Current Snowfall jar. Quality writes the `quality` key on this build.
+/// The lite-file swap stays only for migrating 1.2 / pre-1.3.3 installs.
+pub const SNOW_V13_JAR: &str = "arnold-snowfall-1.3.3.jar";
 
 /// Arnold: these ship keys stay on. Quality must never write them false.
 pub const SHIPS_ALWAYS_TRUE: [&str; 3] = ["waterMask", "rigidRoot", "calmWhenAboard"];
@@ -673,9 +673,10 @@ fn apply_snow(
         Some(&lite_over)
     };
     // 1.3 writes `quality` and only fills adaptiveFps / fpsTarget when missing.
-    // Per-effect switches stay with the player. 1.2 still needs the lite-marker fallback
-    // until the list ships SNOW_V13_JAR.
-    let use_v12_fallback = row.snow.legacy_lite && owned && !looks_like_snow_v13(&existing);
+    // Per-effect switches stay with the player. The lite-file swap is only for
+    // migrating old installs that do not already have 1.3 keys.
+    let migrating_old = !existing.is_empty() && !looks_like_snow_v13(&existing);
+    let use_v12_fallback = row.snow.legacy_lite && owned && migrating_old;
     let base = if use_v12_fallback {
         apply_properties(None, &defaults, lite, header, marker, ConfigSwitch::ToLite).content
     } else if existing.is_empty() {
@@ -1253,9 +1254,21 @@ mod tests {
         assert_eq!(table.ultra.complementary.profile, "HIGH");
         assert_eq!(table.potato.sodium.weather_quality, "FAST");
         assert!(!table.potato.iris.enable_shaders);
-        assert_eq!(SNOW_V13_JAR, "arnold-snowfall-1.3.0.jar");
+        assert_eq!(SNOW_V13_JAR, "arnold-snowfall-1.3.3.jar");
         let snow = crate::manifest::component_by_id(&manifest, "snow").unwrap();
-        assert_eq!(snow.files[0].file, "arnold-snowfall-1.2.0.jar");
+        assert_eq!(snow.files[0].file, "arnold-snowfall-1.3.3.jar");
+        assert_eq!(snow.version, "1.3.3");
+        assert_eq!(snow.files[0].size, 152127);
+        assert!(snow
+            .legacy_match
+            .iter()
+            .any(|p| p == "arnold-snowfall*.jar"));
+        assert!(snow
+            .legacy_match
+            .iter()
+            .any(|p| p == "arnold-snow-client*.jar"));
+        assert!(snow.known_sha512.iter().any(|h| h
+            == "f281c3aa82bc83cf68cc95e6959a5135b32ebab9b850435b17e0d7691c4eac2e3c193a2ed87c14c24bb758adf0a01a0fd744d6ca36c0bfc4d52a38feb56d1285"));
     }
 
     #[test]
@@ -1302,6 +1315,24 @@ mod tests {
             "effect switches stay: {snow}"
         );
         assert!(snow.contains("breath=false"), "{snow}");
+    }
+
+    #[test]
+    fn snow_v13_fresh_install_writes_quality_not_lite_file() {
+        use crate::config::{LITE_MARKER, MANAGED_HEADER};
+        use crate::manifest::load_bundled_manifest;
+        use tempfile::tempdir;
+
+        let tmp = tempdir().unwrap();
+        let game = tmp.path();
+        let manifest = load_bundled_manifest().unwrap();
+        apply_quality(game, &manifest, QualityLevel::Lite, &["snow".into()], None).unwrap();
+        let snow = fs::read_to_string(game.join("config/arnold-snow-client.properties")).unwrap();
+        assert!(snow.starts_with(MANAGED_HEADER), "{snow}");
+        assert!(!snow.starts_with(LITE_MARKER), "{snow}");
+        assert!(snow.contains("quality=lite"), "{snow}");
+        assert!(snow.contains("adaptiveFps=true"), "{snow}");
+        assert!(snow.contains("fpsTarget=60"), "{snow}");
     }
 
     #[test]

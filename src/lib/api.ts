@@ -145,12 +145,12 @@ export async function detectLegacy(): Promise<ImportOffer> {
   if (!isTauri()) {
     return {
       found: true,
-      versionGuess: "2.3.x / 1.2.0 snowfall",
+      versionGuess: "2.3.x / 1.3.x snowfall",
       alreadyAdopted: false,
       jars: [
         {
-          path: "mods/arnold-snowfall-1.2.0.jar",
-          fileName: "arnold-snowfall-1.2.0.jar",
+          path: "mods/arnold-snowfall-1.3.2.jar",
+          fileName: "arnold-snowfall-1.3.2.jar",
           componentId: "snow",
           sha512: "abc",
           knownBuild: true,
