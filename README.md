@@ -1,10 +1,10 @@
 <p align="center"><img src="assets/banner.svg" alt="Arnold Client Mod Installer" width="100%"></p>
 
 <p align="center">
-  <img alt="Minecraft 26.3" src="https://img.shields.io/badge/Minecraft-26.3-e8761c?style=flat-square&labelColor=1a120c">
-  <img alt="Fabric" src="https://img.shields.io/badge/Fabric-0.20.1-f39a3c?style=flat-square&labelColor=1a120c">
-  <img alt="Platforms" src="https://img.shields.io/badge/Windows%20%7C%20macOS%20%7C%20Linux-eadfcf?style=flat-square&labelColor=1a120c">
-  <img alt="Status" src="https://img.shields.io/badge/3.0-in%20the%20forge-c95f12?style=flat-square&labelColor=1a120c">
+  <img alt="Minecraft 26.3" src="https://img.shields.io/badge/Minecraft-26.3-2DD4BF?style=flat-square&labelColor=1E1C26">
+  <img alt="Fabric" src="https://img.shields.io/badge/Fabric-0.20.1-9D5CFF?style=flat-square&labelColor=1E1C26">
+  <img alt="Platforms" src="https://img.shields.io/badge/Windows%20%7C%20macOS%20%7C%20Linux-F0ECE4?style=flat-square&labelColor=1E1C26">
+  <img alt="Status" src="https://img.shields.io/badge/3.0-in%20the%20forge-FFD25A?style=flat-square&labelColor=1E1C26">
 </p>
 
 ---

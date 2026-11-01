@@ -1,9 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="220" viewBox="0 0 960 220">
-<defs><radialGradient id="bg" cx="20%" cy="0%" r="90%"><stop offset="0" stop-color="#2a1d14"/><stop offset="0.6" stop-color="#141110"/></radialGradient>
-<linearGradient id="t" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f39a3c"/><stop offset="1" stop-color="#c95f12"/></linearGradient></defs>
-<rect width="960" height="220" fill="url(#bg)"/><rect y="216" width="960" height="4" fill="#6b3a12"/>
-<polygon points="110,40 160,58 152,140 110,175 68,140 60,58" fill="#e8761c"/>
-<text x="110" y="128" font-family="Georgia,serif" font-size="64" font-weight="bold" fill="#1a120c" text-anchor="middle">A</text>
-<text x="200" y="105" font-family="Georgia,'Times New Roman',serif" font-size="44" fill="url(#t)" letter-spacing="2">Arnold Client Mod Installer</text>
-<text x="202" y="145" font-family="Segoe UI,Arial,sans-serif" font-size="18" fill="#a8937a">Ships, decks and snowfall for the Avalon realm, installed in one click</text>
+<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#171A31"/><stop offset="0.6" stop-color="#312357"/><stop offset="1" stop-color="#472A71"/></linearGradient>
+<radialGradient id="glow" cx="85%" cy="20%" r="40%"><stop offset="0" stop-color="#B5EFF2" stop-opacity="0.25"/><stop offset="1" stop-color="#B5EFF2" stop-opacity="0"/></radialGradient></defs>
+<rect width="960" height="220" fill="url(#bg)"/><rect width="960" height="220" fill="url(#glow)"/>
+<rect y="214" width="960" height="6" fill="#2DD4BF"/>
+<polygon points="110,40 160,58 152,140 110,175 68,140 60,58" fill="#E8761C" stroke="#FFD25A" stroke-width="3"/>
+<text x="110" y="128" font-family="'Pixelify Sans',monospace" font-size="60" font-weight="bold" fill="#1E1C26" text-anchor="middle">A</text>
+<text x="200" y="105" font-family="'Pixelify Sans','Courier New',monospace" font-size="42" font-weight="bold" fill="#FFD25A" letter-spacing="1">Arnold Client Mod Installer</text>
+<text x="202" y="145" font-family="Segoe UI,Arial,sans-serif" font-size="18" fill="#AAA5B4">Ships, decks and snowfall for the Avalon realm, installed in one click</text>
 </svg>
