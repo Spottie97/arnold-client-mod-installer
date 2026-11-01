@@ -1,0 +1,11 @@
+{
+  "id": "lowram",
+  "cpu": "AMD Ryzen 5 3600",
+  "cores": 6,
+  "ramGB": 6,
+  "gpu": "NVIDIA GeForce GTX 1060",
+  "vramGB": 6,
+  "dedicatedGpu": true,
+  "expectKit": "basic",
+  "expectSnowLite": true
+}

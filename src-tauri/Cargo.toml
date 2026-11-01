@@ -1,0 +1,38 @@
+[package]
+name = "arnold-client-mods"
+version = "3.0.0"
+description = "Optional looks and effects for the Arnold server"
+authors = ["Arnold Client Mods"]
+license = "Apache-2.0"
+edition = "2021"
+rust-version = "1.90"
+default-run = "arnold-client-mods"
+
+[lib]
+name = "arnold_client_mods_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+thiserror = "2"
+sha2 = "0.10"
+hex = "0.4"
+ed25519-dalek = "2"
+sysinfo = { version = "0.32", default-features = false, features = ["system"] }
+url = "2"
+dirs = "5"
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

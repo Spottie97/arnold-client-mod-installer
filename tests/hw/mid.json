@@ -1,0 +1,11 @@
+{
+  "id": "mid",
+  "cpu": "Intel Core i5-10400",
+  "cores": 6,
+  "ramGB": 16,
+  "gpu": "NVIDIA GeForce GTX 1650",
+  "vramGB": 4,
+  "dedicatedGpu": true,
+  "expectKit": "full",
+  "expectSnowLite": false
+}

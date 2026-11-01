@@ -1,0 +1,179 @@
+export type Screen =
+  | "welcome"
+  | "scan"
+  | "kit"
+  | "custom"
+  | "progress"
+  | "done"
+  | "error"
+  | "manage"
+  | "help";
+
+export type ComponentGroup = "base" | "shaders" | "arnold" | "ocean";
+export type ComponentKind = "base" | "download" | "pending";
+export type FileDest = "mods" | "shaderpacks";
+
+export interface ComponentFile {
+  file: string;
+  dest: FileDest;
+  match: string;
+  url: string;
+  sha512: string;
+  size: number;
+}
+
+export interface SettingSpec {
+  type: "bool" | "int" | "number" | "string";
+  default: unknown;
+}
+
+export interface ModConfig {
+  file: string;
+  format: string;
+  header?: string;
+  settings: Record<string, SettingSpec>;
+  presets?: Record<string, { marker?: string; overrides: Record<string, unknown> }>;
+}
+
+export interface Component {
+  id: string;
+  group: ComponentGroup;
+  kind: ComponentKind;
+  required?: boolean;
+  requires?: string[];
+  name: string;
+  version: string;
+  description: string;
+  requiredInAllKits?: boolean;
+  minServerShipwright?: string;
+  config?: ModConfig;
+  jvmFlags?: { flag: string; purpose: string }[];
+  pending?: { source: string; project?: string; page?: string };
+  files: ComponentFile[];
+}
+
+export interface Kit {
+  name: string;
+  components: string[];
+  snowLite?: boolean;
+  description: string;
+}
+
+export interface Manifest {
+  schema: number;
+  manifestVersion: string;
+  minAppVersion: string;
+  minecraft: string;
+  currentServerShipwright?: string;
+  loader: { id: string; url: string; sha512: string };
+  components: Component[];
+  kits: Record<string, Kit>;
+  addons?: Record<
+    string,
+    { name: string; components: string[]; defaultOn?: Record<string, boolean> }
+  >;
+}
+
+export interface Detection {
+  gameDir?: string | null;
+  candidates: string[];
+  minecraftVersion: string;
+  minecraftVersionInstalled: boolean;
+  fabric: { installed: boolean; profileId?: string | null; willInstall: boolean };
+  gameRunning: boolean;
+  importedFromLegacy: boolean;
+}
+
+export interface Hardware {
+  cpu: string;
+  cores: number;
+  ramGb: number;
+  gpu: string;
+  vramGb: number;
+  dedicatedGpu: boolean;
+}
+
+export interface Recommendation {
+  kit: string;
+  snowLite: boolean;
+  reasons: string[];
+  hardware: Hardware;
+  warnLowRam: boolean;
+}
+
+export interface Selection {
+  kit: string;
+  customComponents: string[];
+  ocean: boolean;
+  snowLite: boolean | null;
+}
+
+export interface PlanFile {
+  componentId: string;
+  name: string;
+  version: string;
+  file: string;
+  dest: FileDest;
+  url: string;
+  sha512: string;
+  size: number;
+}
+
+export interface InstallPlan {
+  add: PlanFile[];
+  update: PlanFile[];
+  remove: PlanFile[];
+  configs: { componentId: string; file: string; snowLite: boolean }[];
+  loader?: { id: string; url: string; sha512: string } | null;
+  snowLite: boolean;
+  kit: string;
+  components: string[];
+  warnings: string[];
+  bytes: number;
+}
+
+export interface InstalledState {
+  schema: number;
+  source: string;
+  manifestVersion: string;
+  kit?: string | null;
+  components: { id: string; version: string; name: string }[];
+  files: { path: string; sha512: string; componentId: string }[];
+  updatedAt: string;
+}
+
+export interface SnapshotMeta {
+  id: string;
+  createdAt: string;
+  label: string;
+  kit?: string | null;
+  files: string[];
+}
+
+export interface ErrorPayload {
+  code: string;
+  title: string;
+  hint: string;
+  detail: string;
+}
+
+export interface ProgressEvent {
+  runId: string;
+  step: string;
+  file?: string;
+  status: "pending" | "running" | "done" | "error";
+  percent: number;
+  message: string;
+}
+
+export interface AppModel {
+  manifest: Manifest;
+  detection: Detection;
+  recommendation: Recommendation;
+  installed: InstalledState | null;
+  snapshots: SnapshotMeta[];
+}
+
+export function assertNever(value: never): never {
+  throw new Error(`unexpected value: ${String(value)}`);
+}

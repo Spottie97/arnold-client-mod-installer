@@ -1,0 +1,444 @@
+{
+  "schema": 3,
+  "manifestVersion": "2026.11.01-1",
+  "minAppVersion": "3.0.0",
+  "minecraft": "26.3",
+  "currentServerShipwright": "0.11.0",
+  "loader": {
+    "id": "fabric-loader-0.20.1-26.3",
+    "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-20261101-1/fabric-loader-0.20.1-26.3.json",
+    "sha512": "373da0df9cc9e76f2ced4c0cf30417a0311553d9b6f692f1e3169b859d8f909fc74add61331ca7a173efecd06a66e3f89afd703b114da77d8f20d2fc379890da"
+  },
+  "components": [
+    {
+      "id": "base",
+      "group": "base",
+      "kind": "base",
+      "required": true,
+      "requiredInAllKits": false,
+      "name": "Fabric API",
+      "version": "0.165.0",
+      "description": "Fabric API used by every Arnold client mod.",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "file": "fabric-api-0.165.0+1.21.11.jar",
+          "dest": "mods",
+          "match": "fabric-api-*.jar",
+          "url": "https://cdn.modrinth.com/data/P7dR8mSH/versions/fabric-api-0.165.0.jar",
+          "sha512": "2bc69487c30b4d1df9ecaf1742a2a2538c5ee4b6def51ff781e1dca0af4a50b0c7472ca73798f8b7c6e926235031613509ce0b2f1618d5f6bb7814d080b675f5",
+          "size": 2200000
+        }
+      ]
+    },
+    {
+      "id": "sodium",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "name": "Sodium",
+      "version": "0.9.2",
+      "description": "Raises FPS on every PC.",
+      "license": "LicenseRef-Sodium",
+      "files": [
+        {
+          "file": "sodium-fabric-0.9.2+mc26.3.jar",
+          "dest": "mods",
+          "match": "sodium-fabric-*.jar",
+          "url": "https://cdn.modrinth.com/data/AANobbMI/versions/sodium-0.9.2.jar",
+          "sha512": "0781a6bc98b9f4f7abdb3c1429717510c832dbab9dd370f27cf2340049fdbe36e355c30a5befcaba731d3730b2621aa06a3408892b09555a2d9f84dbf9e00665",
+          "size": 1100000
+        }
+      ]
+    },
+    {
+      "id": "shaders",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "sodium",
+        "base"
+      ],
+      "name": "Iris + Complementary",
+      "version": "1.11.7",
+      "description": "Iris shader loader and Complementary Reimagined.",
+      "license": "LGPL-3.0",
+      "files": [
+        {
+          "file": "iris-fabric-1.11.7+mc26.3.jar",
+          "dest": "mods",
+          "match": "iris-*.jar",
+          "url": "https://cdn.modrinth.com/data/YL57xq9U/versions/iris-1.11.7.jar",
+          "sha512": "746347b6b0ae73ffe740eb5da99147592a68cadee4baae5ed8a5598f752a24e794d3c816ada028019abfc3957ad40b3325e9d9ec692a6484d2bb6369e684b45d",
+          "size": 2800000
+        },
+        {
+          "file": "ComplementaryReimagined_r5.9.3.zip",
+          "dest": "shaderpacks",
+          "match": "ComplementaryReimagined*.zip",
+          "url": "https://cdn.modrinth.com/data/HVjoWyZS/versions/comp-r5.9.3.zip",
+          "sha512": "b1d7eb8ce57f2ae414f7fe68d4012522a863b68a6a561b69bc247ab0f50eb6b70f58313f40aa18d521b2840685e1af2ab6424ef6924788248518672deec10c4b",
+          "size": 140000000
+        }
+      ]
+    },
+    {
+      "id": "deck",
+      "group": "arnold",
+      "kind": "download",
+      "requiredInAllKits": true,
+      "name": "Arnold Deck",
+      "version": "0.11.1",
+      "description": "Needed for smooth ship decks on the Arnold server.",
+      "license": "LicenseRef-Arnold",
+      "minServerShipwright": "0.11.1",
+      "uninstallNote": "Deck is only removed with Remove all Arnold mods.",
+      "jvmFlags": [
+        {
+          "flag": "-Darnold.deck.noPredict=true",
+          "purpose": "turn off client prediction (troubleshooting)"
+        }
+      ],
+      "files": [
+        {
+          "file": "arnold-deck-0.11.1.jar",
+          "dest": "mods",
+          "match": "arnold-deck-*.jar",
+          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-20261101-1/arnold-deck-0.11.1.jar",
+          "sha512": "ffc3d28e9839a3a7234d38b570b969914696eb51878d59f14a0a96575661a03d1d662bba63617d03b62625e0d4dca7b6dd79a33c3c3188206e29f109609b204b",
+          "size": 400000
+        }
+      ]
+    },
+    {
+      "id": "ships",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "deck"
+      ],
+      "name": "Arnold Ships",
+      "version": "0.10.2",
+      "description": "Client ships visuals for the Arnold server.",
+      "license": "LicenseRef-Arnold",
+      "minServerShipwright": "0.10.0",
+      "config": {
+        "file": "config/arnold-ships-client.properties",
+        "format": "properties",
+        "header": "# arnold-installer-managed",
+        "merge": "addMissingOnly",
+        "settings": {
+          "particles": {
+            "type": "number",
+            "default": 1.0
+          },
+          "smooth": {
+            "type": "bool",
+            "default": true
+          },
+          "hideVanillaBoat": {
+            "type": "bool",
+            "default": true
+          },
+          "animate": {
+            "type": "bool",
+            "default": true
+          },
+          "hdModels": {
+            "type": "bool",
+            "default": true
+          },
+          "waves": {
+            "type": "bool",
+            "default": true
+          },
+          "spray": {
+            "type": "bool",
+            "default": true
+          },
+          "wake": {
+            "type": "bool",
+            "default": true
+          },
+          "sailFill": {
+            "type": "bool",
+            "default": true
+          },
+          "wetHull": {
+            "type": "bool",
+            "default": true
+          },
+          "waterMask": {
+            "type": "bool",
+            "default": true
+          },
+          "rigidRoot": {
+            "type": "bool",
+            "default": true
+          },
+          "calmWhenAboard": {
+            "type": "bool",
+            "default": true
+          }
+        }
+      },
+      "files": [
+        {
+          "file": "arnold-ships-0.10.2.jar",
+          "dest": "mods",
+          "match": "arnold-ships-*.jar",
+          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-20261101-1/arnold-ships-0.10.2.jar",
+          "sha512": "12d1ba6f44c660eaf38e250c843572d1e0477cb61faf5d110535afcec946c7eee850dd4683b1010d5548c4d0246b9d6d938580c9d29265123e652e269e689c20",
+          "size": 900000
+        }
+      ]
+    },
+    {
+      "id": "snow",
+      "group": "arnold",
+      "kind": "download",
+      "name": "Arnold Snow",
+      "version": "0.8.0",
+      "description": "Client snow, breath and footprints.",
+      "license": "LicenseRef-Arnold",
+      "minServerShipwright": "0.8.0",
+      "config": {
+        "file": "config/arnold-snow-client.properties",
+        "format": "properties",
+        "header": "# arnold-installer-managed",
+        "merge": "addMissingOnly",
+        "settings": {
+          "denserSnow": {
+            "type": "bool",
+            "default": true
+          },
+          "drift": {
+            "type": "bool",
+            "default": true
+          },
+          "crunch": {
+            "type": "bool",
+            "default": true
+          },
+          "footprints": {
+            "type": "bool",
+            "default": true
+          },
+          "breath": {
+            "type": "bool",
+            "default": true
+          },
+          "frost": {
+            "type": "bool",
+            "default": true
+          },
+          "smoothSnow": {
+            "type": "bool",
+            "default": true
+          },
+          "treeCaps": {
+            "type": "bool",
+            "default": true
+          },
+          "softFlakes": {
+            "type": "bool",
+            "default": true
+          },
+          "everywhere": {
+            "type": "bool",
+            "default": false
+          },
+          "density": {
+            "type": "int",
+            "default": 24,
+            "min": 1,
+            "max": 64
+          },
+          "frostStrength": {
+            "type": "number",
+            "default": 0.45
+          },
+          "smoothRadius": {
+            "type": "int",
+            "default": 28
+          },
+          "smoothDetail": {
+            "type": "int",
+            "default": 2
+          },
+          "trailMobs": {
+            "type": "int",
+            "default": 6
+          },
+          "trailSeconds": {
+            "type": "int",
+            "default": 90
+          },
+          "maxPrints": {
+            "type": "int",
+            "default": 384
+          },
+          "deepSnow": {
+            "type": "number",
+            "default": 0.12
+          }
+        },
+        "presets": {
+          "lite": {
+            "marker": "# arnold-installer-lite",
+            "overrides": {
+              "density": 8,
+              "frostStrength": 0.25,
+              "smoothRadius": 14,
+              "smoothDetail": 1,
+              "treeCaps": false,
+              "trailMobs": 2,
+              "trailSeconds": 45,
+              "maxPrints": 96
+            }
+          }
+        }
+      },
+      "files": [
+        {
+          "file": "arnold-snow-0.8.0.jar",
+          "dest": "mods",
+          "match": "arnold-snow-*.jar",
+          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-20261101-1/arnold-snow-0.8.0.jar",
+          "sha512": "e4b15b771a766e4059523e740406dcd31f6bc15ac9fc21ce515925d75b2f7083ab2ac7ea949cf8dbc76260d498d0d94f8113ec8797b313ded9a15703d23c69ff",
+          "size": 500000
+        }
+      ]
+    },
+    {
+      "id": "particlerain",
+      "group": "ocean",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "name": "Particle Rain",
+      "version": "4.0.2",
+      "description": "Rain splash and weather particles.",
+      "license": "MIT",
+      "files": [
+        {
+          "file": "particle-rain-4.0.2.jar",
+          "dest": "mods",
+          "match": "particle-rain-*.jar",
+          "url": "https://cdn.modrinth.com/data/nri85YDI/versions/particle-rain-4.0.2.jar",
+          "sha512": "1148c125ad59d56b6b961e2b3fd7226c4888374dc7d31605d2d42dcb960d25131fa25f2ef759360288829e95edf835a6c602e4d66ca07d44431020c4157589e9",
+          "size": 300000
+        }
+      ]
+    },
+    {
+      "id": "wakes",
+      "group": "ocean",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "name": "Wakes",
+      "version": "0.7.3",
+      "description": "Boat and swim wakes.",
+      "license": "MIT",
+      "files": [
+        {
+          "file": "wakes-0.7.3.jar",
+          "dest": "mods",
+          "match": "wakes-*.jar",
+          "url": "https://cdn.modrinth.com/data/x0vXaNw6/versions/wakes-0.7.3.jar",
+          "sha512": "0fe8a6a69d2b09f0b0917d5652c8f26cc0493dfe5db9c4cd9351f582d75e818e4ab3c915d8038fa2f717ed5b529b1633cf6ff19d2417d9451334ba09aec542a8",
+          "size": 250000
+        }
+      ]
+    },
+    {
+      "id": "waves",
+      "group": "ocean",
+      "kind": "pending",
+      "name": "Realistic Waves",
+      "version": "coming-soon",
+      "description": "Coming soon.",
+      "license": "LicenseRef-Pending",
+      "pending": {
+        "source": "modrinth",
+        "project": "waves",
+        "page": "https://modrinth.com/mod/placeholder-waves"
+      },
+      "files": []
+    }
+  ],
+  "kits": {
+    "basic": {
+      "name": "Basic",
+      "components": [
+        "base",
+        "sodium",
+        "deck",
+        "ships",
+        "snow"
+      ],
+      "snowLite": true,
+      "description": "Ships, smooth decks, lighter snow, Sodium. Runs on almost any PC."
+    },
+    "full": {
+      "name": "Full",
+      "components": [
+        "base",
+        "sodium",
+        "shaders",
+        "deck",
+        "ships",
+        "snow"
+      ],
+      "snowLite": false,
+      "description": "Everything: Iris + Complementary shaders, full snow, ships."
+    },
+    "recommended": {
+      "name": "Recommended",
+      "components": [
+        "base",
+        "sodium",
+        "shaders",
+        "deck",
+        "ships",
+        "snow"
+      ],
+      "snowLite": false,
+      "description": "Full kit when this PC can take it; otherwise Basic."
+    }
+  },
+  "addons": {
+    "ocean": {
+      "name": "Ocean pack",
+      "components": [
+        "particlerain",
+        "wakes",
+        "waves"
+      ],
+      "defaultOn": {
+        "basic": true,
+        "full": true
+      }
+    }
+  },
+  "recommend": {
+    "full": {
+      "dedicatedGpu": true,
+      "vramGB": 4,
+      "ramGB": 16,
+      "cores": 4
+    },
+    "midSnowFull": {
+      "dedicatedGpu": true,
+      "vramGB": 2,
+      "ramGB": 8,
+      "cores": 4
+    },
+    "warnRamBelowGB": 8
+  }
+}
