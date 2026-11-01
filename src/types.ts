@@ -7,7 +7,9 @@ export type Screen =
   | "done"
   | "error"
   | "manage"
-  | "help";
+  | "help"
+  | "import"
+  | "settings";
 
 export type ComponentGroup = "base" | "shaders" | "arnold" | "ocean";
 export type ComponentKind = "base" | "download" | "pending";
@@ -25,6 +27,8 @@ export interface ComponentFile {
 export interface SettingSpec {
   type: "bool" | "int" | "number" | "string";
   default: unknown;
+  label?: string;
+  description?: string;
 }
 
 export interface ModConfig {
@@ -49,6 +53,8 @@ export interface Component {
   config?: ModConfig;
   jvmFlags?: { flag: string; purpose: string }[];
   pending?: { source: string; project?: string; page?: string };
+  legacyMatch?: string[];
+  knownSha512?: string[];
   files: ComponentFile[];
 }
 
@@ -57,6 +63,32 @@ export interface Kit {
   components: string[];
   snowLite?: boolean;
   description: string;
+}
+
+export type QualityLevel = "potato" | "lite" | "normal" | "ultra";
+
+export interface QualityRow {
+  label: string;
+  description: string;
+  skipComponents?: string[];
+  recommendOcean?: boolean;
+  snow?: { quality: string; fpsTarget?: number; adaptiveFps?: boolean; legacyLite?: boolean };
+  ships?: { particles: number; spray?: boolean; wake?: boolean; hdModels?: boolean };
+  sodium?: {
+    weatherQuality: string;
+    leavesQuality: string;
+    renderDistance?: number;
+    cloudStatus?: string;
+  };
+  iris?: { enableShaders: boolean };
+  complementary?: { profile: string };
+}
+
+export interface QualityTable {
+  potato: QualityRow;
+  lite: QualityRow;
+  normal: QualityRow;
+  ultra: QualityRow;
 }
 
 export interface Manifest {
@@ -72,6 +104,14 @@ export interface Manifest {
     string,
     { name: string; components: string[]; defaultOn?: Record<string, boolean> }
   >;
+  qualityPresets?: QualityTable;
+}
+
+export interface ManifestLoad {
+  manifest: Manifest;
+  source: "remote" | "cache" | "bundled" | "error" | string;
+  offline: boolean;
+  message?: string | null;
 }
 
 export interface Detection {
@@ -96,6 +136,8 @@ export interface Hardware {
 export interface Recommendation {
   kit: string;
   snowLite: boolean;
+  quality: QualityLevel;
+  recommendOcean: boolean;
   reasons: string[];
   hardware: Hardware;
   warnLowRam: boolean;
@@ -106,6 +148,7 @@ export interface Selection {
   customComponents: string[];
   ocean: boolean;
   snowLite: boolean | null;
+  quality: QualityLevel | null;
 }
 
 export interface PlanFile {
@@ -126,6 +169,7 @@ export interface InstallPlan {
   configs: { componentId: string; file: string; snowLite: boolean }[];
   loader?: { id: string; url: string; sha512: string } | null;
   snowLite: boolean;
+  quality: QualityLevel;
   kit: string;
   components: string[];
   warnings: string[];
@@ -137,6 +181,7 @@ export interface InstalledState {
   source: string;
   manifestVersion: string;
   kit?: string | null;
+  quality?: QualityLevel | null;
   components: { id: string; version: string; name: string }[];
   files: { path: string; sha512: string; componentId: string }[];
   updatedAt: string;
@@ -161,17 +206,38 @@ export interface ProgressEvent {
   runId: string;
   step: string;
   file?: string;
-  status: "pending" | "running" | "done" | "error";
+  status: "pending" | "running" | "done" | "error" | "cancelled" | string;
   percent: number;
   message: string;
 }
 
-export interface AppModel {
-  manifest: Manifest;
-  detection: Detection;
-  recommendation: Recommendation;
-  installed: InstalledState | null;
-  snapshots: SnapshotMeta[];
+export interface ImportJar {
+  path: string;
+  fileName: string;
+  componentId?: string | null;
+  sha512: string;
+  knownBuild: boolean;
+  tracked: boolean;
+}
+
+export interface ImportOffer {
+  found: boolean;
+  versionGuess?: string | null;
+  jars: ImportJar[];
+  backups: { path: string; kind: string }[];
+  alreadyAdopted: boolean;
+}
+
+export interface Prefs {
+  lastGameDir?: string | null;
+  tourDone: boolean;
+}
+
+export interface UpdateBadge {
+  id: string;
+  name: string;
+  installed: string;
+  available: string;
 }
 
 export function assertNever(value: never): never {

@@ -18,7 +18,9 @@ export function Scan({
         <Stat label="VRAM" value={`${hardware.vramGb} GB`} />
       </div>
       <section className="panel mt-6">
-        <p className="font-heading text-gold">Recommended kit: {recommendation.kit}</p>
+        <p className="font-heading text-gold">
+          Recommended kit: {recommendation.kit} · quality {recommendation.quality}
+        </p>
         <ul className="mt-3 space-y-1 text-muted">
           {recommendation.reasons.map((reason) => (
             <li key={reason}>{reason}</li>

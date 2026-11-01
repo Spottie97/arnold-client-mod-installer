@@ -38,6 +38,8 @@ pub enum AppError {
     State(String),
     #[error("Snapshot error: {0}")]
     Snapshot(String),
+    #[error("Install was cancelled")]
+    Cancelled,
     #[error("{what} is not implemented in this build")]
     NotImplemented { what: String },
     #[error("{title}")]
@@ -58,6 +60,12 @@ impl From<std::io::Error> for AppError {
 impl From<serde_json::Error> for AppError {
     fn from(value: serde_json::Error) -> Self {
         Self::ManifestSchema(value.to_string())
+    }
+}
+
+impl From<zip::result::ZipError> for AppError {
+    fn from(value: zip::result::ZipError) -> Self {
+        Self::Io(value.to_string())
     }
 }
 
@@ -83,6 +91,7 @@ impl AppError {
             Self::Io(_) => "E-IO".to_string(),
             Self::State(_) => "E-STATE".to_string(),
             Self::Snapshot(_) => "E-SNAPSHOT".to_string(),
+            Self::Cancelled => "E-CANCELLED".to_string(),
             Self::NotImplemented { .. } => "E-NOT-IMPLEMENTED".to_string(),
             Self::Other { code, .. } => code.clone(),
         }
@@ -91,7 +100,7 @@ impl AppError {
     pub fn to_payload(&self) -> ErrorPayload {
         match self {
             Self::McMissing { version, path } => ErrorPayload {
-                code: self.code().to_string(),
+                code: self.code(),
                 title: format!("Minecraft {version} isn't installed yet"),
                 hint: format!(
                     "Open the Minecraft Launcher, press Play once on Latest release ({version}), close the game, then press Try again."
@@ -99,13 +108,13 @@ impl AppError {
                 detail: format!("detected: versions/{version}/{version}.jar not found in {path}"),
             },
             Self::UrlNotAllowed { url } => ErrorPayload {
-                code: self.code().to_string(),
+                code: self.code(),
                 title: "That download address is not allowed".to_string(),
-                hint: "The installer only fetches from cdn.modrinth.com and this project's GitHub Releases.".to_string(),
+                hint: "The installer only fetches from cdn.modrinth.com, this project's GitHub Releases, and Fabric meta for the loader profile.".to_string(),
                 detail: url.clone(),
             },
             Self::SignatureInvalid { detail } => ErrorPayload {
-                code: self.code().to_string(),
+                code: self.code(),
                 title: "The mod list signature does not match".to_string(),
                 hint: "Nothing was changed. Try again when you are online, or keep using the last good list.".to_string(),
                 detail: detail.clone(),
@@ -115,57 +124,63 @@ impl AppError {
                 actual,
                 what,
             } => ErrorPayload {
-                code: self.code().to_string(),
+                code: self.code(),
                 title: "A file failed its SHA-512 check".to_string(),
                 hint: "The download was discarded. Your game folder was not changed.".to_string(),
                 detail: format!("{what}: expected {expected}, got {actual}"),
             },
             Self::GameRunning => ErrorPayload {
-                code: self.code().to_string(),
+                code: self.code(),
                 title: "Minecraft is still running".to_string(),
                 hint: "Close the game and the launcher, then try again. Locked jars cannot be replaced on Windows.".to_string(),
                 detail: "A Minecraft or Fabric Java process is running.".to_string(),
             },
             Self::ManifestSchema(detail) => ErrorPayload {
-                code: self.code().to_string(),
+                code: self.code(),
                 title: "The mod list is not valid".to_string(),
                 hint: "Wait for a new mods release. Nothing was changed on your PC.".to_string(),
                 detail: detail.clone(),
             },
             Self::ManifestRequires(detail) => ErrorPayload {
-                code: self.code().to_string(),
+                code: self.code(),
                 title: "The mod list has a broken dependency".to_string(),
                 hint: "Wait for a new mods release. Nothing was changed on your PC.".to_string(),
                 detail: detail.clone(),
             },
             Self::Collision { path, detail } => ErrorPayload {
-                code: self.code().to_string(),
+                code: self.code(),
                 title: format!("A different {path} is already in your mods folder"),
-                hint: "Replace it (the old one is kept in the restore point), keep yours and skip, or cancel.".to_string(),
+                hint: "Replace it (the old one is kept in the restore point), keep yours and skip, or cancel. Unknown snow jars are left alone until you choose.".to_string(),
                 detail: detail.clone(),
             },
             Self::Io(detail) => ErrorPayload {
-                code: self.code().to_string(),
+                code: self.code(),
                 title: "The installer could not read or write a file".to_string(),
                 hint: "Check that you can write to the game folder, then try again.".to_string(),
                 detail: detail.clone(),
             },
             Self::State(detail) => ErrorPayload {
-                code: self.code().to_string(),
+                code: self.code(),
                 title: "The install record could not be read".to_string(),
                 hint: "The installer can rebuild the record from what it finds, or you can pick the game folder again.".to_string(),
                 detail: detail.clone(),
             },
             Self::Snapshot(detail) => ErrorPayload {
-                code: self.code().to_string(),
+                code: self.code(),
                 title: "The restore point could not be used".to_string(),
                 hint: "Your untracked files were left alone. Try another restore point.".to_string(),
                 detail: detail.clone(),
             },
+            Self::Cancelled => ErrorPayload {
+                code: self.code(),
+                title: "Install cancelled".to_string(),
+                hint: "Nothing was left half-applied. Your game folder is as it was before this run.".to_string(),
+                detail: "The install transaction rolled back cleanly.".to_string(),
+            },
             Self::NotImplemented { what } => ErrorPayload {
-                code: self.code().to_string(),
+                code: self.code(),
                 title: format!("{what} is not in this build yet"),
-                hint: "This Phase 1 build uses mock install steps in the UI. The checked core stays available for tests.".to_string(),
+                hint: "This optional piece is disabled in this build. Everything else still works.".to_string(),
                 detail: what.clone(),
             },
             Self::Other {
@@ -203,6 +218,7 @@ mod tests {
         assert_eq!(payload.code, "E-MC-MISSING");
         assert!(payload.title.contains("26.3"));
         assert!(payload.detail.contains("26.3.jar"));
+        assert!(payload.hint.contains("Play"));
     }
 
     #[test]
@@ -211,5 +227,23 @@ mod tests {
             url: "https://evil.example/mod.jar".into(),
         };
         assert_eq!(err.code(), "E-URL-NOT-ALLOWED");
+    }
+
+    #[test]
+    fn cancelled_explains_clean_rollback() {
+        let payload = AppError::Cancelled.to_payload();
+        assert_eq!(payload.code, "E-CANCELLED");
+        assert!(payload.hint.contains("half-applied"));
+    }
+
+    #[test]
+    fn collision_asks_before_touching_unknown_snow() {
+        let payload = AppError::Collision {
+            path: "mods/arnold-snowfall-mystery.jar".into(),
+            detail: "checksum is not a known Arnold build".into(),
+        }
+        .to_payload();
+        assert_eq!(payload.code, "P-COLLISION");
+        assert!(payload.hint.contains("Unknown snow"));
     }
 }

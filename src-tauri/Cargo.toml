@@ -26,6 +26,21 @@ ed25519-dalek = "2"
 sysinfo = { version = "0.32", default-features = false, features = ["system"] }
 url = "2"
 dirs = "5"
+ureq = { version = "2.12", default-features = false, features = ["tls"] }
+zip = { version = "2.2", default-features = false, features = ["deflate"] }
+tauri-plugin-updater = { version = "2", optional = true }
+
+[features]
+default = []
+updater = ["dep:tauri-plugin-updater"]
+
+[[bin]]
+name = "arnold-client-mods"
+path = "src/main.rs"
+
+[[bin]]
+name = "release-manifest"
+path = "src/bin/release-manifest.rs"
 
 [dev-dependencies]
 tempfile = "3"

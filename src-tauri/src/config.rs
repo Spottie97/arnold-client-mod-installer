@@ -213,6 +213,51 @@ pub fn apply_properties(
     }
 }
 
+/// Player-owned settings screen: overwrite listed keys, keep the rest.
+pub fn update_property_keys(existing: &str, updates: &BTreeMap<String, String>) -> String {
+    if existing.is_empty() {
+        let mut out = String::new();
+        for (key, value) in updates {
+            out.push_str(key);
+            out.push('=');
+            out.push_str(value);
+            out.push('\n');
+        }
+        return out;
+    }
+    let ending = detect_ending(existing).to_string();
+    let lines = parse_lines(existing);
+    let mut seen = BTreeSet::new();
+    let mut out = String::new();
+    for line in &lines {
+        if let Some(key) = &line.key {
+            if let Some(value) = updates.get(key) {
+                out.push_str(key);
+                out.push('=');
+                out.push_str(value);
+                out.push_str(&line.ending);
+                seen.insert(key.clone());
+                continue;
+            }
+        }
+        out.push_str(&line.raw);
+        out.push_str(&line.ending);
+    }
+    if !out.is_empty() && !out.ends_with('\n') {
+        out.push_str(&ending);
+    }
+    for (key, value) in updates {
+        if seen.contains(key) {
+            continue;
+        }
+        out.push_str(key);
+        out.push('=');
+        out.push_str(value);
+        out.push_str(&ending);
+    }
+    out
+}
+
 pub fn values_that_differ(
     existing: &str,
     defaults: &BTreeMap<String, String>,
@@ -408,5 +453,14 @@ mod tests {
         let existing = "density=7\ntreeCaps=true\n";
         let diffs = values_that_differ(existing, &snow_defaults());
         assert_eq!(diffs, vec![("density".into(), "7".into(), "24".into())]);
+    }
+
+    #[test]
+    fn settings_screen_overwrites_listed_keys_only() {
+        let existing = "# note\ndensity=7\ntreeCaps=true\n";
+        let updated = update_property_keys(existing, &map(&[("density", "8")]));
+        assert!(updated.contains("# note\n"));
+        assert!(updated.contains("density=8\n"));
+        assert!(updated.contains("treeCaps=true\n"));
     }
 }

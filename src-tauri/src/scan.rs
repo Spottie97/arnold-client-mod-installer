@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 
+use crate::gpu::probe_gpu;
 use crate::manifest::{HardwareThresholds, RecommendConfig};
+use crate::quality::{recommend_quality, QualityLevel};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -18,6 +20,8 @@ pub struct Hardware {
 pub struct Recommendation {
     pub kit: String,
     pub snow_lite: bool,
+    pub quality: QualityLevel,
+    pub recommend_ocean: bool,
     pub reasons: Vec<String>,
     pub hardware: Hardware,
     pub warn_low_ram: bool,
@@ -92,11 +96,15 @@ pub fn recommend(hw: &Hardware, rec: Option<&RecommendConfig>) -> Recommendation
         reasons.push("Shaders: no — lighter snow keeps FPS up".into());
         ("basic".to_string(), true)
     };
+    let quality = recommend_quality(hw);
+    reasons.push(format!("Quality: {}", quality.as_str()));
     reasons.push("Sodium: yes — it raises FPS on every PC".into());
 
     Recommendation {
         kit,
         snow_lite,
+        quality,
+        recommend_ocean: quality.recommend_ocean(),
         reasons,
         hardware: hw.clone(),
         warn_low_ram,
@@ -111,7 +119,7 @@ fn trim_num(n: f64) -> String {
     }
 }
 
-/// RAM and CPU from sysinfo. GPU/VRAM stay unknown in Phase 1 (wgpu is deferred).
+/// RAM and CPU from sysinfo. GPU/VRAM from the live OS probe (DXGI/WMI, system_profiler, lspci/sysfs).
 pub fn probe_hardware() -> Hardware {
     let mut sys = sysinfo::System::new();
     sys.refresh_memory();
@@ -124,13 +132,14 @@ pub fn probe_hardware() -> Hardware {
         .map(|c| c.brand().trim().to_string())
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| "Unknown CPU".into());
+    let gpu = probe_gpu();
     Hardware {
         cpu,
         cores,
         ram_gb: (ram_gb * 10.0).round() / 10.0,
-        gpu: "Unknown (scan stub)".into(),
-        vram_gb: 0.0,
-        dedicated_gpu: false,
+        gpu: gpu.name,
+        vram_gb: gpu.vram_gb,
+        dedicated_gpu: gpu.dedicated,
     }
 }
 
@@ -176,5 +185,14 @@ mod tests {
             seen += 1;
         }
         assert!(seen >= 7, "expected hardware fixtures, got {seen}");
+    }
+
+    #[test]
+    fn live_probe_feeds_recommend() {
+        let hw = probe_hardware();
+        assert!(hw.cores >= 1);
+        assert!(hw.ram_gb >= 0.0);
+        let rec = recommend(&hw, None);
+        assert!(rec.kit == "full" || rec.kit == "basic");
     }
 }

@@ -1,23 +1,52 @@
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "./components/AppShell";
-import { detect, getManifest, listInstalled, listSnapshots, plan, scanHardware, setGameDir } from "./lib/api";
-import { missingMinecraftError, playMockInstall } from "./mock/backend";
+import { Tour } from "./components/Tour";
+import {
+  asErrorPayload,
+  cancelInstall,
+  confirmImport,
+  copyDiagnostics,
+  detect,
+  detectLegacy,
+  exportLog,
+  getManifest,
+  getPrefs,
+  listInstalled,
+  listSnapshots,
+  listenProgress,
+  openLauncher,
+  plan,
+  repairInstall,
+  runInstall,
+  scanHardware,
+  setGameDir,
+  setQuality,
+  setTourDone,
+} from "./lib/api";
+import { parseQuality, snowLiteForQuality } from "./lib/quality";
+import { TOUR_TIPS } from "./lib/tour";
+import { updateBadges } from "./lib/updates";
+import { missingMinecraftError } from "./mock/backend";
 import { Custom } from "./screens/Custom";
 import { Done } from "./screens/Done";
 import { ErrorScreen } from "./screens/ErrorScreen";
+import { ImportScreen } from "./screens/Import";
 import { Kit } from "./screens/Kit";
 import { MacHelp } from "./screens/MacHelp";
 import { Manage } from "./screens/Manage";
 import { Progress } from "./screens/Progress";
 import { Scan } from "./screens/Scan";
+import { Settings } from "./screens/Settings";
 import { Welcome } from "./screens/Welcome";
 import type {
   Detection,
   ErrorPayload,
+  ImportOffer,
   InstallPlan,
   InstalledState,
   Manifest,
   ProgressEvent,
+  QualityLevel,
   Recommendation,
   Screen,
   SnapshotMeta,
@@ -34,6 +63,8 @@ const SCREENS: Screen[] = [
   "error",
   "manage",
   "help",
+  "import",
+  "settings",
 ];
 
 function screenFromHash(): Screen {
@@ -49,6 +80,7 @@ function emptyPlan(): InstallPlan {
     configs: [],
     loader: null,
     snowLite: false,
+    quality: "normal",
     kit: "recommended",
     components: [],
     warnings: [],
@@ -59,6 +91,7 @@ function emptyPlan(): InstallPlan {
 export default function App() {
   const [screen, setScreen] = useState<Screen>(screenFromHash);
   const [manifest, setManifest] = useState<Manifest | null>(null);
+  const [offlineBanner, setOfflineBanner] = useState<string | null>(null);
   const [detection, setDetection] = useState<Detection | null>(null);
   const [recommendation, setRecommendation] = useState<Recommendation | null>(null);
   const [installed, setInstalled] = useState<InstalledState | null>(null);
@@ -67,10 +100,14 @@ export default function App() {
   const [ocean, setOcean] = useState(true);
   const [customIds, setCustomIds] = useState<string[]>(["deck", "ships", "snow", "sodium", "base"]);
   const [snowLite, setSnowLite] = useState(false);
+  const [quality, setQualityLevel] = useState<QualityLevel>("normal");
   const [currentPlan, setCurrentPlan] = useState<InstallPlan>(emptyPlan());
   const [progress, setProgress] = useState<ProgressEvent | null>(null);
+  const [progressLog, setProgressLog] = useState<ProgressEvent[]>([]);
   const [error, setError] = useState<ErrorPayload | null>(null);
-  const [cancelFlag] = useState({ cancelled: false });
+  const [tourStep, setTourStep] = useState<number | null>(null);
+  const [importOffer, setImportOffer] = useState<ImportOffer | null>(null);
+  const [replaceCollisions, setReplaceCollisions] = useState(false);
 
   const go = (next: Screen) => {
     setScreen(next);
@@ -84,23 +121,49 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (tourStep !== null) {
+        setTourStep(null);
+        return;
+      }
+      if (screen === "progress") return;
+      if (screen === "welcome") return;
+      go("welcome");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [screen, tourStep]);
+
+  useEffect(() => {
     let alive = true;
     void (async () => {
-      const [m, d, r, inst, snaps] = await Promise.all([
+      const [load, d, r, inst, snaps, prefs, legacy] = await Promise.all([
         getManifest(),
         detect(),
         scanHardware(),
         listInstalled(),
         listSnapshots(),
+        getPrefs(),
+        detectLegacy().catch(() => null),
       ]);
       if (!alive) return;
-      setManifest(m);
+      setManifest(load.manifest);
+      setOfflineBanner(load.offline ? load.message ?? "Using the last good mod list (offline)." : null);
       setDetection(d);
       setRecommendation(r);
       setInstalled(inst);
       setSnapshots(snaps);
       setKit(r.kit === "full" ? "recommended" : r.kit);
-      setSnowLite(r.snowLite);
+      const nextQuality = parseQuality(inst?.quality) ?? r.quality;
+      setQualityLevel(nextQuality);
+      setSnowLite(snowLiteForQuality(nextQuality));
+      setOcean(r.recommendOcean);
+      if (!prefs.tourDone) setTourStep(0);
+      if (legacy?.found && !legacy.alreadyAdopted && !inst) {
+        setImportOffer(legacy);
+        go("import");
+      }
     })();
     return () => {
       alive = false;
@@ -113,8 +176,9 @@ export default function App() {
       customComponents: customIds,
       ocean,
       snowLite,
+      quality,
     }),
-    [kit, customIds, ocean, snowLite],
+    [kit, customIds, ocean, snowLite, quality],
   );
 
   useEffect(() => {
@@ -127,27 +191,83 @@ export default function App() {
     };
   }, [selection]);
 
-  const startInstall = async () => {
+  const badges = useMemo(
+    () => (manifest ? updateBadges(manifest, installed) : []),
+    [manifest, installed],
+  );
+
+  const startInstall = async (nextPlan = currentPlan, replace = replaceCollisions) => {
     if (detection && !detection.minecraftVersionInstalled) {
       setError(missingMinecraftError(detection.gameDir ?? "(no game folder)"));
       go("error");
       return;
     }
-    cancelFlag.cancelled = false;
+    setProgressLog([]);
     setProgress({
-      runId: "mock",
-      step: "mods",
+      runId: "",
+      step: "prepare",
       status: "running",
-      percent: 12,
-      message: "Backup saved (restore point 2026-11-01 20:41)",
+      percent: 1,
+      message: "Starting install",
     });
     go("progress");
-    const result = await playMockInstall(currentPlan, setProgress, cancelFlag);
-    if (result === "cancelled") {
-      go("kit");
-      return;
+    const stop = await listenProgress((event) => {
+      setProgress(event);
+      setProgressLog((rows) => [...rows, event]);
+    });
+    try {
+      await runInstall(nextPlan, replace);
+      const [inst, snaps] = await Promise.all([listInstalled(), listSnapshots()]);
+      setInstalled(inst);
+      setSnapshots(snaps);
+      go("done");
+    } catch (err) {
+      const payload = asErrorPayload(err);
+      if (payload.code === "E-CANCELLED") {
+        go("kit");
+        return;
+      }
+      setError(payload);
+      setReplaceCollisions(payload.code === "P-COLLISION");
+      go("error");
+    } finally {
+      stop();
     }
-    go("done");
+  };
+
+  const startRecommended = async () => {
+    if (!recommendation) return;
+    const next = await plan({
+      kit: recommendation.kit,
+      customComponents: [],
+      ocean: recommendation.recommendOcean,
+      snowLite: snowLiteForQuality(recommendation.quality),
+      quality: recommendation.quality,
+    });
+    setCurrentPlan(next);
+    setKit(recommendation.kit === "full" ? "recommended" : recommendation.kit);
+    setQualityLevel(recommendation.quality);
+    setSnowLite(snowLiteForQuality(recommendation.quality));
+    setOcean(recommendation.recommendOcean);
+    await startInstall(next, false);
+  };
+
+  const startRepair = async () => {
+    setProgressLog([]);
+    go("progress");
+    const stop = await listenProgress((event) => {
+      setProgress(event);
+      setProgressLog((rows) => [...rows, event]);
+    });
+    try {
+      await repairInstall();
+      go("done");
+    } catch (err) {
+      setError(asErrorPayload(err));
+      go("error");
+    } finally {
+      stop();
+    }
   };
 
   const chooseFolder = async () => {
@@ -158,6 +278,32 @@ export default function App() {
     if (!next.minecraftVersionInstalled) {
       setError(missingMinecraftError(next.gameDir ?? path));
       go("error");
+    }
+  };
+
+  const copyDiag = async () => {
+    const text = await copyDiagnostics();
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      window.prompt("Copy diagnostics", text);
+    }
+  };
+
+  const doExport = async () => {
+    try {
+      await exportLog();
+    } catch {
+      const blob = new Blob(
+        [JSON.stringify({ error, plan: currentPlan, detection }, null, 2)],
+        { type: "application/json" },
+      );
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "arnold-install-log.json";
+      a.click();
+      URL.revokeObjectURL(url);
     }
   };
 
@@ -173,25 +319,26 @@ export default function App() {
     onCustom: () => go("custom"),
     onInstall: () => void startInstall(),
     onCancel: () => {
-      cancelFlag.cancelled = true;
-      go("kit");
+      void cancelInstall();
     },
-    onExport: () => {
-      const blob = new Blob(
-        [JSON.stringify({ error, plan: currentPlan, detection }, null, 2)],
-        { type: "application/json" },
-      );
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "arnold-install-log.json";
-      a.click();
-      URL.revokeObjectURL(url);
+    onExport: () => void doExport(),
+    onCopy: () => void copyDiag(),
+    onRetry: () => {
+      if (error?.code === "P-COLLISION") {
+        void startInstall(currentPlan, true);
+        return;
+      }
+      go("welcome");
     },
-    onRetry: () => go("welcome"),
     onFolder: () => void chooseFolder(),
-    onDoneHome: () => go("welcome"),
+    onDoneHome: () => {
+      void openLauncher().catch((err) => {
+        setError(asErrorPayload(err));
+        go("error");
+      });
+    },
     onHelpBack: () => go("welcome"),
+    onSettings: () => go("settings"),
   });
 
   if (!manifest || !detection || !recommendation) {
@@ -210,7 +357,9 @@ export default function App() {
           detection={detection}
           installed={installed}
           recommendation={recommendation}
+          badges={badges}
           onHelp={() => go("help")}
+          onInstallRecommended={() => void startRecommended()}
         />
       );
       break;
@@ -228,12 +377,18 @@ export default function App() {
       body = (
         <Kit
           selected={kit}
+          quality={quality}
           ocean={ocean}
           recommendation={recommendation}
           plan={currentPlan}
+          table={manifest.qualityPresets}
           onSelect={(next) => {
             setKit(next);
             if (next === "custom") go("custom");
+          }}
+          onQuality={(next) => {
+            setQualityLevel(next);
+            setSnowLite(snowLiteForQuality(next));
           }}
           onOcean={setOcean}
         />
@@ -257,7 +412,7 @@ export default function App() {
       );
       break;
     case "progress":
-      body = <Progress plan={currentPlan} event={progress} />;
+      body = <Progress plan={currentPlan} event={progress} log={progressLog} />;
       break;
     case "done":
       body = <Done plan={currentPlan} />;
@@ -273,19 +428,86 @@ export default function App() {
       );
       break;
     case "manage":
-      body = <Manage installed={installed} snapshots={snapshots} />;
+      body = (
+        <Manage
+          installed={installed}
+          snapshots={snapshots}
+          badges={badges}
+          onRepair={() => void startRepair()}
+          onSettings={() => go("settings")}
+        />
+      );
       break;
     case "help":
       body = <MacHelp />;
+      break;
+    case "import":
+      body = (
+        <ImportScreen
+          offer={
+            importOffer ?? {
+              found: false,
+              jars: [],
+              backups: [],
+              alreadyAdopted: false,
+            }
+          }
+          onConfirm={() => {
+            void confirmImport().then((state) => {
+              setInstalled(state);
+              go("welcome");
+            });
+          }}
+          onSkip={() => go("welcome")}
+        />
+      );
+      break;
+    case "settings":
+      body = (
+        <Settings
+          manifest={manifest}
+          quality={quality}
+          recommended={recommendation.quality}
+          onSnowLite={setSnowLite}
+          onQuality={(next) => {
+            setQualityLevel(next);
+            setSnowLite(snowLiteForQuality(next));
+            void setQuality(next)
+              .then((state) => {
+                if (state) setInstalled(state);
+              })
+              .catch(() => undefined);
+          }}
+        />
+      );
       break;
     default:
       body = assertNever(screen);
   }
 
   return (
-    <AppShell screen={screen} footer={footer}>
-      {body}
-    </AppShell>
+    <>
+      {tourStep !== null ? (
+        <Tour
+          step={tourStep}
+          onNext={() => {
+            if (tourStep >= TOUR_TIPS.length - 1) {
+              setTourStep(null);
+              void setTourDone();
+            } else {
+              setTourStep(tourStep + 1);
+            }
+          }}
+          onSkip={() => {
+            setTourStep(null);
+            void setTourDone();
+          }}
+        />
+      ) : null}
+      <AppShell screen={screen} footer={footer} banner={offlineBanner}>
+        {body}
+      </AppShell>
+    </>
   );
 }
 
@@ -304,10 +526,12 @@ function footerFor(
     onInstall: () => void;
     onCancel: () => void;
     onExport: () => void;
+    onCopy: () => void;
     onRetry: () => void;
     onFolder: () => void;
     onDoneHome: () => void;
     onHelpBack: () => void;
+    onSettings: () => void;
   },
 ) {
   switch (screen) {
@@ -373,6 +597,9 @@ function footerFor(
           <button type="button" className="btn-secondary" onClick={actions.onExport}>
             Export log
           </button>
+          <button type="button" className="btn-secondary" onClick={actions.onCopy}>
+            Copy diagnostics
+          </button>
           <button type="button" className="btn-primary" onClick={actions.onDoneHome}>
             Open Minecraft Launcher
           </button>
@@ -383,6 +610,9 @@ function footerFor(
         <>
           <button type="button" className="btn-secondary" onClick={actions.onExport}>
             Export log
+          </button>
+          <button type="button" className="btn-secondary" onClick={actions.onCopy}>
+            Copy diagnostics
           </button>
           <button type="button" className="btn-secondary" onClick={actions.onFolder}>
             Choose game folder
@@ -398,12 +628,17 @@ function footerFor(
           <button type="button" className="btn-secondary" onClick={actions.onBackWelcome}>
             ← Back
           </button>
+          <button type="button" className="btn-secondary" onClick={actions.onSettings}>
+            Settings
+          </button>
           <button type="button" className="btn-primary" onClick={actions.onUpdate}>
             Update
           </button>
         </>
       );
     case "help":
+    case "import":
+    case "settings":
       return (
         <button type="button" className="btn-primary" onClick={actions.onHelpBack}>
           ← Back

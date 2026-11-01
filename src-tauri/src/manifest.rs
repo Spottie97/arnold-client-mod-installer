@@ -4,8 +4,15 @@ use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::download::{is_allowed_source_url, RELEASE_OWNER, RELEASE_REPO};
+use std::fs;
+use std::path::Path;
+
+use crate::download::{
+    is_allowed_loader_url, is_allowed_source_url, ARNOLD_RELEASE_TAG, RELEASE_OWNER, RELEASE_REPO,
+};
 use crate::errors::AppError;
+use crate::fetch::Fetcher;
+use crate::quality::QualityTable;
 
 /// TEST-ONLY Ed25519 public key embedded in the app. Not a production key.
 pub const TEST_MANIFEST_PUBLIC_KEY_HEX: &str =
@@ -15,6 +22,11 @@ pub const BUNDLED_MANIFEST_JSON: &str = include_str!("../../fixtures/manifest.v3
 pub const BUNDLED_MANIFEST_SIG_HEX: &str = include_str!("../../fixtures/manifest.v3.json.sig");
 
 pub const MANIFEST_SCHEMA: u32 = 3;
+pub const SNOW_LITE_PRESET: &str = "snow.lite";
+pub const REMOTE_MANIFEST_URL: &str =
+    "https://github.com/Spottie97/arnold-client-mod-installer/releases/latest/download/manifest.json";
+pub const REMOTE_MANIFEST_SIG_URL: &str =
+    "https://github.com/Spottie97/arnold-client-mod-installer/releases/latest/download/manifest.json.sig";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -32,6 +44,10 @@ pub struct Manifest {
     pub addons: BTreeMap<String, Addon>,
     #[serde(default)]
     pub recommend: Option<RecommendConfig>,
+    /// Per-level Sodium / Iris / Complementary / snow / ships knobs.
+    /// Arnold can ship new particle values later without an installer rebuild.
+    #[serde(default)]
+    pub quality_presets: Option<QualityTable>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -69,6 +85,10 @@ pub struct Component {
     pub jvm_flags: Vec<JvmFlag>,
     #[serde(default)]
     pub pending: Option<PendingInfo>,
+    #[serde(default)]
+    pub legacy_match: Vec<String>,
+    #[serde(default)]
+    pub known_sha512: Vec<String>,
     pub files: Vec<ComponentFile>,
 }
 
@@ -317,7 +337,7 @@ pub fn validate_manifest(manifest: &Manifest) -> Result<(), AppError> {
             "loader.sha512 is not 128 lowercase hex".into(),
         ));
     }
-    if !is_allowed_source_url(&manifest.loader.url) {
+    if !is_allowed_loader_url(&manifest.loader.url) {
         return Err(AppError::UrlNotAllowed {
             url: manifest.loader.url.clone(),
         });
@@ -364,6 +384,21 @@ pub fn validate_manifest(manifest: &Manifest) -> Result<(), AppError> {
                     "bad match glob {}",
                     file.match_glob
                 )));
+            }
+            for extra in &component.legacy_match {
+                if !valid_match(extra) {
+                    return Err(AppError::ManifestSchema(format!(
+                        "bad legacy match glob {extra}"
+                    )));
+                }
+            }
+            for known in &component.known_sha512 {
+                if !valid_sha512(known) {
+                    return Err(AppError::ManifestSchema(format!(
+                        "bad knownSha512 on {}",
+                        component.id
+                    )));
+                }
             }
             if !is_allowed_source_url(&file.url) {
                 return Err(AppError::UrlNotAllowed {
@@ -489,6 +524,151 @@ pub fn component_by_id<'a>(manifest: &'a Manifest, id: &str) -> Option<&'a Compo
     manifest.components.iter().find(|c| c.id == id)
 }
 
+pub fn lite_preset(config: &ModConfig) -> Option<&ConfigPreset> {
+    config
+        .presets
+        .get(SNOW_LITE_PRESET)
+        .or_else(|| config.presets.get("lite"))
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ManifestLoad {
+    pub manifest: Manifest,
+    pub source: String,
+    pub offline: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+}
+
+pub fn cache_paths(cache_dir: &Path) -> (std::path::PathBuf, std::path::PathBuf) {
+    (
+        cache_dir.join("manifest.json"),
+        cache_dir.join("manifest.json.sig"),
+    )
+}
+
+pub fn write_manifest_cache(
+    cache_dir: &Path,
+    bytes: &[u8],
+    signature: &[u8],
+) -> Result<(), AppError> {
+    fs::create_dir_all(cache_dir)?;
+    let (json_path, sig_path) = cache_paths(cache_dir);
+    fs::write(json_path, bytes)?;
+    fs::write(sig_path, hex::encode(signature))?;
+    Ok(())
+}
+
+pub fn load_cached_manifest(cache_dir: &Path, public_key_hex: &str) -> Result<Manifest, AppError> {
+    let (json_path, sig_path) = cache_paths(cache_dir);
+    let bytes = fs::read(json_path)?;
+    let sig_text = fs::read_to_string(sig_path)?;
+    let signature = hex::decode(sig_text.trim())?;
+    parse_and_verify(&bytes, &signature, public_key_hex)
+}
+
+pub fn fetch_remote_manifest<F: Fetcher>(
+    fetcher: &F,
+    public_key_hex: &str,
+) -> Result<(Manifest, Vec<u8>, Vec<u8>), AppError> {
+    let bytes = fetcher.fetch(REMOTE_MANIFEST_URL)?;
+    let sig_raw = fetcher.fetch(REMOTE_MANIFEST_SIG_URL)?;
+    let signature = decode_signature(&sig_raw)?;
+    let manifest = parse_and_verify(&bytes, &signature, public_key_hex)?;
+    Ok((manifest, bytes, signature))
+}
+
+fn decode_signature(raw: &[u8]) -> Result<Vec<u8>, AppError> {
+    if raw.len() == 64 {
+        return Ok(raw.to_vec());
+    }
+    let text = std::str::from_utf8(raw)
+        .map_err(|e| AppError::SignatureInvalid {
+            detail: format!("signature is not utf-8 hex: {e}"),
+        })?
+        .trim();
+    hex::decode(text).map_err(|e| AppError::SignatureInvalid {
+        detail: format!("signature hex: {e}"),
+    })
+}
+
+/// Remote first, then last-good cache, then the signed bundle. `offline` is set
+/// when the network copy could not be used.
+pub fn load_best_manifest<F: Fetcher>(
+    fetcher: &F,
+    cache_dir: &Path,
+    public_key_hex: &str,
+) -> ManifestLoad {
+    match fetch_remote_manifest(fetcher, public_key_hex) {
+        Ok((manifest, bytes, signature)) => {
+            let _ = write_manifest_cache(cache_dir, &bytes, &signature);
+            ManifestLoad {
+                manifest,
+                source: "remote".into(),
+                offline: false,
+                message: None,
+            }
+        }
+        Err(remote_err) => match load_cached_manifest(cache_dir, public_key_hex) {
+            Ok(manifest) => ManifestLoad {
+                manifest,
+                source: "cache".into(),
+                offline: true,
+                message: Some(format!(
+                    "Using the last good mod list (offline). {remote_err}"
+                )),
+            },
+            Err(_) => match load_bundled_manifest() {
+                Ok(manifest) => ManifestLoad {
+                    manifest,
+                    source: "bundled".into(),
+                    offline: true,
+                    message: Some(format!(
+                        "Using the bundled mod list. Remote fetch failed: {remote_err}"
+                    )),
+                },
+                Err(bundled_err) => ManifestLoad {
+                    manifest: Manifest {
+                        schema: MANIFEST_SCHEMA,
+                        manifest_version: "unavailable".into(),
+                        min_app_version: "3.0.0".into(),
+                        minecraft: "26.3".into(),
+                        current_server_shipwright: None,
+                        loader: Loader {
+                            id: "missing".into(),
+                            url: "https://cdn.modrinth.com/missing".into(),
+                            sha512: "0".repeat(128),
+                        },
+                        components: Vec::new(),
+                        kits: BTreeMap::new(),
+                        addons: BTreeMap::new(),
+                        recommend: None,
+                        quality_presets: None,
+                    },
+                    source: "error".into(),
+                    offline: true,
+                    message: Some(format!(
+                        "No signed mod list is available. {remote_err}; bundled: {bundled_err}"
+                    )),
+                },
+            },
+        },
+    }
+}
+
+pub fn default_cache_dir() -> std::path::PathBuf {
+    dirs::data_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("arnold-client-mods")
+        .join("cache")
+}
+
+pub fn release_asset_url(file_name: &str) -> String {
+    let _ = ARNOLD_RELEASE_TAG;
+    crate::download::arnold_release_asset_url(file_name)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -598,5 +778,85 @@ mod tests {
         let body = br#"{"ok":true}"#;
         let sig = sign(body);
         verify_signature(body, &sig, TEST_MANIFEST_PUBLIC_KEY_HEX).unwrap();
+    }
+
+    #[test]
+    fn remote_manifest_is_cached_and_used_offline() {
+        use crate::fetch::MapFetcher;
+        use tempfile::tempdir;
+
+        let bytes = BUNDLED_MANIFEST_JSON.as_bytes();
+        let sig = hex::decode(BUNDLED_MANIFEST_SIG_HEX.trim()).unwrap();
+        let mut fetcher = MapFetcher::default();
+        fetcher.insert(REMOTE_MANIFEST_URL, bytes.to_vec());
+        fetcher.insert(REMOTE_MANIFEST_SIG_URL, hex::encode(&sig).into_bytes());
+        let tmp = tempdir().unwrap();
+        let loaded = load_best_manifest(&fetcher, tmp.path(), TEST_MANIFEST_PUBLIC_KEY_HEX);
+        assert_eq!(loaded.source, "remote");
+        assert!(!loaded.offline);
+        assert_eq!(loaded.manifest.minecraft, "26.3");
+
+        let mut offline = MapFetcher::default();
+        offline.fail.insert(REMOTE_MANIFEST_URL.to_string());
+        let cached = load_best_manifest(&offline, tmp.path(), TEST_MANIFEST_PUBLIC_KEY_HEX);
+        assert_eq!(cached.source, "cache");
+        assert!(cached.offline);
+        assert!(cached
+            .message
+            .as_deref()
+            .unwrap_or("")
+            .contains("last good"));
+    }
+
+    #[test]
+    fn bad_remote_signature_falls_back_to_bundle() {
+        use crate::fetch::MapFetcher;
+        use tempfile::tempdir;
+
+        let mut fetcher = MapFetcher::default();
+        fetcher.insert(REMOTE_MANIFEST_URL, b"{\"tampered\":true}".to_vec());
+        fetcher.insert(REMOTE_MANIFEST_SIG_URL, b"00".repeat(64));
+        let tmp = tempdir().unwrap();
+        let loaded = load_best_manifest(&fetcher, tmp.path(), TEST_MANIFEST_PUBLIC_KEY_HEX);
+        assert_eq!(loaded.source, "bundled");
+        assert!(loaded.offline);
+    }
+
+    #[test]
+    fn quality_presets_table_matches_arnold_ships() {
+        let manifest = load_bundled_manifest().unwrap();
+        let table = manifest.quality_presets.expect("qualityPresets in fixture");
+        assert_eq!(table.potato.ships.particles, 0.3);
+        assert!(!table.potato.ships.spray);
+        assert!(!table.potato.ships.hd_models);
+        assert_eq!(table.lite.ships.particles, 0.5);
+        assert!(!table.lite.ships.hd_models);
+        assert_eq!(table.normal.ships.particles, 1.0);
+        assert_eq!(table.ultra.ships.particles, 1.6);
+        assert_eq!(table.normal.snow.fps_target, 60);
+        assert!(table.normal.snow.adaptive_fps);
+    }
+
+    #[test]
+    fn snow_lite_preset_id_is_snow_dot_lite() {
+        let manifest = load_bundled_manifest().unwrap();
+        let snow = component_by_id(&manifest, "snow").unwrap();
+        let preset = lite_preset(snow.config.as_ref().unwrap()).unwrap();
+        assert!(snow
+            .config
+            .as_ref()
+            .unwrap()
+            .presets
+            .contains_key(SNOW_LITE_PRESET));
+        assert_eq!(preset.marker.as_deref(), Some("# arnold-installer-lite"));
+    }
+
+    #[test]
+    fn loader_may_use_fabric_meta() {
+        let mut v = valid_json();
+        v["loader"]["url"] = serde_json::json!(
+            "https://meta.fabricmc.net/v2/versions/loader/26.3/0.20.1/profile/json"
+        );
+        parse_manifest(&serde_json::to_vec(&v).unwrap()).unwrap();
     }
 }

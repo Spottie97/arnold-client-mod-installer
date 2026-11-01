@@ -8,6 +8,8 @@ pub const RELEASE_OWNER: &str = "Spottie97";
 pub const RELEASE_REPO: &str = "arnold-client-mod-installer";
 pub const MODRINTH_HOST: &str = "cdn.modrinth.com";
 pub const GITHUB_HOST: &str = "github.com";
+pub const FABRIC_META_HOST: &str = "meta.fabricmc.net";
+pub const ARNOLD_RELEASE_TAG: &str = "mods-2026.11.1";
 
 const GITHUB_ASSET_HOSTS: &[&str] = &[
     "objects.githubusercontent.com",
@@ -18,6 +20,7 @@ const GITHUB_ASSET_HOSTS: &[&str] = &[
 pub enum AllowedSource {
     Modrinth,
     GitHubReleases,
+    FabricMeta,
 }
 
 fn reject(url: &str) -> AppError {
@@ -84,8 +87,35 @@ pub fn classify_source_url(raw: &str) -> Result<AllowedSource, AppError> {
     Err(reject(raw))
 }
 
+/// Loader-only extra host: `https://meta.fabricmc.net/v2/versions/loader/…`
+pub fn classify_loader_url(raw: &str) -> Result<AllowedSource, AppError> {
+    if let Ok(source) = classify_source_url(raw) {
+        return Ok(source);
+    }
+    let url = parsed_https(raw)?;
+    let host = host_of(&url);
+    let path = url.path();
+    if host == FABRIC_META_HOST
+        && (path == "/v2/versions/loader" || path.starts_with("/v2/versions/loader/"))
+        && !path.contains("..")
+    {
+        return Ok(AllowedSource::FabricMeta);
+    }
+    Err(reject(raw))
+}
+
 pub fn is_allowed_source_url(raw: &str) -> bool {
     classify_source_url(raw).is_ok()
+}
+
+pub fn is_allowed_loader_url(raw: &str) -> bool {
+    classify_loader_url(raw).is_ok()
+}
+
+pub fn arnold_release_asset_url(file_name: &str) -> String {
+    format!(
+        "https://{GITHUB_HOST}/{RELEASE_OWNER}/{RELEASE_REPO}/releases/download/{ARNOLD_RELEASE_TAG}/{file_name}"
+    )
 }
 
 /// Redirects are followed only to GitHub release asset hosts, and only from an
@@ -135,10 +165,20 @@ mod tests {
             "https://cdn.modrinth.com/data/AANobbMI/versions/sodium.jar"
         ));
         assert!(is_allowed_source_url(
-            "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-20261101-1/arnold-ships-0.10.2.jar"
+            "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.1/arnold-snowfall-1.2.0.jar"
         ));
         assert!(is_allowed_source_url(
             "https://github.com/Spottie97/arnold-client-mod-installer/releases/latest/download/manifest.json"
+        ));
+        assert_eq!(
+            classify_loader_url(
+                "https://meta.fabricmc.net/v2/versions/loader/26.3/0.20.1/profile/json"
+            )
+            .unwrap(),
+            AllowedSource::FabricMeta
+        );
+        assert!(!is_allowed_source_url(
+            "https://meta.fabricmc.net/v2/versions/loader/26.3/0.20.1/profile/json"
         ));
     }
 

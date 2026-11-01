@@ -16,6 +16,8 @@ export function KitCard({
   return (
     <button
       type="button"
+      role="radio"
+      aria-checked={selected}
       onClick={onSelect}
       className={`flex min-h-[220px] flex-col rounded-2xl bg-panel p-5 text-left transition-shadow ${
         selected ? "shadow-selected" : "hover:shadow-card"

@@ -13,6 +13,8 @@ function activeIndex(screen: Screen): number {
     case "welcome":
     case "help":
     case "manage":
+    case "import":
+    case "settings":
       return 0;
     case "scan":
       return 1;
@@ -43,6 +45,7 @@ export function StepPills({ screen }: { screen: Screen }) {
             className={`pill font-heading ${
               active ? "bg-accent text-white" : "bg-[#2a2438] text-muted"
             }`}
+            aria-current={active ? "step" : undefined}
           >
             {step.label}
           </span>

@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::errors::AppError;
 use crate::manifest::{component_by_id, resolve_requires, ComponentKind, FileDest, Manifest};
+use crate::quality::{row_for, table_from_manifest, QualityLevel};
 use crate::state::InstalledState;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -13,6 +14,8 @@ pub struct Selection {
     #[serde(default)]
     pub ocean: bool,
     pub snow_lite: Option<bool>,
+    #[serde(default)]
+    pub quality: Option<QualityLevel>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -27,6 +30,10 @@ pub struct PlanFile {
     pub sha512: String,
     pub size: u64,
     pub match_glob: String,
+    #[serde(default)]
+    pub legacy_match: Vec<String>,
+    #[serde(default)]
+    pub known_sha512: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -54,6 +61,7 @@ pub struct InstallPlan {
     pub configs: Vec<PlanConfig>,
     pub loader: Option<PlanLoader>,
     pub snow_lite: bool,
+    pub quality: QualityLevel,
     pub kit: String,
     pub components: Vec<String>,
     pub warnings: Vec<String>,
@@ -125,9 +133,27 @@ pub fn build_plan(
         }
     }
 
+    let kit_lite = manifest
+        .kits
+        .get(&selection.kit)
+        .map(|k| k.snow_lite)
+        .unwrap_or(false);
+    let hint_lite = selection.snow_lite.unwrap_or(kit_lite);
+    let quality = selection.quality.unwrap_or(if hint_lite {
+        QualityLevel::Lite
+    } else {
+        QualityLevel::Normal
+    });
+    let snow_lite = quality.snow_lite();
+    let table = table_from_manifest(manifest);
+    let skip = &row_for(&table, quality).skip_components;
+
     if selection.ocean {
         if let Some(ocean) = manifest.addons.get("ocean") {
             for id in &ocean.components {
+                if skip.iter().any(|s| s == id) {
+                    continue;
+                }
                 if let Some(c) = component_by_id(manifest, id) {
                     if c.kind != ComponentKind::Pending && !selected.contains(id) {
                         selected.push(id.clone());
@@ -138,17 +164,11 @@ pub fn build_plan(
     }
 
     selected.retain(|id| {
-        component_by_id(manifest, id).is_some_and(|c| c.kind != ComponentKind::Pending)
+        !skip.iter().any(|s| s == id)
+            && component_by_id(manifest, id).is_some_and(|c| c.kind != ComponentKind::Pending)
     });
 
     let resolved = resolve_requires(manifest, &selected)?;
-    let snow_lite = selection.snow_lite.unwrap_or_else(|| {
-        manifest
-            .kits
-            .get(&selection.kit)
-            .map(|k| k.snow_lite)
-            .unwrap_or(false)
-    });
 
     let mut add = Vec::new();
     let mut update = Vec::new();
@@ -187,6 +207,8 @@ pub fn build_plan(
                 sha512: file.sha512.clone(),
                 size: file.size,
                 match_glob: file.match_glob.clone(),
+                legacy_match: component.legacy_match.clone(),
+                known_sha512: component.known_sha512.clone(),
             };
             bytes += file.size;
             let dest_rel = format!(
@@ -219,6 +241,8 @@ pub fn build_plan(
                     sha512: tracked.sha512.clone(),
                     size: 0,
                     match_glob: String::new(),
+                    legacy_match: Vec::new(),
+                    known_sha512: Vec::new(),
                 });
             }
         }
@@ -241,6 +265,7 @@ pub fn build_plan(
         configs,
         loader,
         snow_lite,
+        quality,
         kit: kit_id.to_string(),
         components: resolved,
         warnings,
@@ -274,6 +299,7 @@ mod tests {
                 custom_components: vec!["shaders".into()],
                 ocean: false,
                 snow_lite: Some(false),
+                quality: None,
             },
             None,
             true,
@@ -296,6 +322,7 @@ mod tests {
                 custom_components: vec![],
                 ocean: true,
                 snow_lite: None,
+                quality: None,
             },
             None,
             false,
@@ -325,6 +352,7 @@ mod tests {
                 custom_components: vec![],
                 ocean: false,
                 snow_lite: Some(true),
+                quality: None,
             },
             Some(&state),
             true,
@@ -339,5 +367,48 @@ mod tests {
         assert!(version_less("0.11.0", "0.11.1"));
         assert!(!version_less("0.11.1", "0.11.0"));
         assert!(!version_less("0.11.1", "0.11.1"));
+    }
+
+    #[test]
+    fn potato_skips_heavy_ocean_even_when_ocean_is_on() {
+        let manifest = load_bundled_manifest().unwrap();
+        let plan = build_plan(
+            &manifest,
+            &Selection {
+                kit: "basic".into(),
+                custom_components: vec![],
+                ocean: true,
+                snow_lite: None,
+                quality: Some(QualityLevel::Potato),
+            },
+            None,
+            true,
+        )
+        .unwrap();
+        assert_eq!(plan.quality, QualityLevel::Potato);
+        assert!(plan.snow_lite);
+        assert!(plan.components.contains(&"particlerain".into()));
+        assert!(!plan.components.contains(&"wakes".into()));
+        assert!(!plan.components.contains(&"waves".into()));
+    }
+
+    #[test]
+    fn quality_drives_snow_lite() {
+        let manifest = load_bundled_manifest().unwrap();
+        let ultra = build_plan(
+            &manifest,
+            &Selection {
+                kit: "basic".into(),
+                custom_components: vec![],
+                ocean: false,
+                snow_lite: Some(true),
+                quality: Some(QualityLevel::Ultra),
+            },
+            None,
+            true,
+        )
+        .unwrap();
+        assert!(!ultra.snow_lite);
+        assert_eq!(ultra.quality, QualityLevel::Ultra);
     }
 }

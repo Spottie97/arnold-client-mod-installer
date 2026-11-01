@@ -1,16 +1,20 @@
 import { StatusChip } from "../components/StatusChip";
-import type { Detection, InstalledState, Recommendation } from "../types";
+import type { Detection, InstalledState, Recommendation, UpdateBadge } from "../types";
 
 export function Welcome({
   detection,
   installed,
   recommendation,
+  badges,
   onHelp,
+  onInstallRecommended,
 }: {
   detection: Detection;
   installed: InstalledState | null;
   recommendation: Recommendation;
+  badges: UpdateBadge[];
   onHelp: () => void;
+  onInstallRecommended: () => void;
 }) {
   const already = Boolean(installed);
   return (
@@ -34,7 +38,7 @@ export function Welcome({
           tone={detection.fabric.installed ? "ok" : "idle"}
           label={
             detection.fabric.installed
-              ? "Fabric 0.20.1 installed"
+              ? "Fabric installed"
               : "Fabric will install"
           }
         />
@@ -42,21 +46,32 @@ export function Welcome({
           tone={detection.gameRunning ? "warn" : "ok"}
           label={detection.gameRunning ? "Game is running" : "Game not running"}
         />
-        <StatusChip tone="warn" label="Update available: Arnold Ships 0.10.2" />
+        {badges.map((badge) => (
+          <StatusChip
+            key={badge.id}
+            tone="warn"
+            label={`Update available: ${badge.name} ${badge.available}`}
+          />
+        ))}
       </div>
       {already ? (
         <section className="panel mt-8 max-w-2xl">
-          <h2 className="font-heading text-2xl text-text">Already installed (from 2.3.4)</h2>
+          <h2 className="font-heading text-2xl text-text">Already installed</h2>
           <p className="mt-2 text-muted">
-            Recommended kit · 7 mods · last change {installed?.updatedAt}
+            {installed?.source} · {installed?.components.length ?? 0} mods · last change{" "}
+            {installed?.updatedAt}
           </p>
         </section>
       ) : (
         <section className="panel mt-8 max-w-2xl">
           <h2 className="font-heading text-2xl text-text">Ready when you are</h2>
           <p className="mt-2 text-muted">
-            Scan this PC next. Right now that would pick the {recommendation.kit} kit.
+            This PC would get the {recommendation.kit} kit at {recommendation.quality} quality
+            {recommendation.snowLite ? " with lighter snow" : ""}.
           </p>
+          <button type="button" className="btn-primary mt-4" onClick={onInstallRecommended}>
+            Install recommended
+          </button>
         </section>
       )}
       <button type="button" className="mt-6 self-start text-sm text-primary" onClick={onHelp}>

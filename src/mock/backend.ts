@@ -6,10 +6,12 @@ import type {
   InstalledState,
   Manifest,
   ProgressEvent,
+  QualityLevel,
   Recommendation,
   Selection,
   SnapshotMeta,
 } from "../types";
+import { snowLiteForQuality } from "../lib/quality";
 import { formatMb } from "../lib/format";
 
 const manifest = fixture as unknown as Manifest;
@@ -36,12 +38,16 @@ function resolveSelection(sel: Selection): string[] {
   for (const component of manifest.components) {
     if (component.requiredInAllKits) selected.add(component.id);
   }
+  const quality: QualityLevel = sel.quality ?? (sel.kit === "basic" ? "lite" : "normal");
+  const skip = new Set(manifest.qualityPresets?.[quality]?.skipComponents ?? []);
   if (sel.ocean) {
     for (const id of manifest.addons?.ocean?.components ?? []) {
+      if (skip.has(id)) continue;
       const component = manifest.components.find((c) => c.id === id);
       if (component && component.kind !== "pending") selected.add(id);
     }
   }
+  for (const id of skip) selected.delete(id);
   const byId = new Map(manifest.components.map((c) => [c.id, c]));
   const out: string[] = [];
   const seen = new Set<string>();
@@ -82,11 +88,14 @@ export function mockRecommendation(): Recommendation {
   return {
     kit: "full",
     snowLite: false,
+    quality: "ultra",
+    recommendOcean: true,
     reasons: [
       "Dedicated GPU with 12 GB VRAM",
       "32 GB RAM",
       "8 cores",
       "Shaders: yes",
+      "Quality: ultra",
       "Sodium: yes — it raises FPS on every PC",
     ],
     hardware: mockHardware,
@@ -126,9 +135,9 @@ export function mockSnapshots(): SnapshotMeta[] {
 
 export function mockPlan(sel: Selection): InstallPlan {
   const ids = resolveSelection(sel);
-  const snowLite =
-    sel.snowLite ??
-    (sel.kit !== "custom" ? Boolean(manifest.kits[sel.kit]?.snowLite) : false);
+  const quality: QualityLevel =
+    sel.quality ?? (sel.snowLite || sel.kit === "basic" ? "lite" : "normal");
+  const snowLite = snowLiteForQuality(quality);
   const add = ids.flatMap((id) => {
     const component = manifest.components.find((c) => c.id === id);
     if (!component) return [];
@@ -162,7 +171,7 @@ export function mockPlan(sel: Selection): InstallPlan {
         componentId: "ships",
         name: "Arnold Ships",
         version: "0.10.2",
-        file: "arnold-ships-0.10.2.jar",
+        file: "arnold-ships-client-0.10.2.jar",
         dest: "mods",
         url: add.find((f) => f.componentId === "ships")?.url ?? "",
         sha512: add.find((f) => f.componentId === "ships")?.sha512 ?? "",
@@ -175,6 +184,7 @@ export function mockPlan(sel: Selection): InstallPlan {
       : [],
     loader: null,
     snowLite,
+    quality,
     kit: sel.kit,
     components: ids,
     warnings,
@@ -212,6 +222,7 @@ export function kitSizeLabel(kit: string, ocean: boolean): string {
     customComponents: [],
     ocean,
     snowLite: kit === "basic",
+    quality: kit === "basic" ? "lite" : "normal",
   };
   if (kit === "custom") return "—";
   return `${formatMb(mockPlan(sel).bytes)}`;

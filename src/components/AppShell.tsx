@@ -7,10 +7,12 @@ export function AppShell({
   screen,
   children,
   footer,
+  banner,
 }: {
   screen: Screen;
   children: ReactNode;
   footer: ReactNode;
+  banner?: string | null;
 }) {
   return (
     <div className="app-bg flex min-h-screen flex-col text-text">
@@ -26,7 +28,17 @@ export function AppShell({
         </div>
         <StepPills screen={screen} />
       </header>
-      <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-8 pb-8">{children}</main>
+      {banner ? (
+        <div
+          className="mx-8 mb-2 rounded-xl border border-gold/40 bg-panel px-4 py-2 text-sm text-gold"
+          role="status"
+        >
+          {banner}
+        </div>
+      ) : null}
+      <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-8 pb-8" id="main">
+        {children}
+      </main>
       <footer className="flex items-center justify-end gap-3 px-8 py-5">{footer}</footer>
     </div>
   );

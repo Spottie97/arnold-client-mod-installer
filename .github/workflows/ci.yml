@@ -44,6 +44,14 @@ jobs:
       - name: clippy
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
       - name: test
-        run: cargo test --manifest-path src-tauri/Cargo.toml
+        run: cargo test --manifest-path src-tauri/Cargo.toml --bins --lib --tests
+      - name: release-manifest (test key)
+        run: |
+          chmod +x tools/release-manifest
+          tools/release-manifest --test-key --out /tmp/arnold-manifest
+          test -s /tmp/arnold-manifest/manifest.json
+          test -s /tmp/arnold-manifest/manifest.json.sig
+          test -s /tmp/arnold-manifest/SHA512SUMS.txt
+          grep -q 'arnold-snowfall-1.2.0.jar' /tmp/arnold-manifest/SHA512SUMS.txt
       - name: build
         run: cargo build --manifest-path src-tauri/Cargo.toml

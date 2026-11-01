@@ -6,8 +6,8 @@
   "currentServerShipwright": "0.11.0",
   "loader": {
     "id": "fabric-loader-0.20.1-26.3",
-    "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-20261101-1/fabric-loader-0.20.1-26.3.json",
-    "sha512": "373da0df9cc9e76f2ced4c0cf30417a0311553d9b6f692f1e3169b859d8f909fc74add61331ca7a173efecd06a66e3f89afd703b114da77d8f20d2fc379890da"
+    "url": "https://meta.fabricmc.net/v2/versions/loader/26.3/0.20.1/profile/json",
+    "sha512": "240fc41eaf03bb87249f5530a2ab113a1cd39b2abba75ee6b6243dba4fc9484b3a862bcb26a8057a6e73cf1b63c8e6e3d4dc856db2e7cffcc29190dcad926b5f"
   },
   "components": [
     {
@@ -95,6 +95,10 @@
       "license": "LicenseRef-Arnold",
       "minServerShipwright": "0.11.1",
       "uninstallNote": "Deck is only removed with Remove all Arnold mods.",
+      "legacyMatch": [
+        "arnold-deck-client-*.jar",
+        "arnold-deck-*.jar"
+      ],
       "jvmFlags": [
         {
           "flag": "-Darnold.deck.noPredict=true",
@@ -103,11 +107,11 @@
       ],
       "files": [
         {
-          "file": "arnold-deck-0.11.1.jar",
+          "file": "arnold-deck-client-0.11.1.jar",
           "dest": "mods",
-          "match": "arnold-deck-*.jar",
-          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-20261101-1/arnold-deck-0.11.1.jar",
-          "sha512": "ffc3d28e9839a3a7234d38b570b969914696eb51878d59f14a0a96575661a03d1d662bba63617d03b62625e0d4dca7b6dd79a33c3c3188206e29f109609b204b",
+          "match": "arnold-deck-client-*.jar",
+          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.1/arnold-deck-client-0.11.1.jar",
+          "sha512": "d0ea678bf64537688be85f989d45920acb512477e81d65e1137dd15fad468fca6594a0ea4897148b1102869a8e75752dd1660e5f1dc2427b0d548e6f0d410ecf",
           "size": 400000
         }
       ]
@@ -184,13 +188,17 @@
           }
         }
       },
+      "legacyMatch": [
+        "arnold-ships-client-*.jar",
+        "arnold-ships-*.jar"
+      ],
       "files": [
         {
-          "file": "arnold-ships-0.10.2.jar",
+          "file": "arnold-ships-client-0.10.2.jar",
           "dest": "mods",
-          "match": "arnold-ships-*.jar",
-          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-20261101-1/arnold-ships-0.10.2.jar",
-          "sha512": "12d1ba6f44c660eaf38e250c843572d1e0477cb61faf5d110535afcec946c7eee850dd4683b1010d5548c4d0246b9d6d938580c9d29265123e652e269e689c20",
+          "match": "arnold-ships-client-*.jar",
+          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.1/arnold-ships-client-0.10.2.jar",
+          "sha512": "4bfb990ccf5223fa85193e49cb0284232e8580fb69e8d8cc3a3778fa90f5889cfa406c7a4e3638e62ba9bf233987df849ab4801c17f0b0280ef0ca78f70727a6",
           "size": 900000
         }
       ]
@@ -200,8 +208,8 @@
       "group": "arnold",
       "kind": "download",
       "name": "Arnold Snow",
-      "version": "0.8.0",
-      "description": "Client snow, breath and footprints.",
+      "version": "1.2.0",
+      "description": "Client snow, breath and footprints. 1.3 uses a quality key; this list still ships 1.2.0 and keeps the snow.lite fallback.",
       "license": "LicenseRef-Arnold",
       "minServerShipwright": "0.8.0",
       "config": {
@@ -283,10 +291,24 @@
           "deepSnow": {
             "type": "number",
             "default": 0.12
+          },
+          "quality": {
+            "type": "string",
+            "default": "normal"
+          },
+          "adaptiveFps": {
+            "type": "bool",
+            "default": true
+          },
+          "fpsTarget": {
+            "type": "int",
+            "default": 60,
+            "min": 30,
+            "max": 240
           }
         },
         "presets": {
-          "lite": {
+          "snow.lite": {
             "marker": "# arnold-installer-lite",
             "overrides": {
               "density": 8,
@@ -301,13 +323,21 @@
           }
         }
       },
+      "legacyMatch": [
+        "arnold-snow-client*.jar",
+        "arnold-snowfall*.jar"
+      ],
+      "knownSha512": [
+        "928170ab67503111c3483ad6359a8655d275ef8992755882775ce161be70a1d63f0d2fc77ae65df30711b7e5e0a9709a6de9f51e914b2f324d15b9652f7c9f13",
+        "c955550273e9bcb4bd5615c1b6393242cff30246814daa360268427f72e41a35cb28702dd90a12fd36277b925d00a33ce6f2a246e6311124713441011ff321cb"
+      ],
       "files": [
         {
-          "file": "arnold-snow-0.8.0.jar",
+          "file": "arnold-snowfall-1.2.0.jar",
           "dest": "mods",
-          "match": "arnold-snow-*.jar",
-          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-20261101-1/arnold-snow-0.8.0.jar",
-          "sha512": "e4b15b771a766e4059523e740406dcd31f6bc15ac9fc21ce515925d75b2f7083ab2ac7ea949cf8dbc76260d498d0d94f8113ec8797b313ded9a15703d23c69ff",
+          "match": "arnold-snowfall*.jar",
+          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.1/arnold-snowfall-1.2.0.jar",
+          "sha512": "f281c3aa82bc83cf68cc95e6959a5135b32ebab9b850435b17e0d7691c4eac2e3c193a2ed87c14c24bb758adf0a01a0fd744d6ca36c0bfc4d52a38feb56d1285",
           "size": 500000
         }
       ]
@@ -440,5 +470,111 @@
       "cores": 4
     },
     "warnRamBelowGB": 8
+  },
+  "qualityPresets": {
+    "potato": {
+      "label": "Potato",
+      "description": "Fastest. Shaders stay off. Sodium uses FAST leaves and weather, a short view distance, and simple clouds. Ships hide spray and foam.",
+      "skipComponents": ["wakes", "waves"],
+      "recommendOcean": false,
+      "snow": {
+        "quality": "potato",
+        "fpsTarget": 60,
+        "adaptiveFps": true,
+        "legacyLite": true
+      },
+      "ships": {
+        "particles": 0.3,
+        "spray": false,
+        "wake": false,
+        "hdModels": false
+      },
+      "sodium": {
+        "weatherQuality": "FAST",
+        "leavesQuality": "FAST",
+        "renderDistance": 6,
+        "cloudStatus": "fast"
+      },
+      "iris": { "enableShaders": false },
+      "complementary": { "profile": "LOW" }
+    },
+    "lite": {
+      "label": "Lite",
+      "description": "Light. Complementary on its Low profile. Sodium stays modest. Ships run at half particles.",
+      "skipComponents": [],
+      "recommendOcean": false,
+      "snow": {
+        "quality": "lite",
+        "fpsTarget": 60,
+        "adaptiveFps": true,
+        "legacyLite": true
+      },
+      "ships": {
+        "particles": 0.5,
+        "spray": true,
+        "wake": true,
+        "hdModels": false
+      },
+      "sodium": {
+        "weatherQuality": "FAST",
+        "leavesQuality": "DEFAULT",
+        "renderDistance": 8,
+        "cloudStatus": "fast"
+      },
+      "iris": { "enableShaders": true },
+      "complementary": { "profile": "LOW" }
+    },
+    "normal": {
+      "label": "Normal",
+      "description": "Balanced. Complementary on its Medium profile. Ocean extras are welcome. Ships use the defaults Arnold ships.",
+      "skipComponents": [],
+      "recommendOcean": true,
+      "snow": {
+        "quality": "normal",
+        "fpsTarget": 60,
+        "adaptiveFps": true,
+        "legacyLite": false
+      },
+      "ships": {
+        "particles": 1.0,
+        "spray": true,
+        "wake": true,
+        "hdModels": true
+      },
+      "sodium": {
+        "weatherQuality": "DEFAULT",
+        "leavesQuality": "DEFAULT",
+        "renderDistance": 12,
+        "cloudStatus": "true"
+      },
+      "iris": { "enableShaders": true },
+      "complementary": { "profile": "MEDIUM" }
+    },
+    "ultra": {
+      "label": "Ultra",
+      "description": "Heaviest. Complementary on its High profile. Extra ship particles when Arnold sends those values.",
+      "skipComponents": [],
+      "recommendOcean": true,
+      "snow": {
+        "quality": "ultra",
+        "fpsTarget": 60,
+        "adaptiveFps": true,
+        "legacyLite": false
+      },
+      "ships": {
+        "particles": 1.6,
+        "spray": true,
+        "wake": true,
+        "hdModels": true
+      },
+      "sodium": {
+        "weatherQuality": "FANCY",
+        "leavesQuality": "FANCY",
+        "renderDistance": 16,
+        "cloudStatus": "true"
+      },
+      "iris": { "enableShaders": true },
+      "complementary": { "profile": "HIGH" }
+    }
   }
 }

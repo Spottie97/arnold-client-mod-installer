@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::download::sha512_hex;
 use crate::errors::AppError;
+use crate::quality::QualityLevel;
 
 pub const STATE_SCHEMA: u32 = 1;
 pub const INSTALLER_DIR: &str = "arnold-installer";
@@ -35,6 +36,8 @@ pub struct InstalledState {
     #[serde(default)]
     pub kit: Option<String>,
     #[serde(default)]
+    pub quality: Option<QualityLevel>,
+    #[serde(default)]
     pub components: Vec<InstalledComponent>,
     #[serde(default)]
     pub files: Vec<TrackedFile>,
@@ -48,6 +51,7 @@ impl InstalledState {
             source: source.into(),
             manifest_version: manifest_version.into(),
             kit: None,
+            quality: None,
             components: Vec::new(),
             files: Vec::new(),
             updated_at: now_stamp(),

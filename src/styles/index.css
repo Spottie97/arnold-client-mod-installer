@@ -44,6 +44,14 @@ body {
   @apply inline-flex items-center justify-center gap-2 rounded-full bg-[#2a2833] px-5 py-2.5 font-heading text-base text-text transition-colors hover:bg-[#353240] disabled:opacity-50;
 }
 
+.btn-primary:focus-visible,
+.btn-secondary:focus-visible,
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
+}
+
 .panel {
   @apply rounded-2xl bg-panel p-5;
 }
