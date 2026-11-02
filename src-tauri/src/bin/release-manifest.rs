@@ -2,8 +2,8 @@ use std::path::PathBuf;
 use std::process;
 
 use arnold_client_mods_lib::release_tool::{
-    arg_value, sign, usage_line, write_signed, DEFAULT_TAG, TEST_PRIVATE_KEY_HEX,
-    TEST_PUBLIC_KEY_HEX,
+    arg_value, resolve_signing_key, sign, usage_line, verify_release_assets, write_signed,
+    DEFAULT_TAG, TEST_PRIVATE_KEY_HEX, TEST_PUBLIC_KEY_HEX,
 };
 
 fn usage() -> ! {
@@ -31,16 +31,25 @@ fn main() {
     let tag = arg_value(&args, "--tag").unwrap_or(DEFAULT_TAG);
     let test_key = args.iter().any(|a| a == "--test-key") || from_folder.is_some();
     let sign_as_is = args.iter().any(|a| a == "--sign-as-is");
-    let key_hex = arg_value(&args, "--key-hex")
-        .map(ToString::to_string)
-        .or_else(|| std::env::var("MANIFEST_SIGNING_KEY").ok())
-        .unwrap_or_else(|| {
-            if test_key {
-                TEST_PRIVATE_KEY_HEX.to_string()
-            } else {
-                eprintln!("error: pass --key-hex, MANIFEST_SIGNING_KEY, or --test-key");
-                usage();
+    if let Some(dir) = arg_value(&args, "--verify-assets") {
+        let input_bytes = std::fs::read(&input).unwrap_or_else(|e| {
+            eprintln!("error: {e}");
+            process::exit(1);
+        });
+        match verify_release_assets(&input_bytes, std::path::Path::new(dir), tag) {
+            Ok(count) => println!("verified {count} release assets"),
+            Err(err) => {
+                eprintln!("error: {err}");
+                process::exit(1);
             }
+        }
+        return;
+    }
+    let env_key = std::env::var("MANIFEST_SIGNING_KEY").ok();
+    let key_hex = resolve_signing_key(arg_value(&args, "--key-hex"), env_key.as_deref(), test_key)
+        .unwrap_or_else(|err| {
+            eprintln!("error: {err}");
+            usage();
         });
 
     if sign_as_is {

@@ -276,7 +276,7 @@ pub fn build_plan(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::manifest::load_bundled_manifest;
+    use crate::manifest::load_fixture_manifest;
     use crate::state::{record_file, InstalledState};
 
     #[test]
@@ -296,7 +296,7 @@ mod tests {
 
     #[test]
     fn custom_shaders_pulls_requires() {
-        let manifest = load_bundled_manifest().unwrap();
+        let manifest = load_fixture_manifest().unwrap();
         let plan = build_plan(
             &manifest,
             &Selection {
@@ -316,14 +316,14 @@ mod tests {
         assert!(plan.components.contains(&"shaders".into()));
         assert!(
             !plan.warnings.iter().any(|w| w.contains("Deck")),
-            "server Shipwright 0.11.1 meets Deck 0.11.1: {warnings:?}",
+            "server Shipwright 0.11.2 meets Deck 0.11.1: {warnings:?}",
             warnings = plan.warnings
         );
     }
 
     #[test]
     fn pending_ocean_waves_never_planned() {
-        let manifest = load_bundled_manifest().unwrap();
+        let manifest = load_fixture_manifest().unwrap();
         let plan = build_plan(
             &manifest,
             &Selection {
@@ -345,7 +345,7 @@ mod tests {
 
     #[test]
     fn plan_diff_update_and_remove() {
-        let manifest = load_bundled_manifest().unwrap();
+        let manifest = load_fixture_manifest().unwrap();
         let mut state = InstalledState::new("installer", "old");
         record_file(
             &mut state,
@@ -380,7 +380,7 @@ mod tests {
 
     #[test]
     fn potato_skips_heavy_ocean_even_when_ocean_is_on() {
-        let manifest = load_bundled_manifest().unwrap();
+        let manifest = load_fixture_manifest().unwrap();
         let plan = build_plan(
             &manifest,
             &Selection {
@@ -403,7 +403,7 @@ mod tests {
 
     #[test]
     fn quality_drives_snow_lite() {
-        let manifest = load_bundled_manifest().unwrap();
+        let manifest = load_fixture_manifest().unwrap();
         let ultra = build_plan(
             &manifest,
             &Selection {

@@ -61,11 +61,7 @@ export async function getManifest(): Promise<ManifestLoad> {
   if (!isTauri()) {
     return { manifest: mockManifest(), source: "bundled", offline: false, message: null };
   }
-  try {
-    return await invoke<ManifestLoad>("get_manifest");
-  } catch {
-    return { manifest: mockManifest(), source: "bundled", offline: true, message: "Using the bundled list." };
-  }
+  return await invoke<ManifestLoad>("get_manifest");
 }
 
 export async function detect(): Promise<Detection> {
@@ -276,12 +272,27 @@ export async function checkUpdate(): Promise<{ available: boolean; reason: strin
   return invoke("check_update");
 }
 
-export function asErrorPayload(error: unknown): ErrorPayload {
+function payloadFrom(error: unknown): ErrorPayload | null {
+  if (typeof error === "string") {
+    try {
+      return payloadFrom(JSON.parse(error) as unknown);
+    } catch {
+      return null;
+    }
+  }
   if (error && typeof error === "object" && "code" in error && "title" in error) {
     return error as ErrorPayload;
   }
+  return null;
+}
+
+export function asErrorPayload(error: unknown): ErrorPayload {
+  const payload = payloadFrom(error);
+  if (payload) return payload;
   if (error && typeof error === "object" && "message" in error) {
     const message = String((error as { message: unknown }).message);
+    const nested = payloadFrom(message);
+    if (nested) return nested;
     return {
       code: "E-IO",
       title: "Something went wrong",

@@ -146,11 +146,11 @@ pub fn probe_hardware() -> Hardware {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::manifest::load_bundled_manifest;
+    use crate::manifest::load_fixture_manifest;
 
     #[test]
     fn fixtures_match_expected_kits() {
-        let manifest = load_bundled_manifest().unwrap();
+        let manifest = load_fixture_manifest().unwrap();
         let rec = manifest.recommend.as_ref();
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../tests/hw");
         let mut seen = 0usize;
@@ -229,7 +229,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(gpu.vram_gb, 16.0);
-        let manifest = load_bundled_manifest().unwrap();
+        let manifest = load_fixture_manifest().unwrap();
         let hw = Hardware {
             cpu: "13th Gen Intel(R) Core(TM) i5-13600KF".into(),
             cores: 20,

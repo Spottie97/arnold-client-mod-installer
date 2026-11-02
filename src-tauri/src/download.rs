@@ -9,7 +9,7 @@ pub const RELEASE_REPO: &str = "arnold-client-mod-installer";
 pub const MODRINTH_HOST: &str = "cdn.modrinth.com";
 pub const GITHUB_HOST: &str = "github.com";
 pub const FABRIC_META_HOST: &str = "meta.fabricmc.net";
-pub const ARNOLD_RELEASE_TAG: &str = "mods-2026.11.1";
+pub const ARNOLD_RELEASE_TAG: &str = "mods-2026.11.2";
 
 const GITHUB_ASSET_HOSTS: &[&str] = &[
     "objects.githubusercontent.com",
@@ -165,7 +165,7 @@ mod tests {
             "https://cdn.modrinth.com/data/AANobbMI/versions/sodium.jar"
         ));
         assert!(is_allowed_source_url(
-            "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.1/arnold-snowfall-1.3.3.jar"
+            "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.2/arnold-snowfall-1.3.3.jar"
         ));
         assert!(is_allowed_source_url(
             "https://github.com/Spottie97/arnold-client-mod-installer/releases/latest/download/manifest.json"

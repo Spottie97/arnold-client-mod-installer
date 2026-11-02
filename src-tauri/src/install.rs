@@ -630,13 +630,13 @@ mod tests {
     use super::*;
     use crate::download::sha512_hex;
     use crate::fetch::MapFetcher;
-    use crate::manifest::load_bundled_manifest;
+    use crate::manifest::load_fixture_manifest;
     use crate::plan::{build_plan, Selection};
     use std::sync::Mutex;
     use tempfile::tempdir;
 
     fn test_manifest_and_fetcher() -> (crate::manifest::Manifest, MapFetcher, Vec<u8>) {
-        let mut manifest = load_bundled_manifest().unwrap();
+        let mut manifest = load_fixture_manifest().unwrap();
         let mut fetcher = MapFetcher::default();
         for component in &mut manifest.components {
             for file in &mut component.files {

@@ -1,0 +1,43 @@
+# Public Windows build. No local-source feature and no signing secret.
+# The production manifest public key is compiled in from manifest.rs.
+# Uploads an artifact. Does not create a release or a tag.
+name: Windows public build
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  windows-public:
+    name: Windows x64 public installer
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - run: npm ci
+      - name: Build Windows public installer
+        # Release profile, no --features local-source. ARNOLD_MANIFEST_PUBKEY is optional;
+        # the committed PRODUCTION_MANIFEST_PUBLIC_KEY_HEX is the key this binary trusts.
+        run: npx tauri build --bundles msi
+      - name: Confirm the exe is a release GUI binary
+        shell: pwsh
+        run: |
+          $path = "src-tauri/target/release/arnold-client-mods.exe"
+          if (-not (Test-Path $path)) { throw "release exe missing" }
+          $bytes = [System.IO.File]::ReadAllBytes((Resolve-Path $path))
+          $pe = [BitConverter]::ToInt32($bytes, 0x3C)
+          $subsystem = [BitConverter]::ToUInt16($bytes, $pe + 92)
+          if ($subsystem -ne 2) { throw "expected IMAGE_SUBSYSTEM_WINDOWS_GUI (2), got $subsystem" }
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: arnold-client-mods-windows-x64
+          if-no-files-found: error
+          path: |
+            src-tauri/target/release/arnold-client-mods.exe
+            src-tauri/target/release/bundle/msi/*.msi

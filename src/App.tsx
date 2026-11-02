@@ -160,33 +160,38 @@ export default function App() {
   useEffect(() => {
     let alive = true;
     void (async () => {
-      const [load, d, r, inst, snaps, prefs, legacy, local] = await Promise.all([
-        getManifest(),
-        detect(),
-        scanHardware(),
-        listInstalled(),
-        listSnapshots(),
-        getPrefs(),
-        detectLegacy().catch(() => null),
-        getLocalSource(),
-      ]);
-      if (!alive) return;
-      setManifest(load.manifest);
-      setLocalSource(local);
-      setOfflineBanner(load.offline ? load.message ?? "Using the last good mod list (offline)." : null);
-      setDetection(d);
-      setRecommendation(r);
-      setInstalled(inst);
-      setSnapshots(snaps);
-      setKit(r.kit === "full" ? "recommended" : r.kit);
-      const nextQuality = parseQuality(inst?.quality) ?? r.quality;
-      setQualityLevel(nextQuality);
-      setSnowLite(snowLiteForQuality(nextQuality));
-      setOcean(r.recommendOcean);
-      if (!prefs.tourDone) setTourStep(0);
-      if (legacy?.found && !legacy.alreadyAdopted && !inst) {
-        setImportOffer(legacy);
-        go("import");
+      try {
+        const [load, d, r, inst, snaps, prefs, legacy, local] = await Promise.all([
+          getManifest(),
+          detect(),
+          scanHardware(),
+          listInstalled(),
+          listSnapshots(),
+          getPrefs(),
+          detectLegacy().catch(() => null),
+          getLocalSource(),
+        ]);
+        if (!alive) return;
+        setManifest(load.manifest);
+        setLocalSource(local);
+        setOfflineBanner(load.offline ? load.message ?? "Using the last good mod list (offline)." : null);
+        setDetection(d);
+        setRecommendation(r);
+        setInstalled(inst);
+        setSnapshots(snaps);
+        setKit(r.kit === "full" ? "recommended" : r.kit);
+        const nextQuality = parseQuality(inst?.quality) ?? r.quality;
+        setQualityLevel(nextQuality);
+        setSnowLite(snowLiteForQuality(nextQuality));
+        setOcean(r.recommendOcean);
+        if (!prefs.tourDone) setTourStep(0);
+        if (legacy?.found && !legacy.alreadyAdopted && !inst) {
+          setImportOffer(legacy);
+          go("import");
+        }
+      } catch (err) {
+        if (!alive) return;
+        setError(asErrorPayload(err));
       }
     })();
     return () => {
@@ -392,6 +397,26 @@ export default function App() {
   });
 
   if (!manifest || !detection || !recommendation) {
+    if (error) {
+      return (
+        <AppShell
+          screen="error"
+          footer={
+            <button type="button" className="btn-primary" onClick={() => window.location.reload()}>
+              Try again
+            </button>
+          }
+        >
+          <ErrorScreen
+            error={error}
+            logPath={logPath}
+            logError={logError}
+            onCopyLogPath={() => void copyLogPath()}
+            onOpenLogFolder={() => void openLogFolder()}
+          />
+        </AppShell>
+      );
+    }
     return (
       <div className="app-bg flex min-h-screen items-center justify-center font-heading text-gold">
         Loading…
@@ -412,15 +437,20 @@ export default function App() {
           onHelp={() => go("help")}
           onInstallRecommended={() => void startRecommended()}
           onPickLocalSource={() => {
-            void pickLocalSource().then(async (info) => {
-              setLocalSource(info);
-              const load = await getManifest();
-              setManifest(load.manifest);
-              setOfflineBanner(
-                load.offline ? load.message ?? "Using the last good mod list (offline)." : null,
-              );
-              setCurrentPlan(await plan(selection));
-            });
+            void pickLocalSource()
+              .then(async (info) => {
+                setLocalSource(info);
+                const load = await getManifest();
+                setManifest(load.manifest);
+                setOfflineBanner(
+                  load.offline ? load.message ?? "Using the last good mod list (offline)." : null,
+                );
+                setCurrentPlan(await plan(selection));
+              })
+              .catch((err: unknown) => {
+                setError(asErrorPayload(err));
+                go("error");
+              });
           }}
         />
       );

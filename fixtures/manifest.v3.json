@@ -1,9 +1,9 @@
 {
   "schema": 3,
-  "manifestVersion": "2026.11.01-1",
+  "manifestVersion": "2026.11.02-1",
   "minAppVersion": "3.0.0",
   "minecraft": "26.3",
-  "currentServerShipwright": "0.11.1",
+  "currentServerShipwright": "0.11.2",
   "loader": {
     "id": "fabric-loader-0.20.1-26.3",
     "url": "https://meta.fabricmc.net/v2/versions/loader/26.3/0.20.1/profile/json",
@@ -110,7 +110,7 @@
           "file": "arnold-deck-client-0.11.1.jar",
           "dest": "mods",
           "match": "arnold-deck-client-*.jar",
-          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.1/arnold-deck-client-0.11.1.jar",
+          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.2/arnold-deck-client-0.11.1.jar",
           "sha512": "a5619fffe5e4008054340f8f2bb6b40a30861b2763404b7f398534831907bdfce3fbdb15f307c1d52ecaf4e51522e47f70c7c25267b0206769108b43660b0b58",
           "size": 11243
         }
@@ -124,7 +124,7 @@
         "deck"
       ],
       "name": "Arnold Ships",
-      "version": "0.10.2",
+      "version": "0.10.3",
       "description": "Client ships visuals for the Arnold server.",
       "license": "LicenseRef-Arnold",
       "minServerShipwright": "0.10.0",
@@ -194,12 +194,12 @@
       ],
       "files": [
         {
-          "file": "arnold-ships-client-0.10.2.jar",
+          "file": "arnold-ships-client-0.10.3.jar",
           "dest": "mods",
           "match": "arnold-ships-client-*.jar",
-          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.1/arnold-ships-client-0.10.2.jar",
-          "sha512": "6d8f1ead05738a551c98b61fd50c6cedcee9e4e8ec7f15426a534af1498589b30a1a1aae416c4a0d44ce232e6ba9387f75845ca6084f6d4b9bed69eae8b7497f",
-          "size": 7460810
+          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.2/arnold-ships-client-0.10.3.jar",
+          "sha512": "bf6a3a5a3395b46e69a16144af682b9610b0868bd40b0ae531698705c1c16f552b41eb914176564cbf2f4406dcb8e4c2cb0cb71b47663f5534a22c5b252f7249",
+          "size": 7460714
         }
       ]
     },
@@ -338,7 +338,7 @@
           "file": "arnold-snowfall-1.3.3.jar",
           "dest": "mods",
           "match": "arnold-snowfall*.jar",
-          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.1/arnold-snowfall-1.3.3.jar",
+          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.2/arnold-snowfall-1.3.3.jar",
           "sha512": "2c8e4c8a8adf564475765bdca2bd3aaa9873d8f2f79ba76e1f7fac531adbf389f32914d13e1ded9daa8f004dc2e8ccd6007fbb1d94e8c1cfc165215ab51d1199",
           "size": 152127
         }

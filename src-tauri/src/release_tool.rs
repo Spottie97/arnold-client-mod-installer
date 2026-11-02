@@ -9,7 +9,7 @@ pub const TEST_PRIVATE_KEY_HEX: &str =
     "48ab0651056657627942de64e86d5435d7391e1ecd922679081c2fbadc376c98";
 pub const TEST_PUBLIC_KEY_HEX: &str =
     "b44547ef0ceb7e4bac652ab9b73b46b2ff3d86d27196a479b674be29e87fdbef";
-pub const DEFAULT_TAG: &str = "mods-2026.11.1";
+pub const DEFAULT_TAG: &str = "mods-2026.11.2";
 
 fn sha512_hex(data: &[u8]) -> String {
     hex::encode(Sha512::digest(data))
@@ -17,8 +17,113 @@ fn sha512_hex(data: &[u8]) -> String {
 
 pub fn usage_line() -> String {
     format!(
-        "release-manifest --in <manifest.json> --out <dir> [--assets <dir>] [--from-folder <dir>] [--tag {DEFAULT_TAG}] [--key-hex HEX] [--test-key] [--sign-as-is]"
+        "release-manifest --in <manifest.json> [--out <dir>] [--assets <dir>] [--from-folder <dir>] [--tag {DEFAULT_TAG}] [--key-hex HEX] [--test-key] [--sign-as-is] [--verify-assets <dir>]"
     )
+}
+
+/// Choose the signing seed. `--test-key` / `--from-folder` force the test seed
+/// unless `--key-hex` is set. A public sign refuses the test seed.
+pub fn resolve_signing_key(
+    explicit_hex: Option<&str>,
+    env_key: Option<&str>,
+    test_key: bool,
+) -> Result<String, String> {
+    if let Some(hex) = explicit_hex
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        return Ok(hex.to_string());
+    }
+    if test_key {
+        return Ok(TEST_PRIVATE_KEY_HEX.to_string());
+    }
+    let Some(env_key) = env_key.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Err("pass --key-hex, MANIFEST_SIGNING_KEY, or --test-key".into());
+    };
+    if env_key == TEST_PRIVATE_KEY_HEX {
+        return Err(
+            "MANIFEST_SIGNING_KEY is the test key. Refusing to sign a public manifest with it."
+                .into(),
+        );
+    }
+    Ok(env_key.to_string())
+}
+
+/// Check every GitHub Release file listed in the manifest against bytes in `assets`.
+/// Modrinth files are skipped. Missing files and hash or size mismatches fail.
+pub fn verify_release_assets(
+    manifest_bytes: &[u8],
+    assets: &Path,
+    tag: &str,
+) -> Result<usize, String> {
+    let manifest: serde_json::Value =
+        serde_json::from_slice(manifest_bytes).map_err(|e| e.to_string())?;
+    let prefix = format!(
+        "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/{tag}/"
+    );
+    let components = manifest
+        .get("components")
+        .and_then(|value| value.as_array())
+        .ok_or_else(|| "manifest has no components".to_string())?;
+    let mut checked = 0usize;
+    for component in components {
+        let Some(files) = component.get("files").and_then(|value| value.as_array()) else {
+            continue;
+        };
+        for file in files {
+            let name = file
+                .get("file")
+                .and_then(|value| value.as_str())
+                .unwrap_or("");
+            let url = file
+                .get("url")
+                .and_then(|value| value.as_str())
+                .unwrap_or("");
+            if !url
+                .starts_with("https://github.com/Spottie97/arnold-client-mod-installer/releases/")
+            {
+                continue;
+            }
+            if name.is_empty() {
+                return Err("release asset is missing a file name".into());
+            }
+            let expected_url = format!("{prefix}{name}");
+            if url != expected_url {
+                return Err(format!(
+                    "{name} url is not {expected_url} (manifest tag must be {tag})"
+                ));
+            }
+            let expected = file
+                .get("sha512")
+                .and_then(|value| value.as_str())
+                .unwrap_or("")
+                .to_ascii_lowercase();
+            let path = assets.join(name);
+            if !path.is_file() {
+                return Err(format!("missing release asset {name}"));
+            }
+            let bytes = fs::read(&path).map_err(|e| format!("{name}: {e}"))?;
+            if let Some(size) = file.get("size").and_then(|value| value.as_u64()) {
+                if bytes.len() as u64 != size {
+                    return Err(format!(
+                        "{name} size mismatch: manifest {size}, file {}",
+                        bytes.len()
+                    ));
+                }
+            }
+            let actual = sha512_hex(&bytes);
+            if actual != expected {
+                return Err(format!(
+                    "{name} sha512 mismatch: manifest {expected}, file {actual}"
+                ));
+            }
+            checked += 1;
+        }
+    }
+    if checked == 0 {
+        return Err(format!("no Arnold release assets for tag {tag}"));
+    }
+    Ok(checked)
 }
 
 pub fn arg_value<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
@@ -229,5 +334,61 @@ mod tests {
             .unwrap();
         assert_eq!(snow.files[0].size, 10);
         assert!(snow.files[0].url.starts_with("file:"));
+    }
+
+    #[test]
+    fn test_key_flag_does_not_use_an_env_signing_key() {
+        let env_key = "cd".repeat(32);
+        let choice = resolve_signing_key(None, Some(&env_key), true).unwrap();
+        assert_ne!(choice, env_key);
+        let signature = sign(b"local-source", &choice).unwrap();
+        crate::manifest::verify_signature(
+            b"local-source",
+            &signature,
+            crate::manifest::TEST_MANIFEST_PUBLIC_KEY_HEX,
+        )
+        .unwrap();
+        match resolve_signing_key(None, Some(&choice), false) {
+            Err(err) => {
+                assert!(err.contains("test key"), "{err}");
+                assert!(!err.contains(&choice));
+            }
+            Ok(_) => panic!("public signing accepted the test key"),
+        }
+        let explicit = "11".repeat(32);
+        assert_eq!(
+            resolve_signing_key(Some(&explicit), Some(&choice), true).unwrap(),
+            explicit
+        );
+    }
+
+    #[test]
+    fn verify_release_assets_checks_sha512_and_rejects_a_mismatch() {
+        let tmp = tempdir().unwrap();
+        let dir = tmp.path();
+        let bytes = b"arnold-jar-bytes";
+        fs::write(dir.join("arnold-ships-client-0.10.3.jar"), bytes).unwrap();
+        let hash = sha512_hex(bytes);
+        let tag = DEFAULT_TAG;
+        let manifest = format!(
+            r#"{{"components":[{{"files":[
+                {{"file":"arnold-ships-client-0.10.3.jar","url":"https://github.com/Spottie97/arnold-client-mod-installer/releases/download/{tag}/arnold-ships-client-0.10.3.jar","sha512":"{hash}","size":{size}}},
+                {{"file":"sodium.jar","url":"https://cdn.modrinth.com/data/x/sodium.jar","sha512":"{hash}","size":1}}
+            ]}}]}}"#,
+            size = bytes.len()
+        );
+        assert_eq!(
+            verify_release_assets(manifest.as_bytes(), dir, tag).unwrap(),
+            1
+        );
+        let bad = manifest.replace(&hash, &"ab".repeat(64));
+        let err = verify_release_assets(bad.as_bytes(), dir, tag).unwrap_err();
+        assert!(err.contains("sha512 mismatch"), "{err}");
+        let missing = manifest.replace("arnold-ships-client-0.10.3.jar", "arnold-missing.jar");
+        let err = verify_release_assets(missing.as_bytes(), dir, tag).unwrap_err();
+        assert!(
+            err.contains("missing") || err.contains("url is not"),
+            "{err}"
+        );
     }
 }

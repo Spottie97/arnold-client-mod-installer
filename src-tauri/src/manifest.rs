@@ -18,8 +18,113 @@ use crate::quality::QualityTable;
 pub const TEST_MANIFEST_PUBLIC_KEY_HEX: &str =
     "b44547ef0ceb7e4bac652ab9b73b46b2ff3d86d27196a479b674be29e87fdbef";
 
+/// All-zero placeholder. A public release build must refuse this key.
+pub const MANIFEST_PUBLIC_KEY_PLACEHOLDER: &str =
+    "0000000000000000000000000000000000000000000000000000000000000000";
+
+/// Production Ed25519 public key for the remote mod list.
+/// The matching private seed lives only as secret `MANIFEST_SIGNING_KEY` in the
+/// GitHub environment `manifest-release`. Safe to commit.
+/// `ARNOLD_MANIFEST_PUBKEY` overrides this at compile time when it is non-empty.
+pub const PRODUCTION_MANIFEST_PUBLIC_KEY_HEX: &str =
+    "f7c8766e77505afd2b39d2f72501d61b020b73d852da18a56873f97f0d809ceb";
+
+/// Test-signed fixture. Public builds verify it with the active key and skip it
+/// when that check fails. `local-source` builds verify it with the test key.
 pub const BUNDLED_MANIFEST_JSON: &str = include_str!("../../fixtures/manifest.v3.json");
 pub const BUNDLED_MANIFEST_SIG_HEX: &str = include_str!("../../fixtures/manifest.v3.json.sig");
+
+/// Which manifest public key a build is allowed to trust.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ManifestKeyPolicy {
+    pub local_source: bool,
+    /// `true` for a release profile (`debug_assertions` off). Release public
+    /// builds never accept the test key.
+    pub release_build: bool,
+    /// `ARNOLD_ALLOW_TEST_MANIFEST_KEY` on a debug/dev build. Ignored for release.
+    pub dev_flag: bool,
+}
+
+/// Compile-time public key. Empty `ARNOLD_MANIFEST_PUBKEY` keeps the committed key.
+pub fn configured_production_public_key() -> &'static str {
+    option_env!("ARNOLD_MANIFEST_PUBKEY")
+        .map(str::trim)
+        .filter(|key| !key.is_empty())
+        .unwrap_or(PRODUCTION_MANIFEST_PUBLIC_KEY_HEX)
+}
+
+pub fn current_manifest_key_policy() -> ManifestKeyPolicy {
+    ManifestKeyPolicy {
+        local_source: cfg!(feature = "local-source"),
+        release_build: !cfg!(debug_assertions),
+        dev_flag: dev_test_manifest_key_flag(),
+    }
+}
+
+fn dev_flag_enabled(value: &str) -> bool {
+    let value = value.trim();
+    value == "1" || value.eq_ignore_ascii_case("true") || value.eq_ignore_ascii_case("yes")
+}
+
+fn dev_test_manifest_key_flag() -> bool {
+    std::env::var("ARNOLD_ALLOW_TEST_MANIFEST_KEY")
+        .ok()
+        .is_some_and(|value| dev_flag_enabled(&value))
+        || option_env!("ARNOLD_ALLOW_TEST_MANIFEST_KEY").is_some_and(dev_flag_enabled)
+}
+
+/// `true` when a public build must not treat `key` as a production verifying key.
+pub fn production_manifest_key_rejected(key: &str) -> bool {
+    let key = key.trim();
+    if key.len() != 64 || !key.chars().all(|c| c.is_ascii_hexdigit()) {
+        return true;
+    }
+    let lower = key.to_ascii_lowercase();
+    if lower == TEST_MANIFEST_PUBLIC_KEY_HEX || lower == MANIFEST_PUBLIC_KEY_PLACEHOLDER {
+        return true;
+    }
+    let Ok(bytes) = hex::decode(&lower) else {
+        return true;
+    };
+    let Ok(arr) = <[u8; 32]>::try_from(bytes.as_slice()) else {
+        return true;
+    };
+    VerifyingKey::from_bytes(&arr).is_err()
+}
+
+pub fn unconfigured_manifest_key() -> AppError {
+    AppError::Other {
+        code: "E-MANIFEST-KEY".into(),
+        title: "This build isn't configured".into(),
+        hint: "This installer will not load a mod list until it is built with the production signing key. Download the published installer.".into(),
+        detail: "The manifest public key is missing, still the placeholder, or equal to the test key. A release build refuses that key. A debug build can set ARNOLD_ALLOW_TEST_MANIFEST_KEY=1 to keep using the test key.".into(),
+    }
+}
+
+/// Key used for the remote manifest, the cached manifest, and the bundled fixture.
+pub fn select_manifest_public_key(
+    policy: ManifestKeyPolicy,
+    production_key: &str,
+) -> Result<&str, AppError> {
+    if policy.local_source {
+        return Ok(TEST_MANIFEST_PUBLIC_KEY_HEX);
+    }
+    let key = production_key.trim();
+    if production_manifest_key_rejected(key) {
+        if !policy.release_build && policy.dev_flag {
+            return Ok(TEST_MANIFEST_PUBLIC_KEY_HEX);
+        }
+        return Err(unconfigured_manifest_key());
+    }
+    Ok(key)
+}
+
+pub fn active_manifest_public_key() -> Result<&'static str, AppError> {
+    select_manifest_public_key(
+        current_manifest_key_policy(),
+        configured_production_public_key(),
+    )
+}
 
 pub const MANIFEST_SCHEMA: u32 = 3;
 pub const SNOW_LITE_PRESET: &str = "snow.lite";
@@ -309,12 +414,18 @@ pub fn parse_and_verify(
 }
 
 pub fn load_bundled_manifest() -> Result<Manifest, AppError> {
+    load_bundled_manifest_with_key(active_manifest_public_key()?)
+}
+
+pub fn load_bundled_manifest_with_key(public_key_hex: &str) -> Result<Manifest, AppError> {
     let sig = hex::decode(BUNDLED_MANIFEST_SIG_HEX.trim())?;
-    parse_and_verify(
-        BUNDLED_MANIFEST_JSON.as_bytes(),
-        &sig,
-        TEST_MANIFEST_PUBLIC_KEY_HEX,
-    )
+    parse_and_verify(BUNDLED_MANIFEST_JSON.as_bytes(), &sig, public_key_hex)
+}
+
+/// Parsed bundled JSON for unit tests that need the mod list, not its signature.
+#[cfg(test)]
+pub fn load_fixture_manifest() -> Result<Manifest, AppError> {
+    parse_manifest(BUNDLED_MANIFEST_JSON.as_bytes())
 }
 
 pub fn validate_manifest(manifest: &Manifest) -> Result<(), AppError> {
@@ -564,7 +675,14 @@ pub fn write_manifest_cache(
     Ok(())
 }
 
-pub fn load_cached_manifest(cache_dir: &Path, public_key_hex: &str) -> Result<Manifest, AppError> {
+pub fn load_cached_manifest(cache_dir: &Path) -> Result<Manifest, AppError> {
+    load_cached_manifest_with_key(cache_dir, active_manifest_public_key()?)
+}
+
+pub fn load_cached_manifest_with_key(
+    cache_dir: &Path,
+    public_key_hex: &str,
+) -> Result<Manifest, AppError> {
     let (json_path, sig_path) = cache_paths(cache_dir);
     let bytes = fs::read(json_path)?;
     let sig_text = fs::read_to_string(sig_path)?;
@@ -573,6 +691,12 @@ pub fn load_cached_manifest(cache_dir: &Path, public_key_hex: &str) -> Result<Ma
 }
 
 pub fn fetch_remote_manifest<F: Fetcher>(
+    fetcher: &F,
+) -> Result<(Manifest, Vec<u8>, Vec<u8>), AppError> {
+    fetch_remote_manifest_with_key(fetcher, active_manifest_public_key()?)
+}
+
+pub fn fetch_remote_manifest_with_key<F: Fetcher>(
     fetcher: &F,
     public_key_hex: &str,
 ) -> Result<(Manifest, Vec<u8>, Vec<u8>), AppError> {
@@ -597,14 +721,23 @@ pub(crate) fn decode_signature(raw: &[u8]) -> Result<Vec<u8>, AppError> {
     })
 }
 
-/// Remote first, then last-good cache, then the signed bundle. `offline` is set
-/// when the network copy could not be used.
+/// Remote first, then last-good cache, then the bundled fixture if it verifies
+/// with the active key. Public builds skip the test-signed fixture.
+/// `offline` is set when the network copy could not be used.
 pub fn load_best_manifest<F: Fetcher>(
+    fetcher: &F,
+    cache_dir: &Path,
+) -> Result<ManifestLoad, AppError> {
+    let key = active_manifest_public_key()?;
+    Ok(load_best_manifest_with_key(fetcher, cache_dir, key))
+}
+
+pub fn load_best_manifest_with_key<F: Fetcher>(
     fetcher: &F,
     cache_dir: &Path,
     public_key_hex: &str,
 ) -> ManifestLoad {
-    match fetch_remote_manifest(fetcher, public_key_hex) {
+    match fetch_remote_manifest_with_key(fetcher, public_key_hex) {
         Ok((manifest, bytes, signature)) => {
             let _ = write_manifest_cache(cache_dir, &bytes, &signature);
             ManifestLoad {
@@ -616,7 +749,7 @@ pub fn load_best_manifest<F: Fetcher>(
                 local_source_dir: None,
             }
         }
-        Err(remote_err) => match load_cached_manifest(cache_dir, public_key_hex) {
+        Err(remote_err) => match load_cached_manifest_with_key(cache_dir, public_key_hex) {
             Ok(manifest) => ManifestLoad {
                 manifest,
                 source: "cache".into(),
@@ -627,7 +760,7 @@ pub fn load_best_manifest<F: Fetcher>(
                 local_source: false,
                 local_source_dir: None,
             },
-            Err(_) => match load_bundled_manifest() {
+            Err(_) => match load_bundled_manifest_with_key(public_key_hex) {
                 Ok(manifest) => ManifestLoad {
                     manifest,
                     source: "bundled".into(),
@@ -702,12 +835,13 @@ mod tests {
 
     #[test]
     fn bundled_fixture_verifies_with_embedded_test_key() {
-        let manifest = load_bundled_manifest().unwrap();
+        let manifest = load_bundled_manifest_with_key(TEST_MANIFEST_PUBLIC_KEY_HEX).unwrap();
         assert_eq!(manifest.schema, 3);
+        assert_eq!(manifest.manifest_version, "2026.11.02-1");
         assert_eq!(manifest.minecraft, "26.3");
         assert_eq!(
             manifest.current_server_shipwright.as_deref(),
-            Some("0.11.1")
+            Some("0.11.2")
         );
         assert!(manifest
             .components
@@ -729,7 +863,7 @@ mod tests {
 
     #[test]
     fn bundled_download_entries_match_verified_modrinth_and_arnold_assets() {
-        let manifest = load_bundled_manifest().unwrap();
+        let manifest = load_fixture_manifest().unwrap();
 
         let fabric = file_of(&manifest, "base", "fabric-api-0.165.0+26.3.jar");
         assert_eq!(
@@ -782,12 +916,15 @@ mod tests {
         );
         assert_eq!(deck.size, 11_243);
 
-        let ships = file_of(&manifest, "ships", "arnold-ships-client-0.10.2.jar");
+        let ships = file_of(&manifest, "ships", "arnold-ships-client-0.10.3.jar");
+        assert!(ships
+            .url
+            .ends_with("/mods-2026.11.2/arnold-ships-client-0.10.3.jar"));
         assert_eq!(
             ships.sha512,
-            "6d8f1ead05738a551c98b61fd50c6cedcee9e4e8ec7f15426a534af1498589b30a1a1aae416c4a0d44ce232e6ba9387f75845ca6084f6d4b9bed69eae8b7497f"
+            "bf6a3a5a3395b46e69a16144af682b9610b0868bd40b0ae531698705c1c16f552b41eb914176564cbf2f4406dcb8e4c2cb0cb71b47663f5534a22c5b252f7249"
         );
-        assert_eq!(ships.size, 7_460_810);
+        assert_eq!(ships.size, 7_460_714);
 
         let rain = file_of(
             &manifest,
@@ -884,7 +1021,7 @@ mod tests {
 
     #[test]
     fn resolve_requires_adds_sodium_and_base_for_shaders() {
-        let manifest = load_bundled_manifest().unwrap();
+        let manifest = load_fixture_manifest().unwrap();
         let resolved = resolve_requires(&manifest, &["shaders".into()]).unwrap();
         assert!(resolved.contains(&"base".into()));
         assert!(resolved.contains(&"sodium".into()));
@@ -909,14 +1046,16 @@ mod tests {
         fetcher.insert(REMOTE_MANIFEST_URL, bytes.to_vec());
         fetcher.insert(REMOTE_MANIFEST_SIG_URL, hex::encode(&sig).into_bytes());
         let tmp = tempdir().unwrap();
-        let loaded = load_best_manifest(&fetcher, tmp.path(), TEST_MANIFEST_PUBLIC_KEY_HEX);
+        let loaded =
+            load_best_manifest_with_key(&fetcher, tmp.path(), TEST_MANIFEST_PUBLIC_KEY_HEX);
         assert_eq!(loaded.source, "remote");
         assert!(!loaded.offline);
         assert_eq!(loaded.manifest.minecraft, "26.3");
 
         let mut offline = MapFetcher::default();
         offline.fail.insert(REMOTE_MANIFEST_URL.to_string());
-        let cached = load_best_manifest(&offline, tmp.path(), TEST_MANIFEST_PUBLIC_KEY_HEX);
+        let cached =
+            load_best_manifest_with_key(&offline, tmp.path(), TEST_MANIFEST_PUBLIC_KEY_HEX);
         assert_eq!(cached.source, "cache");
         assert!(cached.offline);
         assert!(cached
@@ -935,14 +1074,15 @@ mod tests {
         fetcher.insert(REMOTE_MANIFEST_URL, b"{\"tampered\":true}".to_vec());
         fetcher.insert(REMOTE_MANIFEST_SIG_URL, b"00".repeat(64));
         let tmp = tempdir().unwrap();
-        let loaded = load_best_manifest(&fetcher, tmp.path(), TEST_MANIFEST_PUBLIC_KEY_HEX);
+        let loaded =
+            load_best_manifest_with_key(&fetcher, tmp.path(), TEST_MANIFEST_PUBLIC_KEY_HEX);
         assert_eq!(loaded.source, "bundled");
         assert!(loaded.offline);
     }
 
     #[test]
     fn quality_presets_table_matches_arnold_ships() {
-        let manifest = load_bundled_manifest().unwrap();
+        let manifest = load_fixture_manifest().unwrap();
         let table = manifest.quality_presets.expect("qualityPresets in fixture");
         assert_eq!(table.potato.ships.particles, 0.3);
         assert!(!table.potato.ships.spray);
@@ -957,7 +1097,7 @@ mod tests {
 
     #[test]
     fn snow_lite_preset_id_is_snow_dot_lite() {
-        let manifest = load_bundled_manifest().unwrap();
+        let manifest = load_fixture_manifest().unwrap();
         let snow = component_by_id(&manifest, "snow").unwrap();
         let preset = lite_preset(snow.config.as_ref().unwrap()).unwrap();
         assert!(snow
@@ -989,5 +1129,176 @@ mod tests {
             "https://meta.fabricmc.net/v2/versions/loader/26.3/0.20.1/profile/json"
         );
         parse_manifest(&serde_json::to_vec(&v).unwrap()).unwrap();
+    }
+
+    fn release_policy() -> ManifestKeyPolicy {
+        ManifestKeyPolicy {
+            local_source: false,
+            release_build: true,
+            dev_flag: true,
+        }
+    }
+
+    #[test]
+    fn committed_production_key_is_not_the_test_key() {
+        assert_ne!(
+            PRODUCTION_MANIFEST_PUBLIC_KEY_HEX,
+            TEST_MANIFEST_PUBLIC_KEY_HEX
+        );
+        assert!(!production_manifest_key_rejected(
+            PRODUCTION_MANIFEST_PUBLIC_KEY_HEX
+        ));
+        assert!(production_manifest_key_rejected(
+            TEST_MANIFEST_PUBLIC_KEY_HEX
+        ));
+        assert!(production_manifest_key_rejected(
+            MANIFEST_PUBLIC_KEY_PLACEHOLDER
+        ));
+    }
+
+    #[test]
+    fn release_public_policy_rejects_test_key_and_placeholder() {
+        for bad in [
+            TEST_MANIFEST_PUBLIC_KEY_HEX,
+            MANIFEST_PUBLIC_KEY_PLACEHOLDER,
+            "",
+            "abcd",
+        ] {
+            let err = select_manifest_public_key(release_policy(), bad).unwrap_err();
+            assert_eq!(err.code(), "E-MANIFEST-KEY");
+            let payload = err.to_payload();
+            assert!(
+                payload.title.contains("isn't configured"),
+                "{}",
+                payload.title
+            );
+        }
+    }
+
+    #[test]
+    fn release_public_policy_uses_only_the_production_key() {
+        let key = select_manifest_public_key(release_policy(), PRODUCTION_MANIFEST_PUBLIC_KEY_HEX)
+            .unwrap();
+        assert_eq!(key, PRODUCTION_MANIFEST_PUBLIC_KEY_HEX);
+        let bytes = BUNDLED_MANIFEST_JSON.as_bytes();
+        let sig = hex::decode(BUNDLED_MANIFEST_SIG_HEX.trim()).unwrap();
+        let err = parse_and_verify(bytes, &sig, key).unwrap_err();
+        assert_eq!(err.code(), "E-SIG-INVALID");
+    }
+
+    #[test]
+    fn debug_dev_flag_uses_test_key_only_when_production_key_is_unusable() {
+        let debug = ManifestKeyPolicy {
+            local_source: false,
+            release_build: false,
+            dev_flag: true,
+        };
+        assert_eq!(
+            select_manifest_public_key(debug, MANIFEST_PUBLIC_KEY_PLACEHOLDER).unwrap(),
+            TEST_MANIFEST_PUBLIC_KEY_HEX
+        );
+        let no_flag = ManifestKeyPolicy {
+            dev_flag: false,
+            ..debug
+        };
+        assert_eq!(
+            select_manifest_public_key(no_flag, TEST_MANIFEST_PUBLIC_KEY_HEX)
+                .unwrap_err()
+                .code(),
+            "E-MANIFEST-KEY"
+        );
+        assert_eq!(
+            select_manifest_public_key(debug, PRODUCTION_MANIFEST_PUBLIC_KEY_HEX).unwrap(),
+            PRODUCTION_MANIFEST_PUBLIC_KEY_HEX
+        );
+    }
+
+    #[test]
+    fn local_source_policy_keeps_the_test_key() {
+        let policy = ManifestKeyPolicy {
+            local_source: true,
+            release_build: true,
+            dev_flag: false,
+        };
+        assert_eq!(
+            select_manifest_public_key(policy, PRODUCTION_MANIFEST_PUBLIC_KEY_HEX).unwrap(),
+            TEST_MANIFEST_PUBLIC_KEY_HEX
+        );
+    }
+
+    #[test]
+    fn configured_generated_key_accepts_its_manifest_and_rejects_the_test_signature() {
+        let mut seed = [0u8; 32];
+        for (i, byte) in seed.iter_mut().enumerate() {
+            *byte = u8::try_from((i * 17 + 3) % 251).unwrap_or(1);
+        }
+        let signing = SigningKey::from_bytes(&seed);
+        let public_hex = hex::encode(signing.verifying_key().to_bytes());
+        let key = select_manifest_public_key(release_policy(), &public_hex).unwrap();
+        assert_eq!(key, public_hex);
+
+        let bytes = BUNDLED_MANIFEST_JSON.as_bytes();
+        let signature = signing.sign(bytes).to_bytes();
+        parse_and_verify(bytes, &signature, key).unwrap();
+
+        let test_sig = hex::decode(BUNDLED_MANIFEST_SIG_HEX.trim()).unwrap();
+        let err = parse_and_verify(bytes, &test_sig, key).unwrap_err();
+        assert_eq!(err.code(), "E-SIG-INVALID");
+
+        use crate::fetch::MapFetcher;
+        use tempfile::tempdir;
+        let mut fetcher = MapFetcher::default();
+        fetcher.insert(REMOTE_MANIFEST_URL, bytes.to_vec());
+        fetcher.insert(REMOTE_MANIFEST_SIG_URL, hex::encode(signature).into_bytes());
+        let tmp = tempdir().unwrap();
+        let loaded = load_best_manifest_with_key(&fetcher, tmp.path(), key);
+        assert_eq!(loaded.source, "remote");
+        assert_eq!(loaded.manifest.minecraft, "26.3");
+    }
+
+    #[cfg(feature = "local-source")]
+    #[test]
+    fn active_key_follows_local_source_test_key() {
+        assert_eq!(
+            active_manifest_public_key().unwrap(),
+            TEST_MANIFEST_PUBLIC_KEY_HEX
+        );
+        assert!(load_bundled_manifest().is_ok());
+    }
+
+    #[cfg(not(feature = "local-source"))]
+    #[test]
+    fn public_build_rejects_test_signed_remote_cache_and_bundle() {
+        assert_eq!(
+            active_manifest_public_key().unwrap(),
+            PRODUCTION_MANIFEST_PUBLIC_KEY_HEX
+        );
+        assert_eq!(load_bundled_manifest().unwrap_err().code(), "E-SIG-INVALID");
+
+        use crate::fetch::MapFetcher;
+        use tempfile::tempdir;
+        let bytes = BUNDLED_MANIFEST_JSON.as_bytes();
+        let mut fetcher = MapFetcher::default();
+        fetcher.insert(REMOTE_MANIFEST_URL, bytes.to_vec());
+        fetcher.insert(
+            REMOTE_MANIFEST_SIG_URL,
+            BUNDLED_MANIFEST_SIG_HEX.trim().as_bytes().to_vec(),
+        );
+        let tmp = tempdir().unwrap();
+        let loaded = load_best_manifest(&fetcher, tmp.path()).unwrap();
+        assert_eq!(loaded.source, "error");
+        assert!(loaded.manifest.components.is_empty());
+
+        std::fs::write(tmp.path().join("manifest.json"), bytes).unwrap();
+        std::fs::write(
+            tmp.path().join("manifest.json.sig"),
+            BUNDLED_MANIFEST_SIG_HEX.trim(),
+        )
+        .unwrap();
+        let mut offline = MapFetcher::default();
+        offline.fail.insert(REMOTE_MANIFEST_URL.to_string());
+        let cached = load_best_manifest(&offline, tmp.path()).unwrap();
+        assert_eq!(cached.source, "error");
+        assert!(cached.manifest.components.is_empty());
     }
 }

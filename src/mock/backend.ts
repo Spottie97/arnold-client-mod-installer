@@ -170,8 +170,8 @@ export function mockPlan(sel: Selection): InstallPlan {
       {
         componentId: "ships",
         name: "Arnold Ships",
-        version: "0.10.2",
-        file: "arnold-ships-client-0.10.2.jar",
+        version: "0.10.3",
+        file: "arnold-ships-client-0.10.3.jar",
         dest: "mods",
         url: add.find((f) => f.componentId === "ships")?.url ?? "",
         sha512: add.find((f) => f.componentId === "ships")?.sha512 ?? "",
@@ -197,7 +197,7 @@ export function missingMinecraftError(gameDir: string): ErrorPayload {
     code: "E-MC-MISSING",
     title: "Minecraft 26.3 isn't installed yet",
     hint: "Open the Minecraft Launcher, press Play once on Latest release (26.3), close the game, then press Try again.",
-    detail: `detected: versions/26.3/26.3.jar not found in ${gameDir}\nmanifest 2026.11.01-1 (signature ok) · app 3.0.0 · Windows 11 23H2`,
+    detail: `detected: versions/26.3/26.3.jar not found in ${gameDir}\nmanifest 2026.11.02-1 (signature ok) · app 3.0.0 · Windows 11 23H2`,
   };
 }
 
@@ -237,7 +237,7 @@ export async function playMockInstall(
     { message: "Backup saved (restore point 2026-11-01 20:41)", ms: 400 },
     { message: "Fabric loader 0.20.1 + Fabric API 0.165.0 kept", ms: 350 },
     { message: "Sodium 0.9.2 SHA-512 verified", ms: 400 },
-    { message: "Arnold Ships client 0.10.2 SHA-512 verified · replaced 0.10.1", ms: 450 },
+    { message: "Arnold Ships client 0.10.3 SHA-512 verified · replaced 0.10.2", ms: 450 },
     { message: "Iris 1.11.7 — verifying SHA-512…", ms: 700 },
     { message: "Complementary Reimagined r5.9.3 — 41%", ms: 800 },
     { message: "Wakes 0.7.3 · Particle Rain 4.0.2 · Snow config", ms: 500 },
