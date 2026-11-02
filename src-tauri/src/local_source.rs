@@ -64,6 +64,96 @@ fn parse_cli_dir(args: &[String]) -> Result<Option<String>, AppError> {
     Ok(None)
 }
 
+/// `--local-source` and `ARNOLD_LOCAL_SOURCE` win. Otherwise search beside the exe.
+pub fn resolve_local_source(
+    args: &[String],
+    env_value: Option<&str>,
+    search_roots: &[PathBuf],
+) -> Result<Option<PathBuf>, AppError> {
+    if let Some(dir) = resolve_from_args_env(args, env_value)? {
+        return Ok(Some(dir));
+    }
+    Ok(detect_local_source(search_roots))
+}
+
+pub fn exe_search_roots() -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            roots.push(dir.to_path_buf());
+            if let Some(parent) = dir.parent() {
+                roots.push(parent.to_path_buf());
+            }
+        }
+    }
+    roots
+}
+
+/// A mods folder is a direct child of the exe directory or of its parent,
+/// and it holds both `manifest.json` and `manifest.json.sig`.
+/// `mods-*` names win, and the newest name wins among those.
+pub fn detect_local_source(search_roots: &[PathBuf]) -> Option<PathBuf> {
+    let mut found = Vec::new();
+    for root in search_roots {
+        let Ok(entries) = fs::read_dir(root) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if search_roots.iter().any(|root| same_dir(root, &path)) {
+                continue;
+            }
+            if path.is_dir() && folder_has_signed_manifest(&path) {
+                found.push(path);
+            }
+        }
+    }
+    let chosen = pick_local_source_dir(&found)?;
+    Some(chosen.canonicalize().unwrap_or(chosen))
+}
+
+fn same_dir(left: &Path, right: &Path) -> bool {
+    if left == right {
+        return true;
+    }
+    match (left.canonicalize(), right.canonicalize()) {
+        (Ok(left), Ok(right)) => left == right,
+        _ => false,
+    }
+}
+
+pub fn folder_has_signed_manifest(path: &Path) -> bool {
+    path.join("manifest.json").is_file() && path.join("manifest.json.sig").is_file()
+}
+
+fn is_mods_prefixed(name: &str) -> bool {
+    name.to_ascii_lowercase().starts_with("mods-")
+}
+
+pub fn pick_local_source_dir(candidates: &[PathBuf]) -> Option<PathBuf> {
+    let preferred: Vec<&PathBuf> = candidates
+        .iter()
+        .filter(|path| dir_name(path).is_some_and(|name| is_mods_prefixed(&name)))
+        .collect();
+    let pool: Vec<&PathBuf> = if preferred.is_empty() {
+        candidates.iter().collect()
+    } else {
+        preferred
+    };
+    pool.into_iter()
+        .max_by(|left, right| {
+            let left_name = dir_name(left).unwrap_or_default();
+            let right_name = dir_name(right).unwrap_or_default();
+            left_name.cmp(&right_name).then_with(|| left.cmp(right))
+        })
+        .cloned()
+}
+
+fn dir_name(path: &Path) -> Option<String> {
+    path.file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+}
+
 fn existing_dir(raw: &str) -> Result<PathBuf, AppError> {
     let path = PathBuf::from(raw);
     if !path.is_dir() {
@@ -225,7 +315,7 @@ pub fn pick_folder() -> Option<PathBuf> {
 pub fn resolve_startup() -> Result<Option<PathBuf>, AppError> {
     let env = std::env::var(LOCAL_SOURCE_ENV).ok();
     let args: Vec<String> = std::env::args().collect();
-    if let Some(dir) = resolve_from_args_env(&args, env.as_deref())? {
+    if let Some(dir) = resolve_local_source(&args, env.as_deref(), &exe_search_roots())? {
         return Ok(Some(dir));
     }
     Ok(pick_folder())
@@ -416,6 +506,85 @@ mod tests {
         let fetcher = LocalAwareFetcher::new(MapFetcher::default(), None);
         let err = fetcher.fetch(&url).unwrap_err();
         assert_eq!(err.code(), "E-URL-NOT-ALLOWED");
+    }
+
+    fn touch_manifest(dir: &Path) {
+        fs::create_dir_all(dir).unwrap();
+        fs::write(dir.join("manifest.json"), b"{}").unwrap();
+        fs::write(dir.join("manifest.json.sig"), b"00").unwrap();
+    }
+
+    #[test]
+    fn detects_mods_folder_beside_the_exe_and_prefers_newest_mods_name() {
+        let tmp = tempdir().unwrap();
+        let exe_dir = tmp.path().join("app");
+        fs::create_dir_all(&exe_dir).unwrap();
+        touch_manifest(&exe_dir.join("mods-2026.11.1"));
+        touch_manifest(&exe_dir.join("mods-2026.11.2"));
+        touch_manifest(&exe_dir.join("release-mods-2026.12.9"));
+        fs::write(exe_dir.join("manifest.json"), b"{}").unwrap();
+        fs::write(exe_dir.join("manifest.json.sig"), b"00").unwrap();
+        let got = detect_local_source(&[exe_dir.clone(), tmp.path().to_path_buf()]).unwrap();
+        assert!(got.ends_with("mods-2026.11.2"), "{}", got.display());
+    }
+
+    #[test]
+    fn detects_a_folder_in_the_parent_and_ignores_unsigned_dirs() {
+        let tmp = tempdir().unwrap();
+        let exe_dir = tmp.path().join("Program Files").join("Arnold Client Mods");
+        fs::create_dir_all(&exe_dir).unwrap();
+        let unsigned = tmp.path().join("mods-unsigned");
+        fs::create_dir_all(&unsigned).unwrap();
+        fs::write(unsigned.join("manifest.json"), b"{}").unwrap();
+        touch_manifest(&tmp.path().join("mods-2026.11.1"));
+        let got = detect_local_source(&[exe_dir, tmp.path().to_path_buf()]).unwrap();
+        assert!(got.ends_with("mods-2026.11.1"), "{}", got.display());
+    }
+
+    #[test]
+    fn cli_and_env_win_over_a_folder_beside_the_exe() {
+        let tmp = tempdir().unwrap();
+        let root = tmp.path().join("bundle");
+        fs::create_dir_all(&root).unwrap();
+        touch_manifest(&root.join("mods-auto"));
+        let explicit = tmp.path().join("explicit");
+        fs::create_dir_all(&explicit).unwrap();
+        let explicit = explicit.canonicalize().unwrap();
+        let args = vec![
+            "arnold-client-mods".into(),
+            "--local-source".into(),
+            explicit.display().to_string(),
+        ];
+        let roots = [root];
+        let got = resolve_local_source(&args, None, &roots).unwrap().unwrap();
+        assert_eq!(got, explicit);
+
+        let from_env = resolve_local_source(
+            &["arnold-client-mods".into()],
+            Some(explicit.to_str().unwrap()),
+            &roots,
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(from_env, explicit);
+
+        let auto = resolve_local_source(&["arnold-client-mods".into()], Some(""), &roots)
+            .unwrap()
+            .unwrap();
+        assert!(auto.ends_with("mods-auto"), "{}", auto.display());
+    }
+
+    #[test]
+    fn missing_cli_folder_does_not_fall_through_to_auto_detect() {
+        let tmp = tempdir().unwrap();
+        touch_manifest(&tmp.path().join("mods-auto"));
+        let args = vec![
+            "app".into(),
+            "--local-source".into(),
+            "/no/such/arnold-local-source-dir".into(),
+        ];
+        let err = resolve_local_source(&args, None, &[tmp.path().to_path_buf()]).unwrap_err();
+        assert_eq!(err.code(), "E-STATE");
     }
 
     #[test]

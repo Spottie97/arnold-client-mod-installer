@@ -7,8 +7,10 @@ import {
   confirmImport,
   copyDiagnostics,
   detect,
+  detectLauncher,
   detectLegacy,
   exportLog,
+  finishApp,
   getLocalSource,
   getManifest,
   getPrefs,
@@ -17,6 +19,7 @@ import {
   listenProgress,
   openLauncher,
   pickLocalSource,
+  revealPath,
   plan,
   repairInstall,
   runInstall,
@@ -112,6 +115,10 @@ export default function App() {
   const [tourStep, setTourStep] = useState<number | null>(null);
   const [importOffer, setImportOffer] = useState<ImportOffer | null>(null);
   const [replaceCollisions, setReplaceCollisions] = useState(false);
+  const [launcher, setLauncher] = useState<{ available: boolean; note: string } | null>(null);
+  const [launcherFailed, setLauncherFailed] = useState(false);
+  const [logPath, setLogPath] = useState<string | null>(null);
+  const [logError, setLogError] = useState<string | null>(null);
 
   const go = (next: Screen) => {
     setScreen(next);
@@ -138,6 +145,17 @@ export default function App() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [screen, tourStep]);
+
+  useEffect(() => {
+    if (screen !== "done") return;
+    let alive = true;
+    void detectLauncher().then((status) => {
+      if (alive) setLauncher(status);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [screen]);
 
   useEffect(() => {
     let alive = true;
@@ -297,19 +315,33 @@ export default function App() {
   };
 
   const doExport = async () => {
+    setLogError(null);
     try {
-      await exportLog();
+      const path = await exportLog();
+      setLogPath(path);
+    } catch (err) {
+      const payload = asErrorPayload(err);
+      setLogPath(null);
+      setLogError(`${payload.title} ${payload.hint}`.trim());
+    }
+  };
+
+  const copyLogPath = async () => {
+    if (!logPath) return;
+    try {
+      await navigator.clipboard.writeText(logPath);
     } catch {
-      const blob = new Blob(
-        [JSON.stringify({ error, plan: currentPlan, detection }, null, 2)],
-        { type: "application/json" },
-      );
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "arnold-install-log.json";
-      a.click();
-      URL.revokeObjectURL(url);
+      window.prompt("Copy path", logPath);
+    }
+  };
+
+  const openLogFolder = async () => {
+    if (!logPath) return;
+    try {
+      await revealPath(logPath);
+    } catch (err) {
+      const payload = asErrorPayload(err);
+      setLogError(`${payload.title} ${payload.hint}`.trim());
     }
   };
 
@@ -337,11 +369,23 @@ export default function App() {
       go("welcome");
     },
     onFolder: () => void chooseFolder(),
-    onDoneHome: () => {
-      void openLauncher().catch((err) => {
-        setError(asErrorPayload(err));
-        go("error");
+    launcherAvailable: Boolean(launcher?.available),
+    onOpenLauncher: () => {
+      void openLauncher().then((result) => {
+        if (result.opened) {
+          void finishApp();
+          return;
+        }
+        setLauncherFailed(true);
+        if (result.note) {
+          setLauncher((current) =>
+            current ? { ...current, note: result.note } : { available: false, note: result.note },
+          );
+        }
       });
+    },
+    onFinish: () => {
+      void finishApp();
     },
     onHelpBack: () => go("welcome"),
     onSettings: () => go("settings"),
@@ -433,7 +477,17 @@ export default function App() {
       body = <Progress plan={currentPlan} event={progress} log={progressLog} />;
       break;
     case "done":
-      body = <Done plan={currentPlan} />;
+      body = (
+        <Done
+          plan={currentPlan}
+          launcherNote={launcher?.note ?? null}
+          showLauncherNote={Boolean(launcher) && (!launcher?.available || launcherFailed)}
+          logPath={logPath}
+          logError={logError}
+          onCopyLogPath={() => void copyLogPath()}
+          onOpenLogFolder={() => void openLogFolder()}
+        />
+      );
       break;
     case "error":
       body = (
@@ -442,6 +496,10 @@ export default function App() {
             error ??
             missingMinecraftError(detection.gameDir ?? "C:\\Users\\Sam\\AppData\\Roaming\\.minecraft")
           }
+          logPath={logPath}
+          logError={logError}
+          onCopyLogPath={() => void copyLogPath()}
+          onOpenLogFolder={() => void openLogFolder()}
         />
       );
       break;
@@ -522,7 +580,12 @@ export default function App() {
           }}
         />
       ) : null}
-      <AppShell screen={screen} footer={footer} banner={pickBanner(localSource, offlineBanner)}>
+      <AppShell
+        screen={screen}
+        footer={footer}
+        banner={pickBanner(localSource, offlineBanner)}
+        bannerDetail={localSource?.enabled && localSource.dir ? localSource.dir : null}
+      >
         {body}
       </AppShell>
     </>
@@ -547,7 +610,9 @@ function footerFor(
     onCopy: () => void;
     onRetry: () => void;
     onFolder: () => void;
-    onDoneHome: () => void;
+    launcherAvailable: boolean;
+    onOpenLauncher: () => void;
+    onFinish: () => void;
     onHelpBack: () => void;
     onSettings: () => void;
   },
@@ -618,8 +683,13 @@ function footerFor(
           <button type="button" className="btn-secondary" onClick={actions.onCopy}>
             Copy diagnostics
           </button>
-          <button type="button" className="btn-primary" onClick={actions.onDoneHome}>
-            Open Minecraft Launcher
+          {actions.launcherAvailable ? (
+            <button type="button" className="btn-secondary" onClick={actions.onOpenLauncher}>
+              Open Minecraft Launcher
+            </button>
+          ) : null}
+          <button type="button" className="btn-primary" onClick={actions.onFinish}>
+            Finish
           </button>
         </>
       );

@@ -5,8 +5,9 @@ feature stays off in everyday builds and is never passed to the app-release
 workflow.
 
 Use it when draft GitHub Release files need a login and you do not want a
-public pre-release. Reinhardt can double-click the Windows test installer,
-pick the folder that holds the jars, and install from disk.
+public pre-release. Put the signed mods folder next to the test exe (or next
+to the folder that contains it) and double-click. The app uses that folder
+without asking. The folder picker appears only when nothing is found.
 
 The installer still verifies the **test** Ed25519 signature and every SHA-512.
 Only files inside the chosen folder may use `file://`. Everything else still
@@ -84,8 +85,31 @@ Do not use a production signing key for a local-source test.
 
 ## Run it
 
-Double-click the exe or the MSI. If you did not pass a folder, a picker asks
-for the directory that contains `manifest.json`.
+The test installer is a **release** build (`tauri build`, not `tauri dev`), so
+the window opens without a console.
+
+If you do not pass `--local-source` and `ARNOLD_LOCAL_SOURCE` is unset, the app
+looks for a subfolder that contains both `manifest.json` and
+`manifest.json.sig`:
+
+1. In the exe's own directory.
+2. In the parent of that directory.
+
+Names starting with `mods-` win. If several match, the newest name is used.
+The chosen path is shown under the `TEST BUILD - local source` banner, and the
+folder picker stays closed.
+
+A layout that works for a double-click test:
+
+```text
+D:\minecraft-mods\arnold-client-mods.exe
+D:\minecraft-mods\mods-2026.11.1\manifest.json
+D:\minecraft-mods\mods-2026.11.1\manifest.json.sig
+```
+
+An MSI install puts the exe under Program Files. Auto-detect will not see a
+mods folder that was left next to the downloaded zip, so the picker still
+appears there. Point it at the folder, or start the exe with a path.
 
 Or start it with a path:
 

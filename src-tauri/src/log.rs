@@ -2,6 +2,7 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+use chrono::{Datelike, Timelike};
 use serde::{Deserialize, Serialize};
 use zip::write::SimpleFileOptions;
 use zip::ZipWriter;
@@ -154,7 +155,83 @@ pub fn export_log_zip(
 
 pub fn export_log(game_dir: Option<&Path>) -> Result<PathBuf, AppError> {
     let summary = build_summary(game_dir, "26.3", None, None);
-    export_log_zip(game_dir, None, &summary)
+    export_install_log(game_dir, None, &summary, &local_export_stamp())
+}
+
+pub fn installer_logs_dir_from(documents: &Path) -> PathBuf {
+    documents.join("Arnold Installer").join("logs")
+}
+
+pub fn installer_logs_dir() -> PathBuf {
+    let documents = dirs::document_dir().unwrap_or_else(|| {
+        dirs::home_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("Documents")
+    });
+    installer_logs_dir_from(&documents)
+}
+
+pub fn format_export_stamp(year: i32, month: u32, day: u32, hour: u32, minute: u32) -> String {
+    format!("{year:04}-{month:02}-{day:02}-{hour:02}{minute:02}")
+}
+
+pub fn export_log_filename(stamp: &str) -> String {
+    format!("Arnold-install-log-{stamp}.txt")
+}
+
+pub fn local_export_stamp() -> String {
+    let now = chrono::Local::now();
+    format_export_stamp(now.year(), now.month(), now.day(), now.hour(), now.minute())
+}
+
+pub fn export_install_log(
+    game_dir: Option<&Path>,
+    dest_dir: Option<&Path>,
+    summary: &SystemSummary,
+    stamp: &str,
+) -> Result<PathBuf, AppError> {
+    let exports = dest_dir
+        .map(Path::to_path_buf)
+        .unwrap_or_else(installer_logs_dir);
+    fs::create_dir_all(&exports).map_err(|err| log_export_error(&exports, &err))?;
+    let path = exports.join(export_log_filename(stamp));
+    let body = export_log_text(game_dir, summary)?;
+    fs::write(&path, body).map_err(|err| log_export_error(&path, &err))?;
+    Ok(path)
+}
+
+fn export_log_text(game_dir: Option<&Path>, summary: &SystemSummary) -> Result<String, AppError> {
+    let mut text = diagnostics_text(summary, None);
+    if let Some(game) = game_dir {
+        if let Some(state) = load_state(game)? {
+            text.push_str("\n--- state.json ---\n");
+            text.push_str(&serde_json::to_string_pretty(&state).map_err(|err| {
+                AppError::State(format!("could not write state into the log: {err}"))
+            })?);
+            text.push('\n');
+        }
+        let log_path = logs_dir(game).join("install.jsonl");
+        if log_path.is_file() {
+            text.push_str("\n--- logs/install.jsonl ---\n");
+            text.push_str(&fs::read_to_string(log_path)?);
+            if !text.ends_with('\n') {
+                text.push('\n');
+            }
+        }
+    }
+    Ok(text)
+}
+
+fn log_export_error(path: &Path, err: &std::io::Error) -> AppError {
+    AppError::Other {
+        code: "E-LOG-EXPORT".into(),
+        title: "The install log could not be saved".into(),
+        hint: format!(
+            "Could not write {}. Check that your Documents folder is available, then try Export log again.",
+            path.display()
+        ),
+        detail: err.to_string(),
+    }
 }
 
 #[cfg(test)]
@@ -226,5 +303,74 @@ mod tests {
         assert!(text.contains("/home/sam/.minecraft"));
         assert!(text.contains("E-HASH-MISMATCH"));
         assert!(text.contains("3.0.0"));
+    }
+
+    #[test]
+    fn export_filename_is_dated_under_documents() {
+        assert_eq!(
+            export_log_filename(&format_export_stamp(2026, 11, 2, 19, 15)),
+            "Arnold-install-log-2026-11-02-1915.txt"
+        );
+        let docs = Path::new(r"C:\Users\Sam\Documents");
+        assert_eq!(
+            installer_logs_dir_from(docs),
+            docs.join("Arnold Installer").join("logs")
+        );
+    }
+
+    #[test]
+    fn text_export_contains_summary_state_and_logs_only() {
+        let tmp = tempdir().unwrap();
+        let game = tmp.path();
+        let mut state = InstalledState::new("installer", "2026.11.1");
+        record_file(&mut state, "mods/arnold-snowfall-1.3.3.jar", "abc", "snow");
+        save_state(game, &state).unwrap();
+        append_install_log(game, &serde_json::json!({"step":"done"})).unwrap();
+        fs::write(game.join("secrets.txt"), b"do-not-pack").unwrap();
+        let summary = SystemSummary {
+            app_version: "3.0.0".into(),
+            os: "windows".into(),
+            arch: "x86_64".into(),
+            cpu: "Test CPU".into(),
+            cores: 20,
+            ram_gb: 31.8,
+            gpu: "AMD Radeon RX 9070 XT".into(),
+            vram_gb: 16.0,
+            dedicated_gpu: true,
+            minecraft: "26.3".into(),
+            game_dir: Some(game.display().to_string()),
+            manifest_version: Some("2026.11.01-1".into()),
+            manifest_source: Some("local".into()),
+        };
+        let dest = tmp.path().join("out");
+        let path = export_install_log(
+            Some(game),
+            Some(&dest),
+            &summary,
+            &format_export_stamp(2026, 11, 2, 19, 15),
+        )
+        .unwrap();
+        assert_eq!(
+            path.file_name().unwrap(),
+            "Arnold-install-log-2026-11-02-1915.txt"
+        );
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(text.contains("arnold-snowfall-1.3.3.jar"));
+        assert!(text.contains("\"step\":\"done\"") || text.contains("step"));
+        assert!(text.contains("RX 9070 XT"));
+        assert!(!text.contains("do-not-pack"));
+        assert!(!text.contains("secrets.txt"));
+    }
+
+    #[test]
+    fn export_error_names_the_documents_folder() {
+        let err = log_export_error(
+            Path::new(r"C:\Users\Sam\Documents\Arnold Installer\logs"),
+            &std::io::Error::new(std::io::ErrorKind::PermissionDenied, "denied"),
+        );
+        let payload = err.to_payload();
+        assert_eq!(payload.code, "E-LOG-EXPORT");
+        assert!(payload.title.contains("could not be saved"));
+        assert!(payload.hint.contains("Documents"));
     }
 }

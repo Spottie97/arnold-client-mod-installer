@@ -8,11 +8,13 @@ export function AppShell({
   children,
   footer,
   banner,
+  bannerDetail,
 }: {
   screen: Screen;
   children: ReactNode;
   footer: ReactNode;
   banner?: string | null;
+  bannerDetail?: string | null;
 }) {
   return (
     <div className="app-bg flex min-h-screen flex-col text-text">
@@ -33,7 +35,8 @@ export function AppShell({
           className="mx-8 mb-2 rounded-xl border border-gold/40 bg-panel px-4 py-2 text-sm text-gold"
           role="status"
         >
-          {banner}
+          <div>{banner}</div>
+          {bannerDetail ? <div className="mt-1 break-all text-text">{bannerDetail}</div> : null}
         </div>
       ) : null}
       <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-8 pb-8" id="main">

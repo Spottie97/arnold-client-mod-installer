@@ -20,7 +20,7 @@ use crate::fetch::UreqFetcher;
 use crate::import::{adopt_import, detect_import, ImportOffer};
 use crate::install::{repair_tracked, run_install, ProgressEvent};
 use crate::local_source::{load_local_manifest, LocalAwareFetcher, LOCAL_SOURCE_BANNER};
-use crate::log::{build_summary, diagnostics_text, export_log_zip};
+use crate::log::{build_summary, diagnostics_text, export_install_log, local_export_stamp};
 use crate::manifest::{
     component_by_id, default_cache_dir, lite_preset, load_best_manifest, load_bundled_manifest,
     Manifest, ManifestLoad, SNOW_LITE_PRESET, TEST_MANIFEST_PUBLIC_KEY_HEX,
@@ -302,8 +302,15 @@ pub fn set_game_dir(path: String, state: State<AppState>) -> Result<Detection, E
     detect(state)
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportResult {
+    pub path: String,
+    pub revealed: bool,
+}
+
 #[tauri::command]
-pub fn export_log(state: State<AppState>) -> Result<PathBuf, ErrorPayload> {
+pub fn export_log(state: State<AppState>) -> Result<ExportResult, ErrorPayload> {
     let game = game_dir_of(&state).ok();
     let loaded = cached_or_load(&state).ok();
     let summary = build_summary(
@@ -317,7 +324,18 @@ pub fn export_log(state: State<AppState>) -> Result<PathBuf, ErrorPayload> {
             .map(|m| m.manifest.manifest_version.as_str()),
         loaded.as_ref().map(|m| m.source.as_str()),
     );
-    export_log_zip(game.as_deref(), None, &summary).map_err(|e| e.to_payload())
+    let path = export_install_log(game.as_deref(), None, &summary, &local_export_stamp())
+        .map_err(|e| e.to_payload())?;
+    let revealed = crate::process::reveal_path(&path).is_ok();
+    Ok(ExportResult {
+        path: path.display().to_string(),
+        revealed,
+    })
+}
+
+#[tauri::command]
+pub fn reveal_path(path: String) -> Result<(), ErrorPayload> {
+    crate::process::reveal_path(std::path::Path::new(&path)).map_err(|e| e.to_payload())
 }
 
 #[tauri::command]
@@ -336,8 +354,30 @@ pub fn copy_diagnostics(state: State<AppState>) -> Result<String, ErrorPayload> 
 }
 
 #[tauri::command]
-pub fn open_launcher() -> Result<String, ErrorPayload> {
-    crate::launcher::open_minecraft_launcher().map_err(|e| e.to_payload())
+pub fn detect_launcher() -> crate::launcher::LauncherAvailability {
+    crate::launcher::availability()
+}
+
+#[tauri::command]
+pub fn open_launcher(app: AppHandle) -> crate::launcher::LauncherOpenResult {
+    let result = crate::launcher::try_open();
+    if crate::launcher::should_exit_after_launch(result.opened) {
+        exit_app(&app);
+    }
+    result
+}
+
+#[tauri::command]
+pub fn finish(app: AppHandle) {
+    exit_app(&app);
+}
+
+/// Stop the process. `app.exit` asks the runtime to leave; `std::process::exit`
+/// then ends it so a webview host cannot keep the exe up. There is no
+/// close confirmation, tray icon, or window handler that can cancel this.
+fn exit_app(app: &AppHandle) -> ! {
+    app.exit(0);
+    std::process::exit(0);
 }
 
 #[tauri::command]

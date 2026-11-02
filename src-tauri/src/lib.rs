@@ -15,6 +15,7 @@ pub mod log;
 pub mod manifest;
 pub mod plan;
 pub mod prefs;
+pub mod process;
 pub mod quality;
 pub mod release_tool;
 pub mod scan;
@@ -55,8 +56,11 @@ pub fn run() {
             commands::rollback,
             commands::set_game_dir,
             commands::export_log,
+            commands::reveal_path,
             commands::copy_diagnostics,
+            commands::detect_launcher,
             commands::open_launcher,
+            commands::finish,
             commands::detect_legacy,
             commands::confirm_import,
             commands::get_prefs,

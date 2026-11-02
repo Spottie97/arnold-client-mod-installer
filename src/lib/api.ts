@@ -151,8 +151,16 @@ export async function listenProgress(onEvent: (event: ProgressEvent) => void): P
 }
 
 export async function exportLog(): Promise<string> {
-  if (!isTauri()) return "arnold-install-log.json";
-  return invoke<string>("export_log");
+  if (!isTauri()) {
+    return "C:\\Users\\Sam\\Documents\\Arnold Installer\\logs\\Arnold-install-log-2026-11-02-1915.txt";
+  }
+  const result = await invoke<{ path: string; revealed: boolean }>("export_log");
+  return result.path;
+}
+
+export async function revealPath(path: string): Promise<void> {
+  if (!isTauri()) return;
+  await invoke("reveal_path", { path });
 }
 
 export async function copyDiagnostics(): Promise<string> {
@@ -162,9 +170,35 @@ export async function copyDiagnostics(): Promise<string> {
   return invoke<string>("copy_diagnostics");
 }
 
-export async function openLauncher(): Promise<string> {
-  if (!isTauri()) return "browser-preview";
-  return invoke<string>("open_launcher");
+export const LAUNCHER_NOTE =
+  "Open Minecraft and choose the 'Arnold – Fabric 26.3' profile.";
+
+export interface LauncherAvailability {
+  available: boolean;
+  note: string;
+}
+
+export interface LauncherOpenResult {
+  opened: boolean;
+  note: string;
+}
+
+export async function detectLauncher(): Promise<LauncherAvailability> {
+  if (!isTauri()) return { available: false, note: LAUNCHER_NOTE };
+  return invoke<LauncherAvailability>("detect_launcher");
+}
+
+export async function openLauncher(): Promise<LauncherOpenResult> {
+  if (!isTauri()) return { opened: false, note: LAUNCHER_NOTE };
+  return invoke<LauncherOpenResult>("open_launcher");
+}
+
+export async function finishApp(): Promise<void> {
+  if (!isTauri()) {
+    window.close();
+    return;
+  }
+  await invoke("finish");
 }
 
 export async function detectLegacy(): Promise<ImportOffer> {
