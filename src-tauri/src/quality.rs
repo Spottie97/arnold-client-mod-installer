@@ -1097,7 +1097,7 @@ mod tests {
 
     #[test]
     fn apply_writes_sodium_iris_and_does_not_clobber_player_ships() {
-        use crate::manifest::load_bundled_manifest;
+        use crate::manifest::load_fixture_manifest;
         use tempfile::tempdir;
 
         let tmp = tempdir().unwrap();
@@ -1113,7 +1113,7 @@ mod tests {
             "renderDistance:32\ncloudStatus:true\n",
         )
         .unwrap();
-        let manifest = load_bundled_manifest().expect("signed bundled manifest");
+        let manifest = load_fixture_manifest().expect("signed bundled manifest");
         apply_quality(
             game,
             &manifest,
@@ -1161,7 +1161,7 @@ mod tests {
     #[test]
     fn owned_ships_and_complementary_follow_the_table() {
         use crate::config::MANAGED_HEADER;
-        use crate::manifest::load_bundled_manifest;
+        use crate::manifest::load_fixture_manifest;
         use crate::state::InstalledState;
         use tempfile::tempdir;
 
@@ -1174,7 +1174,7 @@ mod tests {
             format!("{MANAGED_HEADER}\nparticles=1\nspray=true\nwake=true\n"),
         )
         .unwrap();
-        let manifest = load_bundled_manifest().unwrap();
+        let manifest = load_fixture_manifest().unwrap();
         let mut state = InstalledState::new("installer", "test");
         state.quality = Some(QualityLevel::Normal);
         record_file(
@@ -1206,7 +1206,7 @@ mod tests {
     #[test]
     fn quality_change_snapshots_and_updates_iris() {
         use crate::backup::list_snapshots;
-        use crate::manifest::load_bundled_manifest;
+        use crate::manifest::load_fixture_manifest;
         use crate::state::InstalledComponent;
         use tempfile::tempdir;
 
@@ -1218,7 +1218,7 @@ mod tests {
             "enableShaders=true\nshaderPack=ComplementaryReimagined_r5.9.3.zip\n",
         )
         .unwrap();
-        let manifest = load_bundled_manifest().unwrap();
+        let manifest = load_fixture_manifest().unwrap();
         let mut state = InstalledState::new("installer", "test");
         state.quality = Some(QualityLevel::Normal);
         state.components.push(InstalledComponent {
@@ -1240,8 +1240,8 @@ mod tests {
 
     #[test]
     fn manifest_table_is_easy_to_edit() {
-        use crate::manifest::load_bundled_manifest;
-        let manifest = load_bundled_manifest().unwrap();
+        use crate::manifest::load_fixture_manifest;
+        let manifest = load_fixture_manifest().unwrap();
         let table = table_from_manifest(&manifest);
         assert!(!table.potato.ships.spray);
         assert!(!table.potato.ships.hd_models);
@@ -1280,7 +1280,7 @@ mod tests {
 
     #[test]
     fn snow_v13_writes_quality_and_only_fills_missing_fps_keys() {
-        use crate::manifest::load_bundled_manifest;
+        use crate::manifest::load_fixture_manifest;
         use tempfile::tempdir;
 
         let tmp = tempdir().unwrap();
@@ -1291,7 +1291,7 @@ mod tests {
             "quality=normal\nadaptiveFps=false\nfpsTarget=90\ndenserSnow=false\nbreath=false\n",
         )
         .unwrap();
-        let manifest = load_bundled_manifest().unwrap();
+        let manifest = load_fixture_manifest().unwrap();
         apply_quality(
             game,
             &manifest,
@@ -1320,12 +1320,12 @@ mod tests {
     #[test]
     fn snow_v13_fresh_install_writes_quality_not_lite_file() {
         use crate::config::{LITE_MARKER, MANAGED_HEADER};
-        use crate::manifest::load_bundled_manifest;
+        use crate::manifest::load_fixture_manifest;
         use tempfile::tempdir;
 
         let tmp = tempdir().unwrap();
         let game = tmp.path();
-        let manifest = load_bundled_manifest().unwrap();
+        let manifest = load_fixture_manifest().unwrap();
         apply_quality(game, &manifest, QualityLevel::Lite, &["snow".into()], None).unwrap();
         let snow = fs::read_to_string(game.join("config/arnold-snow-client.properties")).unwrap();
         assert!(snow.starts_with(MANAGED_HEADER), "{snow}");
@@ -1338,7 +1338,7 @@ mod tests {
     #[test]
     fn snow_v12_fallback_still_rewrites_owned_lite() {
         use crate::config::{LITE_MARKER, MANAGED_HEADER};
-        use crate::manifest::load_bundled_manifest;
+        use crate::manifest::load_fixture_manifest;
         use tempfile::tempdir;
 
         let tmp = tempdir().unwrap();
@@ -1349,7 +1349,7 @@ mod tests {
             format!("{MANAGED_HEADER}\ndensity=24\ntreeCaps=true\n"),
         )
         .unwrap();
-        let manifest = load_bundled_manifest().unwrap();
+        let manifest = load_fixture_manifest().unwrap();
         apply_quality(game, &manifest, QualityLevel::Lite, &["snow".into()], None).unwrap();
         let snow = fs::read_to_string(game.join("config/arnold-snow-client.properties")).unwrap();
         assert!(snow.starts_with(LITE_MARKER), "{snow}");
@@ -1362,7 +1362,7 @@ mod tests {
     #[test]
     fn ships_never_write_water_mask_false() {
         use crate::config::MANAGED_HEADER;
-        use crate::manifest::load_bundled_manifest;
+        use crate::manifest::load_fixture_manifest;
         use tempfile::tempdir;
 
         let tmp = tempdir().unwrap();
@@ -1373,7 +1373,7 @@ mod tests {
             format!("{MANAGED_HEADER}\nparticles=1.0\nwaterMask=false\nrigidRoot=false\ncalmWhenAboard=false\n"),
         )
         .unwrap();
-        let manifest = load_bundled_manifest().unwrap();
+        let manifest = load_fixture_manifest().unwrap();
         apply_quality(
             game,
             &manifest,

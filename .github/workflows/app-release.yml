@@ -22,6 +22,30 @@ jobs:
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
+      - name: Refuse a public release that trusts the test manifest key
+        shell: bash
+        run: |
+          set -euo pipefail
+          extract() {
+            awk -v name="$1" '
+              $0 ~ ("const " name ": &str =") { found = 1; next }
+              found { gsub(/[^0-9a-fA-F]/, "", $0); print; exit }
+            ' src-tauri/src/manifest.rs
+          }
+          production="$(extract PRODUCTION_MANIFEST_PUBLIC_KEY_HEX)"
+          test_key="$(extract TEST_MANIFEST_PUBLIC_KEY_HEX)"
+          override="$(printf '%s' "${ARNOLD_MANIFEST_PUBKEY:-}" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')"
+          if [ -n "$override" ]; then
+            key="$override"
+          else
+            key="$(printf '%s' "$production" | tr '[:upper:]' '[:lower:]')"
+          fi
+          placeholder="$(printf '%.0s0' {1..64})"
+          if [ "${#key}" -ne 64 ] || [ "$key" = "$test_key" ] || [ "$key" = "$placeholder" ]; then
+            echo "Public release build is not configured with a production manifest public key."
+            exit 1
+          fi
+          echo "manifest public key accepted for this public release build"
       - uses: actions/setup-node@v4
         with:
           node-version: 22

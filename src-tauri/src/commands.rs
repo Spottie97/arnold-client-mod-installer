@@ -22,8 +22,8 @@ use crate::install::{repair_tracked, run_install, ProgressEvent};
 use crate::local_source::{load_local_manifest, LocalAwareFetcher, LOCAL_SOURCE_BANNER};
 use crate::log::{build_summary, diagnostics_text, export_install_log, local_export_stamp};
 use crate::manifest::{
-    component_by_id, default_cache_dir, lite_preset, load_best_manifest, load_bundled_manifest,
-    Manifest, ManifestLoad, SNOW_LITE_PRESET, TEST_MANIFEST_PUBLIC_KEY_HEX,
+    active_manifest_public_key, component_by_id, default_cache_dir, lite_preset,
+    load_best_manifest, load_bundled_manifest, Manifest, ManifestLoad, SNOW_LITE_PRESET,
 };
 use crate::plan::{build_plan, InstallPlan, Selection};
 use crate::prefs::{load_prefs, save_prefs, Prefs};
@@ -120,16 +120,21 @@ fn cached_or_load(state: &AppState) -> Result<ManifestLoad, AppError> {
             return Ok(loaded);
         }
     }
+    let key = active_manifest_public_key()?;
     let loaded = if let Some(dir) = local_source_dir(state) {
-        load_local_manifest(&dir, TEST_MANIFEST_PUBLIC_KEY_HEX)?
+        load_local_manifest(&dir, key)?
     } else if crate::local_source::is_enabled() {
         pending_local_load()?
     } else {
-        load_best_manifest(
-            &UreqFetcher::new(),
-            &default_cache_dir(),
-            TEST_MANIFEST_PUBLIC_KEY_HEX,
-        )
+        let loaded = load_best_manifest(&UreqFetcher::new(), &default_cache_dir())?;
+        if loaded.source == "error" {
+            return Err(AppError::SignatureInvalid {
+                detail: loaded
+                    .message
+                    .unwrap_or_else(|| "No signed mod list is available.".into()),
+            });
+        }
+        loaded
     };
     if let Ok(mut guard) = state.manifest.lock() {
         *guard = Some(loaded.clone());

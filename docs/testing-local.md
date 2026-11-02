@@ -51,10 +51,10 @@ npm run dev:local
 ## Prepare a folder of jars
 
 Put the Arnold jars and settings in one folder, for example
-`D:\minecraft-mods\release-mods-2026.11.1\`:
+`D:\minecraft-mods\release-mods-2026.11.2\`:
 
 - `arnold-snowfall-1.3.3.jar`
-- `arnold-ships-client-0.10.2.jar`
+- `arnold-ships-client-0.10.3.jar`
 - `arnold-deck-client-0.11.1.jar`
 - `arnold-ships-client.properties`
 - `arnold-snow-client.properties` (`quality=normal`, `fpsTarget=60`, `adaptiveFps=true`)
@@ -68,20 +68,20 @@ the folder are read from disk; missing names keep their signed HTTPS URLs.
 From the repo, on any machine with Rust:
 
 ```bat
-tools\release-manifest --from-folder D:\minecraft-mods\release-mods-2026.11.1
+tools\release-manifest --from-folder D:\minecraft-mods\release-mods-2026.11.2
 ```
 
 On Linux / macOS:
 
 ```bash
-tools/release-manifest --from-folder /path/to/release-mods-2026.11.1
+tools/release-manifest --from-folder /path/to/release-mods-2026.11.2
 ```
 
 `--from-folder` hashes the jars and settings that are present, writes
 `manifest.json`, `manifest.json.sig`, and `SHA512SUMS.txt` into that same
 folder, and signs with the **test** key unless you pass `--key-hex`.
 
-Do not use a production signing key for a local-source test.
+Do not use a production signing key for a local-source test. A public build (no `local-source`) verifies manifests with the production key only and will not accept this test signature. See `docs/updater-key.md`.
 
 ## Run it
 
@@ -103,8 +103,8 @@ A layout that works for a double-click test:
 
 ```text
 D:\minecraft-mods\arnold-client-mods.exe
-D:\minecraft-mods\mods-2026.11.1\manifest.json
-D:\minecraft-mods\mods-2026.11.1\manifest.json.sig
+D:\minecraft-mods\mods-2026.11.2\manifest.json
+D:\minecraft-mods\mods-2026.11.2\manifest.json.sig
 ```
 
 An MSI install puts the exe under Program Files. Auto-detect will not see a
@@ -114,11 +114,11 @@ appears there. Point it at the folder, or start the exe with a path.
 Or start it with a path:
 
 ```bat
-arnold-client-mods.exe --local-source D:\minecraft-mods\release-mods-2026.11.1
+arnold-client-mods.exe --local-source D:\minecraft-mods\release-mods-2026.11.2
 ```
 
 ```bat
-set ARNOLD_LOCAL_SOURCE=D:\minecraft-mods\release-mods-2026.11.1
+set ARNOLD_LOCAL_SOURCE=D:\minecraft-mods\release-mods-2026.11.2
 arnold-client-mods.exe
 ```
 

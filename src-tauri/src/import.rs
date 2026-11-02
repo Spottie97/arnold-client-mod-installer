@@ -214,7 +214,7 @@ pub fn adopt_import(
 mod tests {
     use super::*;
     use crate::download::sha512_hex;
-    use crate::manifest::load_bundled_manifest;
+    use crate::manifest::load_fixture_manifest;
     use tempfile::tempdir;
 
     #[test]
@@ -262,7 +262,7 @@ mod tests {
         fs::write(game.join("mods/arnold-deck-client-0.11.1.jar"), b"deck").unwrap();
         fs::write(game.join("mods/user-extra.jar"), b"keep").unwrap();
         fs::write(game.join("mods/arnold-snowfall-1.1.0.jar.bak"), b"old").unwrap();
-        let manifest = load_bundled_manifest().unwrap();
+        let manifest = load_fixture_manifest().unwrap();
         let offer = detect_import(game, &manifest).unwrap();
         assert!(offer.found);
         assert!(!offer.already_adopted);
@@ -281,7 +281,7 @@ mod tests {
         let game = tmp.path();
         fs::create_dir_all(game.join("mods")).unwrap();
         fs::write(game.join("mods/arnold-snowfall-1.2.0.jar"), b"snow").unwrap();
-        let manifest = load_bundled_manifest().unwrap();
+        let manifest = load_fixture_manifest().unwrap();
         let err = adopt_import(game, &manifest, false).unwrap_err();
         assert_eq!(err.code(), "E-STATE");
         let state = adopt_import(game, &manifest, true).unwrap();

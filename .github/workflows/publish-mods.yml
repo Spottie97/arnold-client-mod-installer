@@ -1,0 +1,139 @@
+# Sign manifest.json with MANIFEST_SIGNING_KEY and attach it to an existing DRAFT
+# mods release. Does not publish, tag, or create a release.
+#
+# GitHub serves /releases/latest from the newest published release that is not a
+# draft and not a prerelease. After a human publishes this draft, the installer
+# fetches:
+#   https://github.com/Spottie97/arnold-client-mod-installer/releases/latest/download/manifest.json
+# That URL returns this manifest only while the mods release is the newest
+# published release. A newer app-v* release without manifest.json makes /latest
+# 404 for the mod list. Publish the mods release after that app release, or
+# attach the same manifest.json and manifest.json.sig to the release that should
+# stay "latest".
+name: Publish mods release
+
+on:
+  workflow_dispatch:
+    inputs:
+      mods_tag:
+        description: Existing draft tag that already has the Arnold jars (example mods-2026.11.2)
+        required: true
+        type: string
+      manifest_source:
+        description: Repo path of the unsigned manifest JSON to sign
+        required: true
+        default: fixtures/manifest.v3.json
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  from-main:
+    name: Require main
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Refuse branches other than main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "Publish mods release only runs from refs/heads/main (got ${{ github.ref }})."
+          exit 1
+      - name: On main
+        if: github.ref == 'refs/heads/main'
+        run: echo "ref is main"
+
+  sign:
+    name: Sign manifest onto the draft release
+    needs: from-main
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    environment: manifest-release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Require a draft release and a repo manifest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MODS_TAG: ${{ inputs.mods_tag }}
+          MANIFEST_SOURCE: ${{ inputs.manifest_source }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$MODS_TAG" =~ ^mods-[0-9]{4}\.[0-9]{2}\.[0-9]+$ ]]; then
+            echo "mods tag must look like mods-2026.11.2"
+            exit 1
+          fi
+          case "$MANIFEST_SOURCE" in
+            /*|*..*) echo "manifest source must be a relative path inside the repo"; exit 1 ;;
+          esac
+          if [ ! -f "$MANIFEST_SOURCE" ]; then
+            echo "manifest source not found: $MANIFEST_SOURCE"
+            exit 1
+          fi
+          draft="$(gh release view "$MODS_TAG" --json isDraft --jq .isDraft)"
+          if [ "$draft" != "true" ]; then
+            echo "Release $MODS_TAG must already exist as a draft. This workflow does not create or publish a release."
+            exit 1
+          fi
+      - name: Download jars from the draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MODS_TAG: ${{ inputs.mods_tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist/draft-assets
+          gh release download "$MODS_TAG" --dir dist/draft-assets --clobber
+      - name: Verify jar sha512 values against the manifest
+        env:
+          MODS_TAG: ${{ inputs.mods_tag }}
+          MANIFEST_SOURCE: ${{ inputs.manifest_source }}
+        run: |
+          set -euo pipefail
+          cargo run --quiet --manifest-path src-tauri/Cargo.toml --bin release-manifest -- \
+            --in "$MANIFEST_SOURCE" \
+            --tag "$MODS_TAG" \
+            --verify-assets dist/draft-assets
+      - name: Sign manifest.json
+        env:
+          MANIFEST_SIGNING_KEY: ${{ secrets.MANIFEST_SIGNING_KEY }}
+          MANIFEST_SOURCE: ${{ inputs.manifest_source }}
+          MODS_TAG: ${{ inputs.mods_tag }}
+        run: |
+          set -euo pipefail
+          # The signing seed is a secret. Do not print it and do not enable xtrace.
+          if [ -z "${MANIFEST_SIGNING_KEY:-}" ]; then
+            echo "MANIFEST_SIGNING_KEY is not available in the manifest-release environment"
+            exit 1
+          fi
+          case "$MANIFEST_SIGNING_KEY" in
+            *[!0-9a-fA-F]*) echo "MANIFEST_SIGNING_KEY must be hex"; exit 1 ;;
+          esac
+          if [ "${#MANIFEST_SIGNING_KEY}" -ne 64 ]; then
+            echo "MANIFEST_SIGNING_KEY must be 64 hex characters (32-byte seed)"
+            exit 1
+          fi
+          cargo run --quiet --manifest-path src-tauri/Cargo.toml --bin release-manifest -- \
+            --in "$MANIFEST_SOURCE" \
+            --sign-as-is \
+            --tag "$MODS_TAG"
+          mkdir -p dist/mods-release
+          cp "$MANIFEST_SOURCE" dist/mods-release/manifest.json
+          cp "${MANIFEST_SOURCE}.sig" dist/mods-release/manifest.json.sig
+          test -s dist/mods-release/manifest.json
+          test -s dist/mods-release/manifest.json.sig
+      - name: Attach the manifest to the same draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MODS_TAG: ${{ inputs.mods_tag }}
+        run: |
+          set -euo pipefail
+          gh release upload "$MODS_TAG" \
+            dist/mods-release/manifest.json \
+            dist/mods-release/manifest.json.sig \
+            --clobber
+          draft="$(gh release view "$MODS_TAG" --json isDraft --jq .isDraft)"
+          if [ "$draft" != "true" ]; then
+            echo "Release $MODS_TAG is no longer a draft. This workflow must not publish it."
+            exit 1
+          fi
+          echo "Attached manifest.json and manifest.json.sig to draft $MODS_TAG."
+          echo "A human still has to publish the draft before /releases/latest/download/manifest.json will serve it."
