@@ -127,6 +127,11 @@ pub fn is_allowed_redirect(from: &str, to: &str) -> Result<(), AppError> {
     if GITHUB_ASSET_HOSTS.contains(&host.as_str()) {
         return Ok(());
     }
+    // `releases/latest/download/<file>` first redirects to
+    // `releases/download/<tag>/<file>` on github.com, still inside this repo.
+    if matches!(classify_source_url(to), Ok(AllowedSource::GitHubReleases)) {
+        return Ok(());
+    }
     Err(reject(to))
 }
 
@@ -219,6 +224,21 @@ mod tests {
             is_allowed_redirect(origin, "https://release-assets.githubusercontent.com/a").is_ok()
         );
         assert!(is_allowed_redirect(origin, "https://evil.com/a").is_err());
+        let latest = "https://github.com/Spottie97/arnold-client-mod-installer/releases/latest/download/manifest.json";
+        assert!(is_allowed_redirect(
+            latest,
+            "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.2/manifest.json"
+        )
+        .is_ok());
+        assert!(is_allowed_redirect(
+            latest,
+            "https://github.com/someone-else/arnold-client-mod-installer/releases/download/x/manifest.json"
+        )
+        .is_err());
+        assert!(
+            is_allowed_redirect(latest, "https://github.com/Spottie97/other-repo/releases/x")
+                .is_err()
+        );
         assert!(is_allowed_redirect(origin, "https://cdn.modrinth.com/data/x.jar").is_err());
         assert!(is_allowed_redirect(
             "https://evil.com/a.jar",
