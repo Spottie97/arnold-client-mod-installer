@@ -19,7 +19,18 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: npm ci
       - name: Build Windows test installer (local-source)
+        # `tauri build` is the release profile, not debug, so windows_subsystem = "windows" applies.
         run: npx tauri build --features local-source --bundles msi
+      - name: Confirm the exe is a release GUI binary
+        shell: pwsh
+        run: |
+          $path = "src-tauri/target/release/arnold-client-mods.exe"
+          if (-not (Test-Path $path)) { throw "release exe missing" }
+          $bytes = [System.IO.File]::ReadAllBytes((Resolve-Path $path))
+          $pe = [BitConverter]::ToInt32($bytes, 0x3C)
+          # Optional header starts at e_lfanew + 24. Subsystem is at offset 68 (GUI = 2).
+          $subsystem = [BitConverter]::ToUInt16($bytes, $pe + 92)
+          if ($subsystem -ne 2) { throw "expected IMAGE_SUBSYSTEM_WINDOWS_GUI (2), got $subsystem" }
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:

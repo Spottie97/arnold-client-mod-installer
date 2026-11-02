@@ -1,7 +1,20 @@
 import { useState } from "react";
+import { LogExportResult } from "../components/LogExport";
 import type { ErrorPayload } from "../types";
 
-export function ErrorScreen({ error }: { error: ErrorPayload }) {
+export function ErrorScreen({
+  error,
+  logPath,
+  logError,
+  onCopyLogPath,
+  onOpenLogFolder,
+}: {
+  error: ErrorPayload;
+  logPath: string | null;
+  logError: string | null;
+  onCopyLogPath: () => void;
+  onOpenLogFolder: () => void;
+}) {
   const [open, setOpen] = useState(false);
   return (
     <div className="flex flex-1 flex-col">
@@ -24,6 +37,12 @@ export function ErrorScreen({ error }: { error: ErrorPayload }) {
           {error.detail}
         </pre>
       ) : null}
+      <LogExportResult
+        path={logPath}
+        error={logError}
+        onCopy={onCopyLogPath}
+        onOpenFolder={onOpenLogFolder}
+      />
     </div>
   );
 }

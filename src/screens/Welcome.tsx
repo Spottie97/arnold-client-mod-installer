@@ -33,11 +33,20 @@ export function Welcome({
       {localSource?.enabled ? (
         <section className="panel mt-8 max-w-2xl border border-gold/40">
           <h2 className="font-heading text-2xl text-gold">TEST BUILD - local source</h2>
-          <p className="mt-2 text-muted">
-            {localSource.dir
-              ? `Reading manifest.json, jars and settings from ${localSource.dir}.`
-              : "Double-click is enough: pick the folder that has manifest.json and the jars."}
-          </p>
+          {localSource.dir ? (
+            <>
+              <p className="mt-2 break-all text-text">{localSource.dir}</p>
+              <p className="mt-2 text-muted">
+                Reading manifest.json, jars and settings from this folder.
+              </p>
+            </>
+          ) : (
+            <p className="mt-2 text-muted">
+              No mods folder was found next to the app. Choose the folder that has manifest.json
+              and manifest.json.sig. An MSI installed under Program Files will not see a folder
+              sitting beside the download, so the picker still appears there.
+            </p>
+          )}
           {onPickLocalSource ? (
             <button type="button" className="btn-primary mt-4" onClick={onPickLocalSource}>
               {localSource.needsFolder ? "Choose mods folder" : "Change folder"}

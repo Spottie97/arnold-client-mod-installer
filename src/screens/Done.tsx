@@ -1,13 +1,32 @@
+import { LogExportResult } from "../components/LogExport";
 import type { InstallPlan } from "../types";
 
-export function Done({ plan }: { plan: InstallPlan }) {
+export function Done({
+  plan,
+  launcherNote,
+  showLauncherNote,
+  logPath,
+  logError,
+  onCopyLogPath,
+  onOpenLogFolder,
+}: {
+  plan: InstallPlan;
+  launcherNote: string | null;
+  showLauncherNote: boolean;
+  logPath: string | null;
+  logError: string | null;
+  onCopyLogPath: () => void;
+  onOpenLogFolder: () => void;
+}) {
   return (
     <div className="flex flex-1 flex-col">
       <h1 className="mt-6 font-heading text-4xl text-gold md:text-5xl">You&apos;re set</h1>
       <p className="mt-4 max-w-2xl text-lg text-muted">
-        Launch the <span className="text-text">Arnold – Fabric 26.3</span> profile in the Minecraft
-        Launcher. Vanilla still works if a friend joins without mods.
+        Vanilla still works if a friend joins without mods.
       </p>
+      {showLauncherNote && launcherNote ? (
+        <p className="mt-3 max-w-2xl text-lg text-text">{launcherNote}</p>
+      ) : null}
       <section className="panel mt-6">
         <h2 className="font-heading text-xl text-gold">What changed</h2>
         <ul className="mt-3 space-y-2 text-muted">
@@ -20,6 +39,12 @@ export function Done({ plan }: { plan: InstallPlan }) {
           </li>
         </ul>
       </section>
+      <LogExportResult
+        path={logPath}
+        error={logError}
+        onCopy={onCopyLogPath}
+        onOpenFolder={onOpenLogFolder}
+      />
     </div>
   );
 }

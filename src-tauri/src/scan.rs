@@ -195,4 +195,66 @@ mod tests {
         let rec = recommend(&hw, None);
         assert!(rec.kit == "full" || rec.kit == "basic");
     }
+
+    #[test]
+    fn corrected_vram_reaches_recommend_for_the_9070_xt() {
+        use crate::gpu::{
+            select_windows_gpu, DxgiAdapter, RegistryGpu, WmiAdapter, ADAPTER_RAM_CAP_SENTINEL,
+        };
+        use crate::quality::{recommend_quality, QualityLevel};
+
+        let qw = 17_163_091_968u64;
+        let gpu = select_windows_gpu(
+            &[
+                WmiAdapter {
+                    name: "Parsec Virtual Display Adapter".into(),
+                    adapter_ram: 0,
+                    pnp_device_id: r"ROOT\PARSEC\0000".into(),
+                },
+                WmiAdapter {
+                    name: "AMD Radeon RX 9070 XT".into(),
+                    adapter_ram: ADAPTER_RAM_CAP_SENTINEL,
+                    pnp_device_id: r"PCI\VEN_1002&DEV_7550&SUBSYS_1234\4".into(),
+                },
+            ],
+            &[RegistryGpu {
+                driver_desc: "AMD Radeon RX 9070 XT".into(),
+                matching_device_id: r"PCI\VEN_1002&DEV_7550&SUBSYS_1234".into(),
+                qw_memory_size: qw,
+            }],
+            &[DxgiAdapter {
+                name: "AMD Radeon RX 9070 XT".into(),
+                dedicated_video_memory: qw,
+            }],
+        )
+        .unwrap();
+        assert_eq!(gpu.vram_gb, 16.0);
+        let manifest = load_bundled_manifest().unwrap();
+        let hw = Hardware {
+            cpu: "13th Gen Intel(R) Core(TM) i5-13600KF".into(),
+            cores: 20,
+            ram_gb: 31.8,
+            gpu: gpu.name,
+            vram_gb: gpu.vram_gb,
+            dedicated_gpu: gpu.dedicated,
+        };
+        let rec = recommend(&hw, manifest.recommend.as_ref());
+        assert_eq!(rec.kit, "full");
+        assert!(!rec.snow_lite);
+        assert!(rec.recommend_ocean);
+        assert_eq!(rec.quality, QualityLevel::Ultra);
+        assert_eq!(recommend_quality(&hw), QualityLevel::Ultra);
+        assert!(rec.reasons.iter().any(|reason| reason.contains("16 GB")));
+
+        let capped = Hardware {
+            vram_gb: 4.0,
+            ..hw.clone()
+        };
+        let old = recommend(&capped, manifest.recommend.as_ref());
+        assert_eq!(old.kit, "full");
+        assert!(!old.snow_lite);
+        assert_eq!(old.quality, QualityLevel::Ultra);
+        assert_eq!(recommend_quality(&capped), QualityLevel::Ultra);
+        assert!(old.reasons.iter().any(|reason| reason.contains("4 GB")));
+    }
 }

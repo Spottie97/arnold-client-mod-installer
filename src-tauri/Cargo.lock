@@ -60,6 +60,7 @@ dependencies = [
 name = "arnold-client-mods"
 version = "3.0.0"
 dependencies = [
+ "chrono",
  "dirs 5.0.1",
  "ed25519-dalek",
  "hex",
