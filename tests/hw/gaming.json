@@ -1,0 +1,11 @@
+{
+  "id": "gaming",
+  "cpu": "AMD Ryzen 7 5800X",
+  "cores": 8,
+  "ramGB": 32,
+  "gpu": "NVIDIA GeForce RTX 3060",
+  "vramGB": 12,
+  "dedicatedGpu": true,
+  "expectKit": "full",
+  "expectSnowLite": false
+}

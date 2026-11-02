@@ -1,0 +1,11 @@
+{
+  "id": "midrange",
+  "cpu": "Intel Core i5-9400",
+  "cores": 6,
+  "ramGB": 8,
+  "gpu": "NVIDIA GeForce GTX 1050 Ti",
+  "vramGB": 2,
+  "dedicatedGpu": true,
+  "expectKit": "basic",
+  "expectSnowLite": false
+}

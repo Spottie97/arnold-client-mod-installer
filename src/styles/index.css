@@ -1,0 +1,71 @@
+@import "./tokens.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-body);
+  background:
+    radial-gradient(at 15% -10%, var(--grad-2), transparent 55%),
+    linear-gradient(160deg, var(--grad-1), var(--bg) 55%);
+  background-attachment: fixed;
+}
+
+.app-bg {
+  min-height: 100vh;
+  background:
+    radial-gradient(at 15% -10%, var(--grad-2), transparent 55%),
+    linear-gradient(160deg, var(--grad-1), var(--bg) 55%);
+}
+
+.font-heading {
+  font-family: var(--font-heading);
+  letter-spacing: 0.01em;
+}
+
+.pill {
+  @apply rounded-full px-3 py-1.5 text-sm;
+}
+
+.btn-primary {
+  @apply inline-flex items-center justify-center gap-2 rounded-full bg-primary px-5 py-2.5 font-heading text-base text-bg transition-colors hover:bg-primary-hover disabled:opacity-50;
+}
+
+.btn-secondary {
+  @apply inline-flex items-center justify-center gap-2 rounded-full bg-[#2a2833] px-5 py-2.5 font-heading text-base text-text transition-colors hover:bg-[#353240] disabled:opacity-50;
+}
+
+.btn-primary:focus-visible,
+.btn-secondary:focus-visible,
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
+}
+
+.panel {
+  @apply rounded-2xl bg-panel p-5;
+}
+
+.progress-track {
+  height: 10px;
+  border-radius: 999px;
+  background: #12101a;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--primary), var(--glow));
+  box-shadow: 0 0 16px var(--glow);
+}

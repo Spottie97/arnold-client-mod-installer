@@ -1,0 +1,11 @@
+{
+  "id": "apu",
+  "cpu": "AMD Ryzen 5 5600G",
+  "cores": 6,
+  "ramGB": 16,
+  "gpu": "AMD Radeon Graphics",
+  "vramGB": 2,
+  "dedicatedGpu": false,
+  "expectKit": "basic",
+  "expectSnowLite": true
+}

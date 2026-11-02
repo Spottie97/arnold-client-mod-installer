@@ -1,0 +1,11 @@
+{
+  "id": "weak",
+  "cpu": "Intel Core i3-8100",
+  "cores": 4,
+  "ramGB": 8,
+  "gpu": "Intel UHD Graphics 630",
+  "vramGB": 0.5,
+  "dedicatedGpu": false,
+  "expectKit": "basic",
+  "expectSnowLite": true
+}

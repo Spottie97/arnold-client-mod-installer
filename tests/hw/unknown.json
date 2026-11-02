@@ -1,0 +1,11 @@
+{
+  "id": "unknown",
+  "cpu": "Unknown",
+  "cores": 2,
+  "ramGB": 4,
+  "gpu": "Unknown",
+  "vramGB": 0,
+  "dedicatedGpu": false,
+  "expectKit": "basic",
+  "expectSnowLite": true
+}
