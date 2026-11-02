@@ -705,10 +705,116 @@ mod tests {
         let manifest = load_bundled_manifest().unwrap();
         assert_eq!(manifest.schema, 3);
         assert_eq!(manifest.minecraft, "26.3");
+        assert_eq!(
+            manifest.current_server_shipwright.as_deref(),
+            Some("0.11.1")
+        );
         assert!(manifest
             .components
             .iter()
             .any(|c| c.id == "deck" && c.required_in_all_kits));
+    }
+
+    fn file_of<'a>(manifest: &'a Manifest, id: &str, name: &str) -> &'a ComponentFile {
+        manifest
+            .components
+            .iter()
+            .find(|c| c.id == id)
+            .unwrap()
+            .files
+            .iter()
+            .find(|f| f.file == name)
+            .unwrap()
+    }
+
+    #[test]
+    fn bundled_download_entries_match_verified_modrinth_and_arnold_assets() {
+        let manifest = load_bundled_manifest().unwrap();
+
+        let fabric = file_of(&manifest, "base", "fabric-api-0.165.0+26.3.jar");
+        assert_eq!(
+            fabric.url,
+            "https://cdn.modrinth.com/data/P7dR8mSH/versions/EQKgpeKu/fabric-api-0.165.0%2B26.3.jar"
+        );
+        assert_eq!(
+            fabric.sha512,
+            "0a4b8a14e847b71567b557b43d906c2167fa263eeeef37454a821ba286996e3da1616dc2d9647736d28a250d5ecf400541cae808359b29a62324a8a6f2ad5e30"
+        );
+        assert_eq!(fabric.size, 1_778_588);
+
+        let sodium = file_of(&manifest, "sodium", "sodium-fabric-0.9.2+mc26.3.jar");
+        assert_eq!(
+            sodium.url,
+            "https://cdn.modrinth.com/data/AANobbMI/versions/bAZQdGpg/sodium-fabric-0.9.2%2Bmc26.3.jar"
+        );
+        assert_eq!(
+            sodium.sha512,
+            "f3f260f204b8ce5e8777c2c73f537956755ec61f3817b0b78b5e5568e8aa40f14891f146475075109747665c7c88a45ca0ca9a8df3c68d79c58ecdaa8d8c4b93"
+        );
+        assert_eq!(sodium.size, 1_908_068);
+
+        let iris = file_of(&manifest, "shaders", "iris-fabric-1.11.7+mc26.3.jar");
+        assert_eq!(
+            iris.url,
+            "https://cdn.modrinth.com/data/YL57xq9U/versions/vTN4NRGW/iris-fabric-1.11.7%2Bmc26.3.jar"
+        );
+        assert_eq!(
+            iris.sha512,
+            "d8d3312f77fc52a48e4a6cd836fda33669bdebcb4de0b8c0d30adc808b287330a533e0baef355cc1ce6336a26851d9775369a802a4666b7b7a6266af20088f42"
+        );
+        assert_eq!(iris.size, 2_850_938);
+
+        let complementary = file_of(&manifest, "shaders", "ComplementaryReimagined_r5.9.3.zip");
+        assert_eq!(
+            complementary.url,
+            "https://cdn.modrinth.com/data/HVnmMxH1/versions/Bqen1mJX/ComplementaryReimagined_r5.9.3.zip"
+        );
+        assert_eq!(
+            complementary.sha512,
+            "45304b1d7862afdb2177b7e6226fc9c6737911d17a4ad46cc9c519ca4deb935f05072cd337cd8b19a15bb8062b57b54eceec7bdee4cd572d94858e2946d37d85"
+        );
+        assert_eq!(complementary.size, 553_397);
+
+        let deck = file_of(&manifest, "deck", "arnold-deck-client-0.11.1.jar");
+        assert_eq!(
+            deck.sha512,
+            "a5619fffe5e4008054340f8f2bb6b40a30861b2763404b7f398534831907bdfce3fbdb15f307c1d52ecaf4e51522e47f70c7c25267b0206769108b43660b0b58"
+        );
+        assert_eq!(deck.size, 11_243);
+
+        let ships = file_of(&manifest, "ships", "arnold-ships-client-0.10.2.jar");
+        assert_eq!(
+            ships.sha512,
+            "6d8f1ead05738a551c98b61fd50c6cedcee9e4e8ec7f15426a534af1498589b30a1a1aae416c4a0d44ce232e6ba9387f75845ca6084f6d4b9bed69eae8b7497f"
+        );
+        assert_eq!(ships.size, 7_460_810);
+
+        let rain = file_of(
+            &manifest,
+            "particlerain",
+            "particlerain-4.0.2+26.3-fabric.jar",
+        );
+        assert_eq!(rain.match_glob, "particlerain-*.jar");
+        assert_eq!(
+            rain.url,
+            "https://cdn.modrinth.com/data/nrikgvxm/versions/ecVAaY1R/particlerain-4.0.2%2B26.3-fabric.jar"
+        );
+        assert_eq!(
+            rain.sha512,
+            "b87684651246c05d0985c88cc0e05ba0e5bdf04d6e5c3ec90962d4342d9f70bc13a4ca86a4276022d71afdcfd69709596e070f3cfe1ae0ee3484dc2924121f19"
+        );
+        assert_eq!(rain.size, 627_188);
+
+        let wakes = file_of(&manifest, "wakes", "wakes-0.7.3+26.3.jar");
+        assert_eq!(
+            wakes.url,
+            "https://cdn.modrinth.com/data/dlNu0RQY/versions/8kcYA6A0/wakes-0.7.3%2B26.3.jar"
+        );
+        assert_eq!(
+            wakes.sha512,
+            "d74b17ddcadd72b95fa23e9f2d8397cb1e753f70792b4d1ca363ab010daa69272c341ed538175284b5926addc1e27b843b3a434da01b47afda80b164b01ae8ee"
+        );
+        assert_eq!(wakes.size, 292_134);
     }
 
     #[test]

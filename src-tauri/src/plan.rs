@@ -286,6 +286,11 @@ mod tests {
             "sodium-fabric-0.8.0+mc26.3.jar"
         ));
         assert!(match_glob("arnold-deck-*.jar", "arnold-deck-0.11.1.jar"));
+        assert!(match_glob(
+            "particlerain-*.jar",
+            "particlerain-4.0.2+26.3-fabric.jar"
+        ));
+        assert!(!match_glob("particlerain-*.jar", "particle-rain-4.0.2.jar"));
         assert!(!match_glob("sodium-fabric-*.jar", "iris-1.11.7.jar"));
     }
 
@@ -309,7 +314,11 @@ mod tests {
         assert!(plan.components.contains(&"base".into()));
         assert!(plan.components.contains(&"sodium".into()));
         assert!(plan.components.contains(&"shaders".into()));
-        assert!(plan.warnings.iter().any(|w| w.contains("Deck")));
+        assert!(
+            !plan.warnings.iter().any(|w| w.contains("Deck")),
+            "server Shipwright 0.11.1 meets Deck 0.11.1: {warnings:?}",
+            warnings = plan.warnings
+        );
     }
 
     #[test]

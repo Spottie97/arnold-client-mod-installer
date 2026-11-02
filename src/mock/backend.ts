@@ -175,7 +175,7 @@ export function mockPlan(sel: Selection): InstallPlan {
         dest: "mods",
         url: add.find((f) => f.componentId === "ships")?.url ?? "",
         sha512: add.find((f) => f.componentId === "ships")?.sha512 ?? "",
-        size: 900000,
+        size: add.find((f) => f.componentId === "ships")?.size ?? 0,
       },
     ],
     remove: [],
