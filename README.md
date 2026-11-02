@@ -30,7 +30,7 @@ Not sure? The installer scans your PC and recommends a kit.
 1. Download the latest release for your system from **[Releases](../../releases)**.
 2. Close Minecraft, then run the installer.
 3. Choose a kit and press **Install**.
-4. Open the Minecraft launcher and pick the **Arnold – Fabric 26.3** profile. If the installer can see the launcher it offers a button for that; otherwise it tells you the profile name. Finish closes the installer.
+4. Open the Minecraft launcher and pick the **Arnold – Fabric 26.3** profile. If the installer can see the launcher it offers a button for that and closes itself once the launcher has started. Otherwise it tells you the profile name. Finish closes the installer.
 
 <details>
 <summary><b>Windows says "Windows protected your PC"</b></summary>

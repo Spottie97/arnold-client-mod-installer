@@ -7,12 +7,11 @@ use crate::errors::AppError;
 /// `CREATE_NO_WINDOW`. Stops a console flashing when a GUI app starts a child.
 pub const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
-/// Start a child and reap it on a background thread so it is not left as a zombie.
+/// Start a child and return as soon as the OS has accepted the spawn.
+/// The child is not waited on and no thread is kept. A waiter would outlive
+/// `app.exit` and leave this exe running after the window closed.
 pub fn spawn_detached(command: &mut Command) -> std::io::Result<()> {
-    let mut child = command.spawn()?;
-    std::thread::spawn(move || {
-        let _ = child.wait();
-    });
+    let _child = command.spawn()?;
     Ok(())
 }
 
@@ -94,6 +93,22 @@ mod tests {
         assert!(
             source.contains("#![cfg_attr(not(debug_assertions), windows_subsystem = \"windows\")]"),
             "release builds must hide the console"
+        );
+    }
+
+    #[test]
+    fn detached_spawn_does_not_keep_a_waiter_thread() {
+        let source = include_str!("process.rs");
+        let body = source
+            .split("pub fn spawn_detached")
+            .nth(1)
+            .expect("spawn_detached")
+            .split("pub fn command")
+            .next()
+            .expect("command");
+        assert!(
+            !body.contains("thread::spawn"),
+            "a waiter thread would keep the installer alive after exit"
         );
     }
 

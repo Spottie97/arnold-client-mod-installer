@@ -372,15 +372,15 @@ export default function App() {
     launcherAvailable: Boolean(launcher?.available),
     onOpenLauncher: () => {
       void openLauncher().then((result) => {
-        if (!result.opened) {
-          setLauncherFailed(true);
-          if (result.note) {
-            setLauncher((current) =>
-              current
-                ? { ...current, note: result.note }
-                : { available: false, note: result.note },
-            );
-          }
+        if (result.opened) {
+          void finishApp();
+          return;
+        }
+        setLauncherFailed(true);
+        if (result.note) {
+          setLauncher((current) =>
+            current ? { ...current, note: result.note } : { available: false, note: result.note },
+          );
         }
       });
     },

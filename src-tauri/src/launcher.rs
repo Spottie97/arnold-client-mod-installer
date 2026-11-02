@@ -149,6 +149,12 @@ pub fn availability() -> LauncherAvailability {
     availability_from(detect().as_ref())
 }
 
+/// The installer exits only after the launcher process was actually spawned.
+/// A miss or a failed spawn stays on the screen so the profile note can be shown.
+pub fn should_exit_after_launch(opened: bool) -> bool {
+    opened
+}
+
 pub fn try_open() -> LauncherOpenResult {
     let note = launcher_note();
     let Some(found) = detect() else {
@@ -269,6 +275,26 @@ fn program_on_path(name: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn successful_launch_exits_and_a_failure_does_not() {
+        assert!(should_exit_after_launch(true));
+        assert!(!should_exit_after_launch(false));
+    }
+
+    #[test]
+    fn exit_goes_through_app_exit_and_nothing_blocks_it() {
+        let commands = include_str!("commands.rs");
+        let lib = include_str!("lib.rs");
+        assert!(commands.contains("app.exit(0)"));
+        assert!(commands.contains("std::process::exit(0)"));
+        for source in [commands, lib] {
+            assert!(!source.contains("prevent_exit"));
+            assert!(!source.contains("on_window_event"));
+            assert!(!source.contains("ExitRequested"));
+            assert!(!source.contains("thread::spawn"));
+        }
+    }
 
     #[test]
     fn note_uses_the_profile_the_installer_writes() {

@@ -359,13 +359,25 @@ pub fn detect_launcher() -> crate::launcher::LauncherAvailability {
 }
 
 #[tauri::command]
-pub fn open_launcher() -> crate::launcher::LauncherOpenResult {
-    crate::launcher::try_open()
+pub fn open_launcher(app: AppHandle) -> crate::launcher::LauncherOpenResult {
+    let result = crate::launcher::try_open();
+    if crate::launcher::should_exit_after_launch(result.opened) {
+        exit_app(&app);
+    }
+    result
 }
 
 #[tauri::command]
 pub fn finish(app: AppHandle) {
+    exit_app(&app);
+}
+
+/// Stop the process. `app.exit` asks the runtime to leave; `std::process::exit`
+/// then ends it so a webview host cannot keep the exe up. There is no
+/// close confirmation, tray icon, or window handler that can cancel this.
+fn exit_app(app: &AppHandle) -> ! {
     app.exit(0);
+    std::process::exit(0);
 }
 
 #[tauri::command]
