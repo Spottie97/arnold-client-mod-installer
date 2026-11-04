@@ -25,15 +25,15 @@ describe("SAO addon stays off", () => {
   it("is default-off for every kit and absent from kits and presets", () => {
     const sao = manifest.addons?.sao;
     expect(sao?.name).toBe("SAO: Aincrad (staging test)");
-    expect(sao?.components).toEqual(["sao_aincrad", "geckolib"]);
+    expect(sao?.components).toEqual(["saoaincrad", "geckolib"]);
     for (const kit of Object.keys(manifest.kits)) {
       expect(sao?.defaultOn?.[kit]).toBe(false);
-      expect(manifest.kits[kit].components).not.toContain("sao_aincrad");
+      expect(manifest.kits[kit].components).not.toContain("saoaincrad");
       expect(manifest.kits[kit].components).not.toContain("geckolib");
     }
     for (const level of ["potato", "lite", "normal", "ultra"] as const) {
       const row = manifest.qualityPresets?.[level];
-      expect(row?.skipComponents ?? []).not.toContain("sao_aincrad");
+      expect(row?.skipComponents ?? []).not.toContain("saoaincrad");
       expect(row?.recommendOcean).not.toBeUndefined();
     }
   });
@@ -46,7 +46,7 @@ describe("SAO addon stays off", () => {
     expect(freshAddonFlags(manifest, null).sao).toBe(false);
     const installed = savedAddonFlags(manifest, ["base", "sodium", "deck", "ships", "snow"]);
     expect(freshAddonFlags(manifest, installed).sao).toBe(false);
-    const optedIn = savedAddonFlags(manifest, ["base", "sao_aincrad", "geckolib"]);
+    const optedIn = savedAddonFlags(manifest, ["base", "saoaincrad", "geckolib"]);
     expect(freshAddonFlags(manifest, optedIn).sao).toBe(true);
     expect(savedAddonFlags(manifest, ["geckolib"])?.sao).toBe(false);
   });
@@ -54,13 +54,13 @@ describe("SAO addon stays off", () => {
   it("leaves sao out of a normal plan and adds it only when ticked", () => {
     const off = mockPlan(selection());
     expect(off.components).toContain("particlerain");
-    expect(off.components).not.toContain("sao_aincrad");
+    expect(off.components).not.toContain("saoaincrad");
     expect(off.components).not.toContain("geckolib");
     const on = mockPlan(selection({ addons: { sao: true } }));
-    expect(on.components).toContain("sao_aincrad");
+    expect(on.components).toContain("saoaincrad");
     expect(on.components).toContain("geckolib");
     expect(on.components).toContain("base");
-    expect(on.components.indexOf("geckolib")).toBeLessThan(on.components.indexOf("sao_aincrad"));
+    expect(on.components.indexOf("geckolib")).toBeLessThan(on.components.indexOf("saoaincrad"));
   });
 });
 

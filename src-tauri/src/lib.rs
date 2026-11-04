@@ -10,6 +10,8 @@ pub mod gpu;
 pub mod import;
 pub mod install;
 pub mod launcher;
+#[cfg(test)]
+mod legacy_v3;
 pub mod local_source;
 pub mod log;
 pub mod manifest;

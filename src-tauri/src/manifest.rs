@@ -204,7 +204,6 @@ pub enum ComponentGroup {
     Shaders,
     Arnold,
     Ocean,
-    Sao,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -995,7 +994,7 @@ mod tests {
 
         let sao = file_of(
             &manifest,
-            "sao_aincrad",
+            "saoaincrad",
             "sao_aincrad-0.0.3-spike+1c25315.jar",
         );
         assert_eq!(
