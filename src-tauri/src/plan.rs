@@ -425,7 +425,7 @@ mod tests {
         assert!(plan.components.contains(&"particlerain".into()));
         assert!(!plan.components.contains(&"wakes".into()));
         assert!(!plan.components.contains(&"waves".into()));
-        assert!(!plan.components.contains(&"sao_aincrad".into()));
+        assert!(!plan.components.contains(&"saoaincrad".into()));
         assert!(!plan.components.contains(&"geckolib".into()));
     }
 
@@ -448,7 +448,7 @@ mod tests {
         .unwrap();
         assert!(!ultra.snow_lite);
         assert_eq!(ultra.quality, QualityLevel::Ultra);
-        assert!(!ultra.components.contains(&"sao_aincrad".into()));
+        assert!(!ultra.components.contains(&"saoaincrad".into()));
     }
 
     fn selection_from(raw: &str) -> Selection {
@@ -467,7 +467,7 @@ mod tests {
             assert!(
                 !kit.components
                     .iter()
-                    .any(|id| id == "sao_aincrad" || id == "geckolib"),
+                    .any(|id| id == "saoaincrad" || id == "geckolib"),
                 "{kit_id}"
             );
         }
@@ -476,14 +476,14 @@ mod tests {
             assert!(!row
                 .skip_components
                 .iter()
-                .any(|id| id == "sao_aincrad" || id == "geckolib"));
+                .any(|id| id == "saoaincrad" || id == "geckolib"));
         }
         let saved =
             selection_from(r#"{"kit":"full","ocean":true,"snowLite":false,"quality":"ultra"}"#);
         assert!(saved.addons.is_empty());
         let plan = build_plan(&manifest, &saved, None, true).unwrap();
         assert!(plan.components.contains(&"wakes".into()));
-        assert!(!plan.components.contains(&"sao_aincrad".into()));
+        assert!(!plan.components.contains(&"saoaincrad".into()));
         assert!(!plan.components.contains(&"geckolib".into()));
     }
 
@@ -515,7 +515,7 @@ mod tests {
                     !plan
                         .components
                         .iter()
-                        .any(|id| id == "sao_aincrad" || id == "geckolib"),
+                        .any(|id| id == "saoaincrad" || id == "geckolib"),
                     "{kit} {quality:?} {components:?}",
                     components = plan.components
                 );
@@ -542,7 +542,7 @@ mod tests {
             true,
         )
         .unwrap();
-        assert!(!off.components.contains(&"sao_aincrad".into()));
+        assert!(!off.components.contains(&"saoaincrad".into()));
 
         addons.insert("sao".into(), true);
         addons.insert("ocean".into(), true);
@@ -560,14 +560,14 @@ mod tests {
             true,
         )
         .unwrap();
-        assert!(plan.components.contains(&"sao_aincrad".into()));
+        assert!(plan.components.contains(&"saoaincrad".into()));
         assert!(plan.components.contains(&"geckolib".into()));
         assert!(plan.components.contains(&"base".into()));
         assert!(!plan.components.contains(&"particlerain".into()));
         let sao_at = plan
             .components
             .iter()
-            .position(|id| id == "sao_aincrad")
+            .position(|id| id == "saoaincrad")
             .unwrap();
         let gecko_at = plan
             .components

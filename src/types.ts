@@ -11,7 +11,7 @@ export type Screen =
   | "import"
   | "settings";
 
-export type ComponentGroup = "base" | "shaders" | "arnold" | "ocean" | "sao";
+export type ComponentGroup = "base" | "shaders" | "arnold" | "ocean";
 export type ComponentKind = "base" | "download" | "pending";
 export type FileDest = "mods" | "shaderpacks";
 

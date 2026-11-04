@@ -405,7 +405,7 @@
     },
     {
       "id": "geckolib",
-      "group": "sao",
+      "group": "base",
       "kind": "download",
       "requires": [
         "base"
@@ -426,8 +426,8 @@
       ]
     },
     {
-      "id": "sao_aincrad",
-      "group": "sao",
+      "id": "saoaincrad",
+      "group": "base",
       "kind": "download",
       "requires": [
         "base",
@@ -505,7 +505,7 @@
     "sao": {
       "name": "SAO: Aincrad (staging test)",
       "components": [
-        "sao_aincrad",
+        "saoaincrad",
         "geckolib"
       ],
       "defaultOn": {
