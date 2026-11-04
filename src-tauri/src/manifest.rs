@@ -864,7 +864,7 @@ mod tests {
     fn bundled_fixture_verifies_with_embedded_test_key() {
         let manifest = load_bundled_manifest_with_key(TEST_MANIFEST_PUBLIC_KEY_HEX).unwrap();
         assert_eq!(manifest.schema, 3);
-        assert_eq!(manifest.manifest_version, "2026.11.04-1");
+        assert_eq!(manifest.manifest_version, "2026.11.04-2");
         assert_eq!(manifest.minecraft, "26.3");
         assert_eq!(
             manifest.current_server_shipwright.as_deref(),
@@ -1035,6 +1035,97 @@ mod tests {
             }
         }
         assert_eq!(github_files, 4);
+    }
+
+    #[test]
+    fn keo_performance_mods_are_client_addons_and_keep_the_pinned_renderer() {
+        let manifest = load_fixture_manifest().unwrap();
+        let by_id = |id: &str| {
+            manifest
+                .components
+                .iter()
+                .find(|c| c.id == id)
+                .unwrap_or_else(|| panic!("missing {id}"))
+        };
+
+        let fabric = by_id("base");
+        assert_eq!(fabric.version, "0.165.0");
+        assert!(fabric.required);
+        let sodium = by_id("sodium");
+        assert_eq!(sodium.version, "0.9.2");
+        assert_eq!(by_id("shaders").version, "1.11.7");
+
+        let added = [
+            ("badoptimizations", "2.4.1", "MIT"),
+            ("modernfix", "5.27.20-build.2", "LGPL-3.0-only"),
+            ("lithium", "0.26.3", "LGPL-3.0-only"),
+            ("clumps", "26.3.2", "MIT"),
+            ("sodiumextra", "0.9.5", "LGPL-3.0-only"),
+            ("immediatelyfast", "1.17.1", "LGPL-3.0-or-later"),
+            (
+                "entityculling",
+                "1.11.3",
+                "LicenseRef-tr7zw-Protective-License",
+            ),
+            ("asynclogger", "2.2.3", "LGPL-3.0-only"),
+            ("jasione", "1.0.9", "LGPL-3.0-only"),
+            ("asyncparticles", "26.3.2.1", "LGPL-3.0-only"),
+            ("obe", "1.2.1", "LGPL-3.0-or-later"),
+        ];
+        for (id, version, license) in added {
+            let component = by_id(id);
+            assert_eq!(component.version, version, "{id}");
+            assert_eq!(component.license.as_deref(), Some(license), "{id}");
+            assert_eq!(component.group, ComponentGroup::Shaders, "{id}");
+            assert!(!component.required, "{id} must not be required");
+            assert!(
+                !component.required_in_all_kits,
+                "{id} must not be forced into every kit"
+            );
+            assert!(
+                component
+                    .description
+                    .to_ascii_lowercase()
+                    .contains("client"),
+                "{id} description should say it is client-side"
+            );
+            assert_eq!(component.files.len(), 1, "{id}");
+            let file = &component.files[0];
+            assert!(
+                file.url.starts_with("https://cdn.modrinth.com/"),
+                "{id} {}",
+                file.url
+            );
+            assert!(valid_sha512(&file.sha512), "{id}");
+            assert!(file.size > 0, "{id}");
+            for kit in ["basic", "full", "recommended"] {
+                assert!(
+                    manifest.kits[kit].components.iter().any(|item| item == id),
+                    "{kit} missing {id}"
+                );
+            }
+        }
+
+        for skipped in [
+            "fism",
+            "spark",
+            "zfastnoise",
+            "zconfig",
+            "modmenu",
+            "cupboard",
+            "gpumemleakfix",
+            "embeddium",
+        ] {
+            assert!(
+                manifest.components.iter().all(|c| c.id != skipped),
+                "{skipped} should stay out"
+            );
+        }
+
+        let extra = by_id("sodiumextra");
+        assert_eq!(extra.requires, vec!["sodium".to_string()]);
+        assert_eq!(extra.files[0].match_glob, "sodium-extra-*.jar");
+        assert_ne!(sodium.files[0].match_glob, extra.files[0].match_glob);
     }
 
     #[test]

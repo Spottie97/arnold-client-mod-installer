@@ -1,6 +1,6 @@
 {
   "schema": 3,
-  "manifestVersion": "2026.11.04-1",
+  "manifestVersion": "2026.11.04-2",
   "minAppVersion": "3.0.0",
   "minecraft": "26.3",
   "currentServerShipwright": "0.11.2",
@@ -447,6 +447,230 @@
           "size": 608813
         }
       ]
+    },
+    {
+      "id": "badoptimizations",
+      "group": "shaders",
+      "kind": "download",
+      "name": "BadOptimizations",
+      "version": "2.4.1",
+      "description": "Speeds up non-rendering work. Client only. The server does not need it.",
+      "license": "MIT",
+      "files": [
+        {
+          "file": "BadOptimizations-2.4.1-26.3-fabric.jar",
+          "dest": "mods",
+          "match": "BadOptimizations-*.jar",
+          "url": "https://cdn.modrinth.com/data/g96Z4WVZ/versions/Sp0ctspw/BadOptimizations-2.4.1-26.3-fabric.jar",
+          "sha512": "048a0979807afb96bae7801b7445746c985081bb55fab9b80b286036234a9869cc84f83c40ab77a2600b7e06ad44178ee17935b706b751c9b38f87ebc6e180f8",
+          "size": 60760
+        }
+      ]
+    },
+    {
+      "id": "modernfix",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "name": "ModernFix",
+      "version": "5.27.20-build.2",
+      "description": "ModernFix mVUS fork for Fabric 26.3. Loading and memory fixes on the client. The server does not need it.",
+      "license": "LGPL-3.0-only",
+      "files": [
+        {
+          "file": "modernfix-5.27.20-build.2.jar",
+          "dest": "mods",
+          "match": "modernfix-*.jar",
+          "url": "https://cdn.modrinth.com/data/TjSm1wrD/versions/pa9cAfYg/modernfix-5.27.20-build.2.jar",
+          "sha512": "b586434056107aac4ef86e9351d66170dac65a45a1e5f8bd48fb931b3012ab2431b16476eb9c256773339e2b4c60f6f3e90a4709180f700b2aea59ff607f4243",
+          "size": 1168784
+        }
+      ]
+    },
+    {
+      "id": "lithium",
+      "group": "shaders",
+      "kind": "download",
+      "name": "Lithium",
+      "version": "0.26.3",
+      "description": "Speeds up game logic on this client. The Arnold server does not need Lithium.",
+      "license": "LGPL-3.0-only",
+      "files": [
+        {
+          "file": "lithium-fabric-0.26.3+mc26.3.jar",
+          "dest": "mods",
+          "match": "lithium-fabric-*.jar",
+          "url": "https://cdn.modrinth.com/data/gvQqBUqZ/versions/fWv5bnZk/lithium-fabric-0.26.3%2Bmc26.3.jar",
+          "sha512": "2ca92fb530135d2baddf0ba4cc4f93976234876a38c4aa02b487b2552400f005afcfbeebf5373fb4396fe2020537a42d7597b8da5a52b904355ef51d5fef07ad",
+          "size": 919892
+        }
+      ]
+    },
+    {
+      "id": "clumps",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "name": "Clumps",
+      "version": "26.3.2",
+      "description": "Merges experience orbs so they cause less lag. Client only here. The server does not need it.",
+      "license": "MIT",
+      "files": [
+        {
+          "file": "Clumps-fabric-26.3-26.3.2.jar",
+          "dest": "mods",
+          "match": "Clumps-*.jar",
+          "url": "https://cdn.modrinth.com/data/Wnxd13zP/versions/J4I1wxJZ/Clumps-fabric-26.3-26.3.2.jar",
+          "sha512": "8c166ae97e1999d0f213d0a181d6ef87b99648016c92c9aa1414d2c2e24364b12549569cd7e247a3d675df703ae6a8a88fc175d3f527818c710578408508c8ab",
+          "size": 20154
+        }
+      ]
+    },
+    {
+      "id": "sodiumextra",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "sodium"
+      ],
+      "name": "Sodium Extra",
+      "version": "0.9.5",
+      "description": "Extra Sodium performance and detail toggles. Client only. Needs Sodium, not a second renderer.",
+      "license": "LGPL-3.0-only",
+      "files": [
+        {
+          "file": "sodium-extra-fabric-0.9.5+mc26.3.jar",
+          "dest": "mods",
+          "match": "sodium-extra-*.jar",
+          "url": "https://cdn.modrinth.com/data/PtjYWJkn/versions/fs5l9Q1U/sodium-extra-fabric-0.9.5%2Bmc26.3.jar",
+          "sha512": "785632a8e0081a207124ad72f0862216902b89f40d4133d91b9f9553c0fe345478685630505eaba2fd6e49fdcc388414dd1ad9694cd15a0c29a8fbe0bec8d022",
+          "size": 481973
+        }
+      ]
+    },
+    {
+      "id": "immediatelyfast",
+      "group": "shaders",
+      "kind": "download",
+      "name": "ImmediatelyFast",
+      "version": "1.17.1",
+      "description": "Speeds up immediate-mode rendering. Client only. The server does not need it.",
+      "license": "LGPL-3.0-or-later",
+      "files": [
+        {
+          "file": "ImmediatelyFast-Fabric-1.17.1+26.3.jar",
+          "dest": "mods",
+          "match": "ImmediatelyFast-*.jar",
+          "url": "https://cdn.modrinth.com/data/5ZwdcRci/versions/3MP9UR23/ImmediatelyFast-Fabric-1.17.1%2B26.3.jar",
+          "sha512": "8e139589fd995bce3d485a34d92a07243964212f7ed2e4fc2f6de5b9a74d0f59b03252e7ce40c64e006cf3e21bed5de27b830d33ef048b286e041f6178ad8428",
+          "size": 99586
+        }
+      ]
+    },
+    {
+      "id": "entityculling",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "name": "Entity Culling",
+      "version": "1.11.3",
+      "description": "Skips entities and block entities the player cannot see. Client only. The server does not need it.",
+      "license": "LicenseRef-tr7zw-Protective-License",
+      "files": [
+        {
+          "file": "entityculling-fabric-1.11.3-mc26.3.jar",
+          "dest": "mods",
+          "match": "entityculling-*.jar",
+          "url": "https://cdn.modrinth.com/data/NNAgCjsB/versions/X1g3VhTx/entityculling-fabric-1.11.3-mc26.3.jar",
+          "sha512": "b6209bb62d72376d3fd284da137ec93a6dd38ebe5fd38ab9190deeade68b5b7f4bf915f4abcb4a807afe18cb9f0b59e11be789d46df6f0e6f64388ed2edc284d",
+          "size": 1508547
+        }
+      ]
+    },
+    {
+      "id": "asynclogger",
+      "group": "shaders",
+      "kind": "download",
+      "name": "Async Logger",
+      "version": "2.2.3",
+      "description": "Moves logging off the game thread. Client only. The server does not need it.",
+      "license": "LGPL-3.0-only",
+      "files": [
+        {
+          "file": "asynclogger-2.2.3+26.1.2-fabric.jar",
+          "dest": "mods",
+          "match": "asynclogger-*.jar",
+          "url": "https://cdn.modrinth.com/data/zvNzKfGF/versions/3Klv7aWV/asynclogger-2.2.3%2B26.1.2-fabric.jar",
+          "sha512": "b35428bb1c687d2884d92e5a69b6e29653a1ade8bbe91e709a06083214e7c90d6ce49ed6a980a1a98f5673f358eeed252f62137d7d7eef879a1c729392df8bc7",
+          "size": 584418
+        }
+      ]
+    },
+    {
+      "id": "jasione",
+      "group": "shaders",
+      "kind": "download",
+      "name": "Jasione",
+      "version": "1.0.9",
+      "description": "Cuts extra memory allocations. Client install only. The server does not need it.",
+      "license": "LGPL-3.0-only",
+      "files": [
+        {
+          "file": "jasione-1.0.9+26.1.2-fabric.jar",
+          "dest": "mods",
+          "match": "jasione-*.jar",
+          "url": "https://cdn.modrinth.com/data/qlDkBPij/versions/kbKBk4b3/jasione-1.0.9%2B26.1.2-fabric.jar",
+          "sha512": "ad6ff0c19eab2945489c2523d19fcd79b39cc33ed7130e3c5b3ac13028dd66ed1d207faaa0b04399d2cfd67cbb1c2390d0733c667dea8c3bb9a01a3e03a61829",
+          "size": 748721
+        }
+      ]
+    },
+    {
+      "id": "asyncparticles",
+      "group": "shaders",
+      "kind": "download",
+      "name": "AsyncParticles",
+      "version": "26.3.2.1",
+      "description": "Ticks particles off the main thread. Client only. The server does not need it.",
+      "license": "LGPL-3.0-only",
+      "files": [
+        {
+          "file": "AsyncParticles-26.3.2.1+26.3.jar",
+          "dest": "mods",
+          "match": "AsyncParticles-*.jar",
+          "url": "https://cdn.modrinth.com/data/c3onkd5k/versions/msLpUZAi/AsyncParticles-26.3.2.1%2B26.3.jar",
+          "sha512": "ce5c2f876cb9b6630bbd8d7e4d1b725cb5fea0a5bc05df7bf6464d533251f7409a706e930fa6a66a590fc771ba5cbce40d6d3833f8a082b17649512fd8361f6c",
+          "size": 1310383
+        }
+      ]
+    },
+    {
+      "id": "obe",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "name": "Optimized Block Entities",
+      "version": "1.2.1",
+      "description": "Renders block entities faster. Client only. The server does not need it.",
+      "license": "LGPL-3.0-or-later",
+      "files": [
+        {
+          "file": "obe+26.3-1.2.1.jar",
+          "dest": "mods",
+          "match": "obe+*.jar",
+          "url": "https://cdn.modrinth.com/data/AtOSAunf/versions/CCh1GsUc/obe%2B26.3-1.2.1.jar",
+          "sha512": "689729cb7eb49e29f5da99ce35b3ee3282e42cd2c803b5cddfc1ed24a68dc6d6f1888b2ad65bc334086975cd95764753e9ef25244bcf3faa94d1b543561c7f6b",
+          "size": 257621
+        }
+      ]
     }
   ],
   "kits": {
@@ -457,10 +681,21 @@
         "sodium",
         "deck",
         "ships",
-        "snow"
+        "snow",
+        "badoptimizations",
+        "modernfix",
+        "lithium",
+        "clumps",
+        "sodiumextra",
+        "immediatelyfast",
+        "entityculling",
+        "asynclogger",
+        "jasione",
+        "asyncparticles",
+        "obe"
       ],
       "snowLite": true,
-      "description": "Ships, smooth decks, lighter snow, Sodium. Runs on almost any PC."
+      "description": "Ships, smooth decks, lighter snow, Sodium, and client performance mods. Runs on almost any PC."
     },
     "full": {
       "name": "Full",
@@ -470,10 +705,21 @@
         "shaders",
         "deck",
         "ships",
-        "snow"
+        "snow",
+        "badoptimizations",
+        "modernfix",
+        "lithium",
+        "clumps",
+        "sodiumextra",
+        "immediatelyfast",
+        "entityculling",
+        "asynclogger",
+        "jasione",
+        "asyncparticles",
+        "obe"
       ],
       "snowLite": false,
-      "description": "Everything: Iris + Complementary shaders, full snow, ships."
+      "description": "Everything: Iris + Complementary shaders, client performance mods, full snow, ships."
     },
     "recommended": {
       "name": "Recommended",
@@ -483,7 +729,18 @@
         "shaders",
         "deck",
         "ships",
-        "snow"
+        "snow",
+        "badoptimizations",
+        "modernfix",
+        "lithium",
+        "clumps",
+        "sodiumextra",
+        "immediatelyfast",
+        "entityculling",
+        "asynclogger",
+        "jasione",
+        "asyncparticles",
+        "obe"
       ],
       "snowLite": false,
       "description": "Full kit when this PC can take it; otherwise Basic."

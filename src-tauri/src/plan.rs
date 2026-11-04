@@ -314,6 +314,18 @@ mod tests {
         ));
         assert!(!match_glob("particlerain-*.jar", "particle-rain-4.0.2.jar"));
         assert!(!match_glob("sodium-fabric-*.jar", "iris-1.11.7.jar"));
+        assert!(!match_glob(
+            "sodium-fabric-*.jar",
+            "sodium-extra-fabric-0.9.5+mc26.3.jar"
+        ));
+        assert!(match_glob(
+            "sodium-extra-*.jar",
+            "sodium-extra-fabric-0.9.5+mc26.3.jar"
+        ));
+        assert!(!match_glob(
+            "sodium-extra-*.jar",
+            "sodium-fabric-0.9.2+mc26.3.jar"
+        ));
     }
 
     #[test]

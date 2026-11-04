@@ -200,7 +200,7 @@ export function missingMinecraftError(gameDir: string): ErrorPayload {
     code: "E-MC-MISSING",
     title: "Minecraft 26.3 isn't installed yet",
     hint: "Open the Minecraft Launcher, press Play once on Latest release (26.3), close the game, then press Try again.",
-    detail: `detected: versions/26.3/26.3.jar not found in ${gameDir}\nmanifest 2026.11.04-1 (signature ok) · app 3.0.0 · Windows 11 23H2`,
+    detail: `detected: versions/26.3/26.3.jar not found in ${gameDir}\nmanifest 2026.11.04-2 (signature ok) · app 3.0.0 · Windows 11 23H2`,
   };
 }
 
@@ -209,9 +209,9 @@ export function kitBlurb(kit: string, rec: Recommendation): string {
     case "recommended":
       return `Full kit: ${rec.hardware.gpu} · ${rec.hardware.vramGb} GB VRAM · ${rec.hardware.ramGb} GB RAM · ${rec.hardware.cores} cores`;
     case "basic":
-      return "Ships, smooth decks, lighter snow, Sodium. Runs on almost any PC.";
+      return "Ships, smooth decks, lighter snow, Sodium, and client performance mods. Runs on almost any PC.";
     case "full":
-      return "Everything: Iris + Complementary shaders, full snow, ships.";
+      return "Everything: Iris + Complementary shaders, client performance mods, full snow, ships.";
     case "custom":
       return "Pick each mod yourself. Requirements are added for you.";
     default:
