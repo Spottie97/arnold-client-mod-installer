@@ -40,8 +40,11 @@ function resolveSelection(sel: Selection): string[] {
   }
   const quality: QualityLevel = sel.quality ?? (sel.kit === "basic" ? "lite" : "normal");
   const skip = new Set(manifest.qualityPresets?.[quality]?.skipComponents ?? []);
-  if (sel.ocean) {
-    for (const id of manifest.addons?.ocean?.components ?? []) {
+  const extras = sel.addons ?? {};
+  for (const [addonId, addon] of Object.entries(manifest.addons ?? {})) {
+    const enabled = addonId === "ocean" ? sel.ocean : extras[addonId] === true;
+    if (!enabled) continue;
+    for (const id of addon.components) {
       if (skip.has(id)) continue;
       const component = manifest.components.find((c) => c.id === id);
       if (component && component.kind !== "pending") selected.add(id);
@@ -197,7 +200,7 @@ export function missingMinecraftError(gameDir: string): ErrorPayload {
     code: "E-MC-MISSING",
     title: "Minecraft 26.3 isn't installed yet",
     hint: "Open the Minecraft Launcher, press Play once on Latest release (26.3), close the game, then press Try again.",
-    detail: `detected: versions/26.3/26.3.jar not found in ${gameDir}\nmanifest 2026.11.02-1 (signature ok) · app 3.0.0 · Windows 11 23H2`,
+    detail: `detected: versions/26.3/26.3.jar not found in ${gameDir}\nmanifest 2026.11.04-1 (signature ok) · app 3.0.0 · Windows 11 23H2`,
   };
 }
 
@@ -216,11 +219,16 @@ export function kitBlurb(kit: string, rec: Recommendation): string {
   }
 }
 
-export function kitSizeLabel(kit: string, ocean: boolean): string {
+export function kitSizeLabel(
+  kit: string,
+  ocean: boolean,
+  addons: Record<string, boolean> = {},
+): string {
   const sel: Selection = {
     kit,
     customComponents: [],
     ocean,
+    addons,
     snowLite: kit === "basic",
     quality: kit === "basic" ? "lite" : "normal",
   };

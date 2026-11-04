@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 use crate::errors::AppError;
@@ -13,6 +15,10 @@ pub struct Selection {
     pub custom_components: Vec<String>,
     #[serde(default)]
     pub ocean: bool,
+    /// Optional add-ons other than Ocean. A missing key stays off. `defaultOn`
+    /// is not applied here, so an older saved selection cannot gain SAO.
+    #[serde(default)]
+    pub addons: BTreeMap<String, bool>,
     pub snow_lite: Option<bool>,
     #[serde(default)]
     pub quality: Option<QualityLevel>,
@@ -66,6 +72,27 @@ pub struct InstallPlan {
     pub components: Vec<String>,
     pub warnings: Vec<String>,
     pub bytes: u64,
+}
+
+fn push_addon_components(
+    manifest: &Manifest,
+    selected: &mut Vec<String>,
+    skip: &[String],
+    addon_id: &str,
+) {
+    let Some(addon) = manifest.addons.get(addon_id) else {
+        return;
+    };
+    for id in &addon.components {
+        if skip.iter().any(|skipped| skipped == id) {
+            continue;
+        }
+        if let Some(component) = component_by_id(manifest, id) {
+            if component.kind != ComponentKind::Pending && !selected.contains(id) {
+                selected.push(id.clone());
+            }
+        }
+    }
 }
 
 pub fn match_glob(pattern: &str, name: &str) -> bool {
@@ -149,18 +176,13 @@ pub fn build_plan(
     let skip = &row_for(&table, quality).skip_components;
 
     if selection.ocean {
-        if let Some(ocean) = manifest.addons.get("ocean") {
-            for id in &ocean.components {
-                if skip.iter().any(|s| s == id) {
-                    continue;
-                }
-                if let Some(c) = component_by_id(manifest, id) {
-                    if c.kind != ComponentKind::Pending && !selected.contains(id) {
-                        selected.push(id.clone());
-                    }
-                }
-            }
+        push_addon_components(manifest, &mut selected, skip, "ocean");
+    }
+    for (id, enabled) in &selection.addons {
+        if !*enabled || id == "ocean" {
+            continue;
         }
+        push_addon_components(manifest, &mut selected, skip, id);
     }
 
     selected.retain(|id| {
@@ -303,6 +325,7 @@ mod tests {
                 kit: "custom".into(),
                 custom_components: vec!["shaders".into()],
                 ocean: false,
+                addons: BTreeMap::new(),
                 snow_lite: Some(false),
                 quality: None,
             },
@@ -330,6 +353,7 @@ mod tests {
                 kit: "basic".into(),
                 custom_components: vec![],
                 ocean: true,
+                addons: BTreeMap::new(),
                 snow_lite: None,
                 quality: None,
             },
@@ -360,6 +384,7 @@ mod tests {
                 kit: "basic".into(),
                 custom_components: vec![],
                 ocean: false,
+                addons: BTreeMap::new(),
                 snow_lite: Some(true),
                 quality: None,
             },
@@ -387,6 +412,7 @@ mod tests {
                 kit: "basic".into(),
                 custom_components: vec![],
                 ocean: true,
+                addons: BTreeMap::new(),
                 snow_lite: None,
                 quality: Some(QualityLevel::Potato),
             },
@@ -399,6 +425,8 @@ mod tests {
         assert!(plan.components.contains(&"particlerain".into()));
         assert!(!plan.components.contains(&"wakes".into()));
         assert!(!plan.components.contains(&"waves".into()));
+        assert!(!plan.components.contains(&"sao_aincrad".into()));
+        assert!(!plan.components.contains(&"geckolib".into()));
     }
 
     #[test]
@@ -410,6 +438,7 @@ mod tests {
                 kit: "basic".into(),
                 custom_components: vec![],
                 ocean: false,
+                addons: BTreeMap::new(),
                 snow_lite: Some(true),
                 quality: Some(QualityLevel::Ultra),
             },
@@ -419,5 +448,133 @@ mod tests {
         .unwrap();
         assert!(!ultra.snow_lite);
         assert_eq!(ultra.quality, QualityLevel::Ultra);
+        assert!(!ultra.components.contains(&"sao_aincrad".into()));
+    }
+
+    fn selection_from(raw: &str) -> Selection {
+        serde_json::from_str(raw).unwrap()
+    }
+
+    #[test]
+    fn saved_selection_without_sao_stays_off_even_if_default_on_is_flipped() {
+        let mut manifest = load_fixture_manifest().unwrap();
+        let sao = manifest.addons.get_mut("sao").unwrap();
+        for kit in ["basic", "full", "recommended"] {
+            assert_eq!(sao.default_on.get(kit).copied(), Some(false));
+            sao.default_on.insert(kit.into(), true);
+        }
+        for (kit_id, kit) in &manifest.kits {
+            assert!(
+                !kit.components
+                    .iter()
+                    .any(|id| id == "sao_aincrad" || id == "geckolib"),
+                "{kit_id}"
+            );
+        }
+        let table = manifest.quality_presets.clone().unwrap();
+        for row in [&table.potato, &table.lite, &table.normal, &table.ultra] {
+            assert!(!row
+                .skip_components
+                .iter()
+                .any(|id| id == "sao_aincrad" || id == "geckolib"));
+        }
+        let saved =
+            selection_from(r#"{"kit":"full","ocean":true,"snowLite":false,"quality":"ultra"}"#);
+        assert!(saved.addons.is_empty());
+        let plan = build_plan(&manifest, &saved, None, true).unwrap();
+        assert!(plan.components.contains(&"wakes".into()));
+        assert!(!plan.components.contains(&"sao_aincrad".into()));
+        assert!(!plan.components.contains(&"geckolib".into()));
+    }
+
+    #[test]
+    fn kits_and_quality_do_not_turn_sao_on() {
+        let manifest = load_fixture_manifest().unwrap();
+        for kit in ["basic", "full", "recommended"] {
+            for quality in [
+                QualityLevel::Potato,
+                QualityLevel::Lite,
+                QualityLevel::Normal,
+                QualityLevel::Ultra,
+            ] {
+                let plan = build_plan(
+                    &manifest,
+                    &Selection {
+                        kit: kit.into(),
+                        custom_components: vec![],
+                        ocean: true,
+                        addons: BTreeMap::new(),
+                        snow_lite: None,
+                        quality: Some(quality),
+                    },
+                    None,
+                    true,
+                )
+                .unwrap();
+                assert!(
+                    !plan
+                        .components
+                        .iter()
+                        .any(|id| id == "sao_aincrad" || id == "geckolib"),
+                    "{kit} {quality:?} {components:?}",
+                    components = plan.components
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn sao_opt_in_installs_aincrad_geckolib_and_fabric() {
+        let manifest = load_fixture_manifest().unwrap();
+        let mut addons = BTreeMap::new();
+        addons.insert("sao".into(), false);
+        let off = build_plan(
+            &manifest,
+            &Selection {
+                kit: "basic".into(),
+                custom_components: vec![],
+                ocean: false,
+                addons: addons.clone(),
+                snow_lite: None,
+                quality: Some(QualityLevel::Normal),
+            },
+            None,
+            true,
+        )
+        .unwrap();
+        assert!(!off.components.contains(&"sao_aincrad".into()));
+
+        addons.insert("sao".into(), true);
+        addons.insert("ocean".into(), true);
+        let plan = build_plan(
+            &manifest,
+            &Selection {
+                kit: "basic".into(),
+                custom_components: vec![],
+                ocean: false,
+                addons,
+                snow_lite: None,
+                quality: Some(QualityLevel::Normal),
+            },
+            None,
+            true,
+        )
+        .unwrap();
+        assert!(plan.components.contains(&"sao_aincrad".into()));
+        assert!(plan.components.contains(&"geckolib".into()));
+        assert!(plan.components.contains(&"base".into()));
+        assert!(!plan.components.contains(&"particlerain".into()));
+        let sao_at = plan
+            .components
+            .iter()
+            .position(|id| id == "sao_aincrad")
+            .unwrap();
+        let gecko_at = plan
+            .components
+            .iter()
+            .position(|id| id == "geckolib")
+            .unwrap();
+        let base_at = plan.components.iter().position(|id| id == "base").unwrap();
+        assert!(base_at < gecko_at && gecko_at < sao_at);
     }
 }

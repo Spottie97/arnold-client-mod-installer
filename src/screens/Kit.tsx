@@ -1,5 +1,7 @@
+import { AddonToggles } from "../components/AddonToggles";
 import { KitCard } from "../components/KitCard";
 import { QualityPicker } from "../components/QualityPicker";
+import type { AddonRow } from "../lib/addons";
 import { kitBlurb, kitSizeLabel } from "../mock/backend";
 import type { InstallPlan, QualityLevel, QualityTable, Recommendation } from "../types";
 
@@ -7,23 +9,28 @@ export function Kit({
   selected,
   quality,
   ocean,
+  addons,
   recommendation,
   plan,
   table,
   onSelect,
   onQuality,
-  onOcean,
+  onAddon,
 }: {
   selected: string;
   quality: QualityLevel;
   ocean: boolean;
+  addons: AddonRow[];
   recommendation: Recommendation;
   plan: InstallPlan;
   table?: QualityTable;
   onSelect: (kit: string) => void;
   onQuality: (level: QualityLevel) => void;
-  onOcean: (on: boolean) => void;
+  onAddon: (id: string, on: boolean) => void;
 }) {
+  const extra = Object.fromEntries(
+    addons.filter((addon) => addon.id !== "ocean").map((addon) => [addon.id, addon.checked]),
+  );
   return (
     <div className="flex flex-1 flex-col">
       <h1 className="mt-4 font-heading text-4xl text-gold md:text-5xl">Choose your kit</h1>
@@ -31,7 +38,7 @@ export function Kit({
         <KitCard
           title="Recommended"
           body={kitBlurb("recommended", recommendation)}
-          meta={`${kitSizeLabel("full", ocean)} · shaders on`}
+          meta={`${kitSizeLabel("full", ocean, extra)} · shaders on`}
           selected={selected === "recommended"}
           badge="FOR THIS PC"
           onSelect={() => onSelect("recommended")}
@@ -39,14 +46,14 @@ export function Kit({
         <KitCard
           title="Basic"
           body={kitBlurb("basic", recommendation)}
-          meta={kitSizeLabel("basic", ocean)}
+          meta={kitSizeLabel("basic", ocean, extra)}
           selected={selected === "basic"}
           onSelect={() => onSelect("basic")}
         />
         <KitCard
           title="Full"
           body={kitBlurb("full", recommendation)}
-          meta={kitSizeLabel("full", ocean)}
+          meta={kitSizeLabel("full", ocean, extra)}
           selected={selected === "full"}
           onSelect={() => onSelect("full")}
         />
@@ -66,29 +73,7 @@ export function Kit({
           onSelect={onQuality}
         />
       </div>
-      <label className="panel mt-5 flex items-center gap-4">
-        <span
-          className={`relative h-7 w-12 rounded-full ${ocean ? "bg-primary" : "bg-[#3a3548]"}`}
-        >
-          <input
-            type="checkbox"
-            className="peer sr-only"
-            checked={ocean}
-            onChange={(event) => onOcean(event.target.checked)}
-          />
-          <span
-            className={`absolute top-1 h-5 w-5 rounded-full bg-white transition-all ${
-              ocean ? "left-6" : "left-1"
-            }`}
-          />
-        </span>
-        <span>
-          <span className="font-heading text-lg">Ocean pack</span>
-          <span className="ml-3 text-muted">
-            Particle Rain · Wakes · Realistic Waves (coming soon)
-          </span>
-        </span>
-      </label>
+      <AddonToggles addons={addons} onToggle={onAddon} />
       <p className="mt-4 text-sm leading-relaxed text-muted">
         Why: dedicated GPU with {recommendation.hardware.vramGb} GB VRAM,{" "}
         {recommendation.hardware.ramGb} GB RAM, {recommendation.hardware.cores} cores →{" "}
