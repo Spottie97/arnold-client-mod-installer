@@ -9,7 +9,7 @@ pub const TEST_PRIVATE_KEY_HEX: &str =
     "48ab0651056657627942de64e86d5435d7391e1ecd922679081c2fbadc376c98";
 pub const TEST_PUBLIC_KEY_HEX: &str =
     "b44547ef0ceb7e4bac652ab9b73b46b2ff3d86d27196a479b674be29e87fdbef";
-pub const DEFAULT_TAG: &str = "mods-2026.11.2";
+pub const DEFAULT_TAG: &str = "mods-2026.11.4";
 
 fn sha512_hex(data: &[u8]) -> String {
     hex::encode(Sha512::digest(data))
@@ -390,5 +390,23 @@ mod tests {
             err.contains("missing") || err.contains("url is not"),
             "{err}"
         );
+    }
+
+    #[test]
+    fn verify_release_assets_rejects_a_jar_hosted_on_another_tag() {
+        let tmp = tempdir().unwrap();
+        let dir = tmp.path();
+        let bytes = b"arnold-jar-bytes";
+        fs::write(dir.join("arnold-ships-client-0.10.3.jar"), bytes).unwrap();
+        let hash = sha512_hex(bytes);
+        let manifest = format!(
+            r#"{{"components":[{{"files":[
+                {{"file":"arnold-ships-client-0.10.3.jar","url":"https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.2/arnold-ships-client-0.10.3.jar","sha512":"{hash}","size":{size}}}
+            ]}}]}}"#,
+            size = bytes.len()
+        );
+        let err = verify_release_assets(manifest.as_bytes(), dir, "mods-2026.11.4").unwrap_err();
+        assert!(err.contains("mods-2026.11.4"), "{err}");
+        assert!(err.contains("url is not"), "{err}");
     }
 }

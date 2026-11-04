@@ -204,6 +204,7 @@ pub enum ComponentGroup {
     Shaders,
     Arnold,
     Ocean,
+    Sao,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -373,7 +374,7 @@ fn valid_id(id: &str) -> bool {
     let mut chars = id.chars();
     match chars.next() {
         Some(c) if c.is_ascii_lowercase() => {
-            chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+            chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
         }
         _ => false,
     }
@@ -524,6 +525,33 @@ pub fn validate_manifest(manifest: &Manifest) -> Result<(), AppError> {
             if !ids.contains(id) {
                 return Err(AppError::ManifestRequires(format!(
                     "kit {kit_id} references unknown component {id}"
+                )));
+            }
+        }
+    }
+
+    for (addon_id, addon) in &manifest.addons {
+        if !valid_id(addon_id) {
+            return Err(AppError::ManifestSchema(format!(
+                "invalid addon id {addon_id}"
+            )));
+        }
+        if addon.name.trim().is_empty() {
+            return Err(AppError::ManifestSchema(format!(
+                "addon {addon_id} has an empty name"
+            )));
+        }
+        for id in &addon.components {
+            if !ids.contains(id) {
+                return Err(AppError::ManifestRequires(format!(
+                    "addon {addon_id} references unknown component {id}"
+                )));
+            }
+        }
+        for kit_id in addon.default_on.keys() {
+            if !manifest.kits.contains_key(kit_id) {
+                return Err(AppError::ManifestSchema(format!(
+                    "addon {addon_id} defaultOn references unknown kit {kit_id}"
                 )));
             }
         }
@@ -837,7 +865,7 @@ mod tests {
     fn bundled_fixture_verifies_with_embedded_test_key() {
         let manifest = load_bundled_manifest_with_key(TEST_MANIFEST_PUBLIC_KEY_HEX).unwrap();
         assert_eq!(manifest.schema, 3);
-        assert_eq!(manifest.manifest_version, "2026.11.02-1");
+        assert_eq!(manifest.manifest_version, "2026.11.04-1");
         assert_eq!(manifest.minecraft, "26.3");
         assert_eq!(
             manifest.current_server_shipwright.as_deref(),
@@ -917,9 +945,10 @@ mod tests {
         assert_eq!(deck.size, 11_243);
 
         let ships = file_of(&manifest, "ships", "arnold-ships-client-0.10.3.jar");
-        assert!(ships
-            .url
-            .ends_with("/mods-2026.11.2/arnold-ships-client-0.10.3.jar"));
+        assert!(ships.url.ends_with(&format!(
+            "/{}/arnold-ships-client-0.10.3.jar",
+            crate::download::ARNOLD_RELEASE_TAG
+        )));
         assert_eq!(
             ships.sha512,
             "bf6a3a5a3395b46e69a16144af682b9610b0868bd40b0ae531698705c1c16f552b41eb914176564cbf2f4406dcb8e4c2cb0cb71b47663f5534a22c5b252f7249"
@@ -952,6 +981,61 @@ mod tests {
             "d74b17ddcadd72b95fa23e9f2d8397cb1e753f70792b4d1ca363ab010daa69272c341ed538175284b5926addc1e27b843b3a434da01b47afda80b164b01ae8ee"
         );
         assert_eq!(wakes.size, 292_134);
+
+        let gecko = file_of(&manifest, "geckolib", "geckolib-fabric-26.3-5.5.7.jar");
+        assert_eq!(
+            gecko.url,
+            "https://cdn.modrinth.com/data/8BmcQJ2H/versions/kSxHvs99/geckolib-fabric-26.3-5.5.7.jar"
+        );
+        assert_eq!(
+            gecko.sha512,
+            "c7c89bd6c5f2801ef1575e2e1212202f5a3eff480d73503beff12b1d60dfb751112fccf36e36c243b26b6b492261cef12d8b2c1a92a734bb0b621daa8c158fc5"
+        );
+        assert_eq!(gecko.size, 1_191_230);
+
+        let sao = file_of(
+            &manifest,
+            "sao_aincrad",
+            "sao_aincrad-0.0.3-spike+1c25315.jar",
+        );
+        assert_eq!(
+            sao.url,
+            "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.4/sao_aincrad-0.0.3-spike+1c25315.jar"
+        );
+        assert_eq!(
+            sao.sha512,
+            "80b6d884c82e5ff9c49bb1ea33181ad0d6d6068d4ddf8bbf37940896bc1926d48bad1b54437cee1e97d5dae3e38fcb042cb84f7fef1a32a2635ebaf28d1778bd"
+        );
+        assert_eq!(sao.size, 608_813);
+        assert_eq!(sao.match_glob, "sao_aincrad-*.jar");
+    }
+
+    #[test]
+    fn github_release_files_use_the_tag_publish_checks() {
+        let manifest = load_fixture_manifest().unwrap();
+        let tag = crate::download::ARNOLD_RELEASE_TAG;
+        assert_eq!(tag, "mods-2026.11.4");
+        let prefix = format!(
+            "https://github.com/{}/{}/releases/download/{tag}/",
+            crate::download::RELEASE_OWNER,
+            crate::download::RELEASE_REPO
+        );
+        let mut github_files = 0;
+        for component in &manifest.components {
+            for file in &component.files {
+                if !file.url.starts_with("https://github.com/") {
+                    continue;
+                }
+                github_files += 1;
+                assert_eq!(
+                    file.url,
+                    format!("{prefix}{}", file.file),
+                    "{} must sit on {tag} or Publish mods release rejects it",
+                    file.file
+                );
+            }
+        }
+        assert_eq!(github_files, 4);
     }
 
     #[test]

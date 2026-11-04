@@ -9,7 +9,7 @@ pub const RELEASE_REPO: &str = "arnold-client-mod-installer";
 pub const MODRINTH_HOST: &str = "cdn.modrinth.com";
 pub const GITHUB_HOST: &str = "github.com";
 pub const FABRIC_META_HOST: &str = "meta.fabricmc.net";
-pub const ARNOLD_RELEASE_TAG: &str = "mods-2026.11.2";
+pub const ARNOLD_RELEASE_TAG: &str = "mods-2026.11.4";
 
 const GITHUB_ASSET_HOSTS: &[&str] = &[
     "objects.githubusercontent.com",

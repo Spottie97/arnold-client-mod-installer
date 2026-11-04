@@ -11,7 +11,7 @@ export type Screen =
   | "import"
   | "settings";
 
-export type ComponentGroup = "base" | "shaders" | "arnold" | "ocean";
+export type ComponentGroup = "base" | "shaders" | "arnold" | "ocean" | "sao";
 export type ComponentKind = "base" | "download" | "pending";
 export type FileDest = "mods" | "shaderpacks";
 
@@ -149,6 +149,8 @@ export interface Selection {
   kit: string;
   customComponents: string[];
   ocean: boolean;
+  /** Optional add-ons other than Ocean. A missing id stays off. */
+  addons?: Record<string, boolean>;
   snowLite: boolean | null;
   quality: QualityLevel | null;
 }

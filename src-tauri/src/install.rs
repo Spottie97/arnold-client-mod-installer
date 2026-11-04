@@ -666,6 +666,7 @@ mod tests {
                 kit: "basic".into(),
                 custom_components: vec![],
                 ocean: false,
+                addons: Default::default(),
                 snow_lite: Some(true),
                 quality: None,
             },

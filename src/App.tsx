@@ -28,6 +28,7 @@ import {
   setQuality,
   setTourDone,
 } from "./lib/api";
+import { addonRows, freshAddonFlags, savedAddonFlags } from "./lib/addons";
 import { pickBanner, type LocalSourceInfo } from "./lib/localSource";
 import { parseQuality, snowLiteForQuality } from "./lib/quality";
 import { TOUR_TIPS } from "./lib/tour";
@@ -105,6 +106,7 @@ export default function App() {
   const [snapshots, setSnapshots] = useState<SnapshotMeta[]>([]);
   const [kit, setKit] = useState("recommended");
   const [ocean, setOcean] = useState(true);
+  const [addonFlags, setAddonFlags] = useState<Record<string, boolean>>({});
   const [customIds, setCustomIds] = useState<string[]>(["deck", "ships", "snow", "sodium", "base"]);
   const [snowLite, setSnowLite] = useState(false);
   const [quality, setQualityLevel] = useState<QualityLevel>("normal");
@@ -184,6 +186,12 @@ export default function App() {
         setQualityLevel(nextQuality);
         setSnowLite(snowLiteForQuality(nextQuality));
         setOcean(r.recommendOcean);
+        setAddonFlags(
+          freshAddonFlags(
+            load.manifest,
+            savedAddonFlags(load.manifest, inst ? inst.components.map((item) => item.id) : null),
+          ),
+        );
         if (!prefs.tourDone) setTourStep(0);
         if (legacy?.found && !legacy.alreadyAdopted && !inst) {
           setImportOffer(legacy);
@@ -204,10 +212,11 @@ export default function App() {
       kit,
       customComponents: customIds,
       ocean,
+      addons: addonFlags,
       snowLite,
       quality,
     }),
-    [kit, customIds, ocean, snowLite, quality],
+    [kit, customIds, ocean, addonFlags, snowLite, quality],
   );
 
   useEffect(() => {
@@ -265,11 +274,13 @@ export default function App() {
   };
 
   const startRecommended = async () => {
-    if (!recommendation) return;
+    if (!recommendation || !manifest) return;
+    const flags = freshAddonFlags(manifest, null);
     const next = await plan({
       kit: recommendation.kit,
       customComponents: [],
       ocean: recommendation.recommendOcean,
+      addons: flags,
       snowLite: snowLiteForQuality(recommendation.quality),
       quality: recommendation.quality,
     });
@@ -278,6 +289,7 @@ export default function App() {
     setQualityLevel(recommendation.quality);
     setSnowLite(snowLiteForQuality(recommendation.quality));
     setOcean(recommendation.recommendOcean);
+    setAddonFlags(flags);
     await startInstall(next, false);
   };
 
@@ -424,6 +436,15 @@ export default function App() {
     );
   }
 
+  const rows = addonRows(manifest, ocean, addonFlags);
+  const onAddon = (id: string, on: boolean) => {
+    if (id === "ocean") {
+      setOcean(on);
+      return;
+    }
+    setAddonFlags((current) => ({ ...current, [id]: on }));
+  };
+
   let body: JSX.Element;
   switch (screen) {
     case "welcome":
@@ -471,6 +492,7 @@ export default function App() {
           selected={kit}
           quality={quality}
           ocean={ocean}
+          addons={rows}
           recommendation={recommendation}
           plan={currentPlan}
           table={manifest.qualityPresets}
@@ -482,7 +504,7 @@ export default function App() {
             setQualityLevel(next);
             setSnowLite(snowLiteForQuality(next));
           }}
-          onOcean={setOcean}
+          onAddon={onAddon}
         />
       );
       break;
@@ -493,12 +515,14 @@ export default function App() {
           selected={currentPlan.components}
           snowLite={snowLite}
           plan={currentPlan}
+          addons={rows}
           onToggle={(id) => {
             setCustomIds((ids) =>
               ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id],
             );
             setKit("custom");
           }}
+          onAddon={onAddon}
           onSnowLite={setSnowLite}
         />
       );

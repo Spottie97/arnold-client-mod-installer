@@ -1,6 +1,6 @@
 {
   "schema": 3,
-  "manifestVersion": "2026.11.02-1",
+  "manifestVersion": "2026.11.04-1",
   "minAppVersion": "3.0.0",
   "minecraft": "26.3",
   "currentServerShipwright": "0.11.2",
@@ -110,7 +110,7 @@
           "file": "arnold-deck-client-0.11.1.jar",
           "dest": "mods",
           "match": "arnold-deck-client-*.jar",
-          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.2/arnold-deck-client-0.11.1.jar",
+          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.4/arnold-deck-client-0.11.1.jar",
           "sha512": "a5619fffe5e4008054340f8f2bb6b40a30861b2763404b7f398534831907bdfce3fbdb15f307c1d52ecaf4e51522e47f70c7c25267b0206769108b43660b0b58",
           "size": 11243
         }
@@ -197,7 +197,7 @@
           "file": "arnold-ships-client-0.10.3.jar",
           "dest": "mods",
           "match": "arnold-ships-client-*.jar",
-          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.2/arnold-ships-client-0.10.3.jar",
+          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.4/arnold-ships-client-0.10.3.jar",
           "sha512": "bf6a3a5a3395b46e69a16144af682b9610b0868bd40b0ae531698705c1c16f552b41eb914176564cbf2f4406dcb8e4c2cb0cb71b47663f5534a22c5b252f7249",
           "size": 7460714
         }
@@ -338,7 +338,7 @@
           "file": "arnold-snowfall-1.3.3.jar",
           "dest": "mods",
           "match": "arnold-snowfall*.jar",
-          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.2/arnold-snowfall-1.3.3.jar",
+          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.4/arnold-snowfall-1.3.3.jar",
           "sha512": "2c8e4c8a8adf564475765bdca2bd3aaa9873d8f2f79ba76e1f7fac531adbf389f32914d13e1ded9daa8f004dc2e8ccd6007fbb1d94e8c1cfc165215ab51d1199",
           "size": 152127
         }
@@ -402,6 +402,51 @@
         "page": "https://modrinth.com/mod/placeholder-waves"
       },
       "files": []
+    },
+    {
+      "id": "geckolib",
+      "group": "sao",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "name": "GeckoLib",
+      "version": "5.5.7",
+      "description": "Animation library for the SAO: Aincrad staging test. Fabric build for Minecraft 26.3.",
+      "license": "MIT",
+      "files": [
+        {
+          "file": "geckolib-fabric-26.3-5.5.7.jar",
+          "dest": "mods",
+          "match": "geckolib-fabric-*.jar",
+          "url": "https://cdn.modrinth.com/data/8BmcQJ2H/versions/kSxHvs99/geckolib-fabric-26.3-5.5.7.jar",
+          "sha512": "c7c89bd6c5f2801ef1575e2e1212202f5a3eff480d73503beff12b1d60dfb751112fccf36e36c243b26b6b492261cef12d8b2c1a92a734bb0b621daa8c158fc5",
+          "size": 1191230
+        }
+      ]
+    },
+    {
+      "id": "sao_aincrad",
+      "group": "sao",
+      "kind": "download",
+      "requires": [
+        "base",
+        "geckolib"
+      ],
+      "name": "SAO: Aincrad (staging test)",
+      "version": "0.0.3-spike+1c25315",
+      "description": "Staging test only, for the SAO test server. Not part of the Arnold client. Needs Minecraft 26.3 and Java 25. Leave this off unless you are testing that server.",
+      "license": "LicenseRef-Private",
+      "files": [
+        {
+          "file": "sao_aincrad-0.0.3-spike+1c25315.jar",
+          "dest": "mods",
+          "match": "sao_aincrad-*.jar",
+          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.4/sao_aincrad-0.0.3-spike+1c25315.jar",
+          "sha512": "80b6d884c82e5ff9c49bb1ea33181ad0d6d6068d4ddf8bbf37940896bc1926d48bad1b54437cee1e97d5dae3e38fcb042cb84f7fef1a32a2635ebaf28d1778bd",
+          "size": 608813
+        }
+      ]
     }
   ],
   "kits": {
@@ -455,6 +500,18 @@
       "defaultOn": {
         "basic": true,
         "full": true
+      }
+    },
+    "sao": {
+      "name": "SAO: Aincrad (staging test)",
+      "components": [
+        "sao_aincrad",
+        "geckolib"
+      ],
+      "defaultOn": {
+        "basic": false,
+        "full": false,
+        "recommended": false
       }
     }
   },

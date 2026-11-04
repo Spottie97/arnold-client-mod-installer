@@ -1,3 +1,5 @@
+import { AddonToggles } from "../components/AddonToggles";
+import type { AddonRow } from "../lib/addons";
 import type { Component, InstallPlan, Manifest } from "../types";
 
 const GROUPS: { id: Component["group"]; title: string }[] = [
@@ -11,14 +13,18 @@ export function Custom({
   selected,
   snowLite,
   plan,
+  addons,
   onToggle,
+  onAddon,
   onSnowLite,
 }: {
   manifest: Manifest;
   selected: string[];
   snowLite: boolean;
   plan: InstallPlan;
+  addons: AddonRow[];
   onToggle: (id: string) => void;
+  onAddon: (id: string, on: boolean) => void;
   onSnowLite: (on: boolean) => void;
 }) {
   return (
@@ -68,6 +74,7 @@ export function Custom({
           </section>
         ))}
       </div>
+      <AddonToggles addons={addons} onToggle={onAddon} />
       <label className="panel mt-5 flex items-center gap-3">
         <input
           type="checkbox"
