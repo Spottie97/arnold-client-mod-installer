@@ -999,7 +999,7 @@ mod tests {
         );
         assert_eq!(
             sao.url,
-            "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.4/sao_aincrad-0.0.3-spike+1c25315.jar"
+            "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.5/sao_aincrad-0.0.3-spike+1c25315.jar"
         );
         assert_eq!(
             sao.sha512,
@@ -1013,7 +1013,7 @@ mod tests {
     fn github_release_files_use_the_tag_publish_checks() {
         let manifest = load_fixture_manifest().unwrap();
         let tag = crate::download::ARNOLD_RELEASE_TAG;
-        assert_eq!(tag, "mods-2026.11.4");
+        assert_eq!(tag, "mods-2026.11.5");
         let prefix = format!(
             "https://github.com/{}/{}/releases/download/{tag}/",
             crate::download::RELEASE_OWNER,
