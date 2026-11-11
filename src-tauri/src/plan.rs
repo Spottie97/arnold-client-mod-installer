@@ -16,7 +16,7 @@ pub struct Selection {
     #[serde(default)]
     pub ocean: bool,
     /// Optional add-ons other than Ocean. A missing key stays off. `defaultOn`
-    /// is not applied here, so an older saved selection cannot gain SAO.
+    /// is not applied here, so an older saved selection cannot gain a new addon.
     #[serde(default)]
     pub addons: BTreeMap<String, bool>,
     pub snow_lite: Option<bool>,
@@ -437,8 +437,9 @@ mod tests {
         assert!(plan.components.contains(&"particlerain".into()));
         assert!(!plan.components.contains(&"wakes".into()));
         assert!(!plan.components.contains(&"waves".into()));
-        assert!(!plan.components.contains(&"saoaincrad".into()));
-        assert!(!plan.components.contains(&"geckolib".into()));
+        assert!(!plan.components.contains(&"architect".into()));
+        assert!(!plan.components.contains(&"litematica".into()));
+        assert!(!plan.components.contains(&"malilib".into()));
     }
 
     #[test]
@@ -460,7 +461,7 @@ mod tests {
         .unwrap();
         assert!(!ultra.snow_lite);
         assert_eq!(ultra.quality, QualityLevel::Ultra);
-        assert!(!ultra.components.contains(&"saoaincrad".into()));
+        assert!(!ultra.components.contains(&"architect".into()));
     }
 
     fn selection_from(raw: &str) -> Selection {
@@ -468,18 +469,18 @@ mod tests {
     }
 
     #[test]
-    fn saved_selection_without_sao_stays_off_even_if_default_on_is_flipped() {
+    fn saved_selection_without_architect_stays_off_even_if_default_on_is_flipped() {
         let mut manifest = load_fixture_manifest().unwrap();
-        let sao = manifest.addons.get_mut("sao").unwrap();
+        let architect = manifest.addons.get_mut("architect").unwrap();
         for kit in ["basic", "full", "recommended"] {
-            assert_eq!(sao.default_on.get(kit).copied(), Some(false));
-            sao.default_on.insert(kit.into(), true);
+            assert_eq!(architect.default_on.get(kit).copied(), Some(false));
+            architect.default_on.insert(kit.into(), true);
         }
         for (kit_id, kit) in &manifest.kits {
             assert!(
                 !kit.components
                     .iter()
-                    .any(|id| id == "saoaincrad" || id == "geckolib"),
+                    .any(|id| { id == "architect" || id == "litematica" || id == "malilib" }),
                 "{kit_id}"
             );
         }
@@ -488,19 +489,20 @@ mod tests {
             assert!(!row
                 .skip_components
                 .iter()
-                .any(|id| id == "saoaincrad" || id == "geckolib"));
+                .any(|id| { id == "architect" || id == "litematica" || id == "malilib" }));
         }
         let saved =
             selection_from(r#"{"kit":"full","ocean":true,"snowLite":false,"quality":"ultra"}"#);
         assert!(saved.addons.is_empty());
         let plan = build_plan(&manifest, &saved, None, true).unwrap();
         assert!(plan.components.contains(&"wakes".into()));
-        assert!(!plan.components.contains(&"saoaincrad".into()));
-        assert!(!plan.components.contains(&"geckolib".into()));
+        assert!(!plan.components.contains(&"architect".into()));
+        assert!(!plan.components.contains(&"litematica".into()));
+        assert!(!plan.components.contains(&"malilib".into()));
     }
 
     #[test]
-    fn kits_and_quality_do_not_turn_sao_on() {
+    fn kits_and_quality_do_not_turn_architect_on() {
         let manifest = load_fixture_manifest().unwrap();
         for kit in ["basic", "full", "recommended"] {
             for quality in [
@@ -527,7 +529,7 @@ mod tests {
                     !plan
                         .components
                         .iter()
-                        .any(|id| id == "saoaincrad" || id == "geckolib"),
+                        .any(|id| { id == "architect" || id == "litematica" || id == "malilib" }),
                     "{kit} {quality:?} {components:?}",
                     components = plan.components
                 );
@@ -536,10 +538,10 @@ mod tests {
     }
 
     #[test]
-    fn sao_opt_in_installs_aincrad_geckolib_and_fabric() {
+    fn architect_opt_in_installs_helper_and_deps() {
         let manifest = load_fixture_manifest().unwrap();
         let mut addons = BTreeMap::new();
-        addons.insert("sao".into(), false);
+        addons.insert("architect".into(), false);
         let off = build_plan(
             &manifest,
             &Selection {
@@ -554,9 +556,9 @@ mod tests {
             true,
         )
         .unwrap();
-        assert!(!off.components.contains(&"saoaincrad".into()));
+        assert!(!off.components.contains(&"architect".into()));
 
-        addons.insert("sao".into(), true);
+        addons.insert("architect".into(), true);
         addons.insert("ocean".into(), true);
         let plan = build_plan(
             &manifest,
@@ -572,21 +574,27 @@ mod tests {
             true,
         )
         .unwrap();
-        assert!(plan.components.contains(&"saoaincrad".into()));
-        assert!(plan.components.contains(&"geckolib".into()));
+        assert!(plan.components.contains(&"architect".into()));
+        assert!(plan.components.contains(&"litematica".into()));
+        assert!(plan.components.contains(&"malilib".into()));
         assert!(plan.components.contains(&"base".into()));
         assert!(!plan.components.contains(&"particlerain".into()));
-        let sao_at = plan
+        let architect_at = plan
             .components
             .iter()
-            .position(|id| id == "saoaincrad")
+            .position(|id| id == "architect")
             .unwrap();
-        let gecko_at = plan
+        let litematica_at = plan
             .components
             .iter()
-            .position(|id| id == "geckolib")
+            .position(|id| id == "litematica")
+            .unwrap();
+        let malilib_at = plan
+            .components
+            .iter()
+            .position(|id| id == "malilib")
             .unwrap();
         let base_at = plan.components.iter().position(|id| id == "base").unwrap();
-        assert!(base_at < gecko_at && gecko_at < sao_at);
+        assert!(base_at < malilib_at && malilib_at < litematica_at && litematica_at < architect_at);
     }
 }

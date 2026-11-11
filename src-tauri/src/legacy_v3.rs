@@ -266,9 +266,10 @@ fn legacy_select(
     out
 }
 
-fn assert_staging_absent(ids: &[String], kit: &str, ocean: bool) {
+fn assert_optional_addons_absent(ids: &[String], kit: &str, ocean: bool) {
     assert!(
-        !ids.iter().any(|id| id == "saoaincrad" || id == "geckolib"),
+        !ids.iter()
+            .any(|id| id == "architect" || id == "litematica" || id == "malilib"),
         "{kit} ocean={ocean} selected {ids:?}"
     );
 }
@@ -278,31 +279,32 @@ mod tests {
     use super::*;
 
     #[test]
-    fn fixture_parses_on_the_6362dfe_schema_and_leaves_sao_off() {
+    fn fixture_parses_on_the_6362dfe_schema_and_leaves_architect_off() {
         let manifest = parse_legacy(BUNDLED_MANIFEST_JSON).expect("6362dfe schema");
         assert_eq!(manifest.min_app_version, "3.0.0");
         assert_eq!(manifest.minecraft, "26.3");
-        assert!(manifest.addons.contains_key("sao"));
+        assert!(manifest.addons.contains_key("architect"));
         assert!(manifest.addons.contains_key("ocean"));
+        assert!(!manifest.addons.contains_key("sao"));
 
-        let sao = manifest
+        let architect = manifest
             .components
             .iter()
-            .find(|component| component.id == "saoaincrad")
-            .expect("sao component");
-        let gecko = manifest
+            .find(|component| component.id == "architect")
+            .expect("architect component");
+        let litematica = manifest
             .components
             .iter()
-            .find(|component| component.id == "geckolib")
-            .expect("geckolib");
-        assert_eq!(sao.group, LegacyGroup::Base);
-        assert_eq!(gecko.group, LegacyGroup::Base);
-        assert!(!sao.required_in_all_kits);
-        assert!(!gecko.required_in_all_kits);
-        assert_eq!(sao.name, "SAO: Aincrad (staging test)");
-        assert_eq!(gecko.name, "GeckoLib");
-        assert!(sao.description.contains("Staging test only"));
-        assert_eq!(sao.version, "0.0.3-spike+1c25315");
+            .find(|component| component.id == "litematica")
+            .expect("litematica");
+        assert_eq!(architect.group, LegacyGroup::Base);
+        assert_eq!(litematica.group, LegacyGroup::Base);
+        assert!(!architect.required_in_all_kits);
+        assert!(!litematica.required_in_all_kits);
+        assert_eq!(architect.name, "The Architect");
+        assert_eq!(litematica.name, "Litematica");
+        assert!(architect.description.contains("own Anthropic API key"));
+        assert_eq!(architect.version, "0.3.2");
 
         let visible: Vec<&str> = manifest
             .components
@@ -310,8 +312,9 @@ mod tests {
             .filter(|component| LEGACY_CUSTOM_GROUPS.contains(&group_name(component.group)))
             .map(|component| component.id.as_str())
             .collect();
-        assert!(!visible.contains(&"saoaincrad"));
-        assert!(!visible.contains(&"geckolib"));
+        assert!(!visible.contains(&"architect"));
+        assert!(!visible.contains(&"litematica"));
+        assert!(!visible.contains(&"malilib"));
 
         let table = manifest.quality_presets.as_ref().expect("presets");
         let presets = [
@@ -324,7 +327,7 @@ mod tests {
             assert!(
                 !row.skip_components
                     .iter()
-                    .any(|id| id == "saoaincrad" || id == "geckolib"),
+                    .any(|id| { id == "architect" || id == "litematica" || id == "malilib" }),
                 "{level}"
             );
             for kit in ["basic", "full", "recommended"] {
@@ -335,7 +338,7 @@ mod tests {
                     &[],
                     &row.skip_components,
                 );
-                assert_staging_absent(&ids, kit, row.recommend_ocean);
+                assert_optional_addons_absent(&ids, kit, row.recommend_ocean);
             }
         }
 
@@ -345,7 +348,7 @@ mod tests {
             .collect();
         for ocean in [false, true] {
             let ids = legacy_select(&manifest, "custom", ocean, &defaults, &[]);
-            assert_staging_absent(&ids, "custom", ocean);
+            assert_optional_addons_absent(&ids, "custom", ocean);
             assert!(ids.contains(&"base".to_string()));
             assert!(!ids.contains(&"shaders".to_string()));
         }
@@ -363,7 +366,7 @@ mod tests {
             &saved.custom_components,
             &[],
         );
-        assert_staging_absent(&ids, "saved-full", true);
+        assert_optional_addons_absent(&ids, "saved-full", true);
         assert!(ids.contains(&"particlerain".to_string()));
     }
 
@@ -383,7 +386,7 @@ mod tests {
             .as_array_mut()
             .unwrap()
             .iter_mut()
-            .find(|component| component["id"] == "saoaincrad")
+            .find(|component| component["id"] == "architect")
             .unwrap()["group"] = serde_json::json!("sao");
         let err = parse_legacy(&value.to_string()).unwrap_err();
         assert!(err.contains("sao") || err.contains("variant"), "{err}");

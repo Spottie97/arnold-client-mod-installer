@@ -981,33 +981,6 @@ mod tests {
         );
         assert_eq!(wakes.size, 292_134);
 
-        let gecko = file_of(&manifest, "geckolib", "geckolib-fabric-26.3-5.5.7.jar");
-        assert_eq!(
-            gecko.url,
-            "https://cdn.modrinth.com/data/8BmcQJ2H/versions/kSxHvs99/geckolib-fabric-26.3-5.5.7.jar"
-        );
-        assert_eq!(
-            gecko.sha512,
-            "c7c89bd6c5f2801ef1575e2e1212202f5a3eff480d73503beff12b1d60dfb751112fccf36e36c243b26b6b492261cef12d8b2c1a92a734bb0b621daa8c158fc5"
-        );
-        assert_eq!(gecko.size, 1_191_230);
-
-        let sao = file_of(
-            &manifest,
-            "saoaincrad",
-            "sao_aincrad-0.0.3-spike+1c25315.jar",
-        );
-        assert_eq!(
-            sao.url,
-            "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.5/sao_aincrad-0.0.3-spike+1c25315.jar"
-        );
-        assert_eq!(
-            sao.sha512,
-            "80b6d884c82e5ff9c49bb1ea33181ad0d6d6068d4ddf8bbf37940896bc1926d48bad1b54437cee1e97d5dae3e38fcb042cb84f7fef1a32a2635ebaf28d1778bd"
-        );
-        assert_eq!(sao.size, 608_813);
-        assert_eq!(sao.match_glob, "sao_aincrad-*.jar");
-
         let malilib = file_of(&manifest, "malilib", "malilib-fabric-26.3-0.30.2.jar");
         assert_eq!(
             malilib.url,
@@ -1068,7 +1041,7 @@ mod tests {
                 );
             }
         }
-        assert_eq!(github_files, 4);
+        assert_eq!(github_files, 3);
     }
 
     #[test]
