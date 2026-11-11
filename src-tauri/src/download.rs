@@ -10,6 +10,11 @@ pub const MODRINTH_HOST: &str = "cdn.modrinth.com";
 pub const GITHUB_HOST: &str = "github.com";
 pub const FABRIC_META_HOST: &str = "meta.fabricmc.net";
 pub const ARNOLD_RELEASE_TAG: &str = "mods-2026.11.5";
+/// Official Architect download hosts. The short link on app. redirects to /assets/downloads/.
+pub const ARCHITECT_APP_HOST: &str = "app.thearchitectmod.com";
+pub const ARCHITECT_SITE_HOST: &str = "thearchitectmod.com";
+const ARCHITECT_APP_PATH_PREFIX: &str = "/dl/";
+const ARCHITECT_SITE_PATH_PREFIX: &str = "/assets/downloads/";
 
 const GITHUB_ASSET_HOSTS: &[&str] = &[
     "objects.githubusercontent.com",
@@ -21,6 +26,7 @@ pub enum AllowedSource {
     Modrinth,
     GitHubReleases,
     FabricMeta,
+    Architect,
 }
 
 fn reject(url: &str) -> AppError {
@@ -62,8 +68,9 @@ fn host_of(url: &Url) -> String {
     url.host_str().unwrap_or("").to_ascii_lowercase()
 }
 
-/// Allow only `https://cdn.modrinth.com/…` and
-/// `https://github.com/Spottie97/arnold-client-mod-installer/releases/…`.
+/// Allow only `https://cdn.modrinth.com/…`,
+/// `https://github.com/Spottie97/arnold-client-mod-installer/releases/…`,
+/// and The Architect's official download URLs.
 pub fn classify_source_url(raw: &str) -> Result<AllowedSource, AppError> {
     let url = parsed_https(raw)?;
     let host = host_of(&url);
@@ -84,7 +91,17 @@ pub fn classify_source_url(raw: &str) -> Result<AllowedSource, AppError> {
         }
     }
 
+    if is_architect_download(&host, path) {
+        return Ok(AllowedSource::Architect);
+    }
+
     Err(reject(raw))
+}
+
+fn is_architect_download(host: &str, path: &str) -> bool {
+    let allowed = (host == ARCHITECT_APP_HOST && path.starts_with(ARCHITECT_APP_PATH_PREFIX))
+        || (host == ARCHITECT_SITE_HOST && path.starts_with(ARCHITECT_SITE_PATH_PREFIX));
+    allowed && !path.contains("..")
 }
 
 /// Loader-only extra host: `https://meta.fabricmc.net/v2/versions/loader/…`
@@ -118,18 +135,29 @@ pub fn arnold_release_asset_url(file_name: &str) -> String {
     )
 }
 
-/// Redirects are followed only to GitHub release asset hosts, and only from an
-/// already-allowlisted origin URL. SHA-512 is still checked afterwards.
+/// Redirects are followed only to a matching allowlisted destination, and only
+/// from an already-allowlisted origin URL. SHA-512 is still checked afterwards.
+/// GitHub Releases may land on GitHub asset hosts or another Releases URL.
+/// Architect short links may land on the official `/assets/downloads/` URL.
 pub fn is_allowed_redirect(from: &str, to: &str) -> Result<(), AppError> {
-    classify_source_url(from)?;
+    let origin = classify_source_url(from)?;
     let dest = parsed_https(to)?;
     let host = host_of(&dest);
-    if GITHUB_ASSET_HOSTS.contains(&host.as_str()) {
+    if matches!(origin, AllowedSource::GitHubReleases)
+        && GITHUB_ASSET_HOSTS.contains(&host.as_str())
+    {
         return Ok(());
     }
     // `releases/latest/download/<file>` first redirects to
     // `releases/download/<tag>/<file>` on github.com, still inside this repo.
-    if matches!(classify_source_url(to), Ok(AllowedSource::GitHubReleases)) {
+    if matches!(origin, AllowedSource::GitHubReleases)
+        && matches!(classify_source_url(to), Ok(AllowedSource::GitHubReleases))
+    {
+        return Ok(());
+    }
+    if matches!(origin, AllowedSource::Architect)
+        && matches!(classify_source_url(to), Ok(AllowedSource::Architect))
+    {
         return Ok(());
     }
     Err(reject(to))
@@ -185,6 +213,18 @@ mod tests {
         assert!(!is_allowed_source_url(
             "https://meta.fabricmc.net/v2/versions/loader/26.3/0.20.1/profile/json"
         ));
+        assert_eq!(
+            classify_source_url("https://app.thearchitectmod.com/dl/architect-0.3.2+26.3.jar")
+                .unwrap(),
+            AllowedSource::Architect
+        );
+        assert_eq!(
+            classify_source_url(
+                "https://thearchitectmod.com/assets/downloads/architect-0.3.2+26.3.jar"
+            )
+            .unwrap(),
+            AllowedSource::Architect
+        );
     }
 
     #[test]
@@ -206,6 +246,16 @@ mod tests {
             "https://user:pass@cdn.modrinth.com/x.jar",
             "https://192.168.1.10/mod.jar",
             "https://cdn.modrinth.com/../escape.jar",
+            "https://evil.thearchitectmod.com/dl/x.jar",
+            "https://thearchitectmod.com.evil.com/assets/downloads/x.jar",
+            "https://www.thearchitectmod.com/assets/downloads/x.jar",
+            "https://app.thearchitectmod.com/other/x.jar",
+            "https://thearchitectmod.com/dl/x.jar",
+            "https://app.thearchitectmod.com/assets/downloads/x.jar",
+            "http://app.thearchitectmod.com/dl/x.jar",
+            "https://app.thearchitectmod.com:8443/dl/x.jar",
+            "https://user:pass@app.thearchitectmod.com/dl/x.jar",
+            "https://app.thearchitectmod.com/dl/../escape.jar",
         ];
         for url in bad {
             assert!(classify_source_url(url).is_err(), "should reject {url}");
@@ -243,6 +293,19 @@ mod tests {
         assert!(is_allowed_redirect(
             "https://evil.com/a.jar",
             "https://objects.githubusercontent.com/a"
+        )
+        .is_err());
+        let architect = "https://app.thearchitectmod.com/dl/architect-0.3.2+26.3.jar";
+        assert!(is_allowed_redirect(
+            architect,
+            "https://thearchitectmod.com/assets/downloads/architect-0.3.2+26.3.jar"
+        )
+        .is_ok());
+        assert!(is_allowed_redirect(architect, "https://objects.githubusercontent.com/a").is_err());
+        assert!(is_allowed_redirect(architect, "https://cdn.modrinth.com/data/x.jar").is_err());
+        assert!(is_allowed_redirect(
+            "https://cdn.modrinth.com/data/x.jar",
+            "https://thearchitectmod.com/assets/downloads/architect-0.3.2+26.3.jar"
         )
         .is_err());
     }

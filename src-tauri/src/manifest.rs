@@ -1007,6 +1007,40 @@ mod tests {
         );
         assert_eq!(sao.size, 608_813);
         assert_eq!(sao.match_glob, "sao_aincrad-*.jar");
+
+        let malilib = file_of(&manifest, "malilib", "malilib-fabric-26.3-0.30.2.jar");
+        assert_eq!(
+            malilib.url,
+            "https://cdn.modrinth.com/data/GcWjdA9I/versions/JX9bESec/malilib-fabric-26.3-0.30.2.jar"
+        );
+        assert_eq!(
+            malilib.sha512,
+            "8f17a5d70cb2f461aeb540f4a99de01c3351f8d3678d902d3d00cfe5d10c039fdc111c1079fe23aacb7936b793ad1cd045a8dc3a9e7926865820c254d92345b8"
+        );
+        assert_eq!(malilib.size, 2_081_094);
+
+        let litematica = file_of(&manifest, "litematica", "litematica-fabric-26.3-0.29.1.jar");
+        assert_eq!(
+            litematica.url,
+            "https://cdn.modrinth.com/data/bEpr0Arc/versions/ZqV316KY/litematica-fabric-26.3-0.29.1.jar"
+        );
+        assert_eq!(
+            litematica.sha512,
+            "45a8d468463afb97b3fc72efa168024ad69e670e77f5455ecf588583434a1787b32795edf5236579c32c828b02873efb39a4808caa08bbbaf1d8b6b090b160c3"
+        );
+        assert_eq!(litematica.size, 1_972_556);
+
+        let architect = file_of(&manifest, "architect", "architect-0.3.2+26.3.jar");
+        assert_eq!(
+            architect.url,
+            "https://app.thearchitectmod.com/dl/architect-0.3.2+26.3.jar"
+        );
+        assert_eq!(
+            architect.sha512,
+            "86db71d8953a8187a81583786aa5ba078d1f46c7ef4753a047824e5fee9e26cf51bf456a9a16e9d737f4b93312dbae8f7d2fe5c95e7e533156c44d0ed28050fe"
+        );
+        assert_eq!(architect.size, 2_570_616);
+        assert_eq!(architect.match_glob, "architect-*.jar");
     }
 
     #[test]
