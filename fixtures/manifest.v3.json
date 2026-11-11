@@ -671,6 +671,75 @@
           "size": 257621
         }
       ]
+    },
+    {
+      "id": "malilib",
+      "group": "base",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "name": "MaLiLib",
+      "version": "0.30.2",
+      "description": "Library needed by Litematica.",
+      "license": "LGPL-3.0",
+      "files": [
+        {
+          "file": "malilib-fabric-26.3-0.30.2.jar",
+          "dest": "mods",
+          "match": "malilib-fabric-*.jar",
+          "url": "https://cdn.modrinth.com/data/GcWjdA9I/versions/JX9bESec/malilib-fabric-26.3-0.30.2.jar",
+          "sha512": "8f17a5d70cb2f461aeb540f4a99de01c3351f8d3678d902d3d00cfe5d10c039fdc111c1079fe23aacb7936b793ad1cd045a8dc3a9e7926865820c254d92345b8",
+          "size": 2081094
+        }
+      ]
+    },
+    {
+      "id": "litematica",
+      "group": "base",
+      "kind": "download",
+      "requires": [
+        "base",
+        "malilib"
+      ],
+      "name": "Litematica",
+      "version": "0.29.1",
+      "description": "Shows a see-through outline of a build and its material list.",
+      "license": "LGPL-3.0",
+      "files": [
+        {
+          "file": "litematica-fabric-26.3-0.29.1.jar",
+          "dest": "mods",
+          "match": "litematica-fabric-*.jar",
+          "url": "https://cdn.modrinth.com/data/bEpr0Arc/versions/ZqV316KY/litematica-fabric-26.3-0.29.1.jar",
+          "sha512": "45a8d468463afb97b3fc72efa168024ad69e670e77f5455ecf588583434a1787b32795edf5236579c32c828b02873efb39a4808caa08bbbaf1d8b6b090b160c3",
+          "size": 1972556
+        }
+      ]
+    },
+    {
+      "id": "architect",
+      "group": "base",
+      "kind": "download",
+      "requires": [
+        "base",
+        "malilib",
+        "litematica"
+      ],
+      "name": "The Architect",
+      "version": "0.3.2",
+      "description": "AI build helper: press B, describe a build, and get an outline and material list. You place the blocks yourself in survival. Needs an Architect plan or your own Anthropic API key (18+ account, billed by Anthropic).",
+      "license": "LicenseRef-All-Rights-Reserved",
+      "files": [
+        {
+          "file": "architect-0.3.2+26.3.jar",
+          "dest": "mods",
+          "match": "architect-*.jar",
+          "url": "https://app.thearchitectmod.com/dl/architect-0.3.2+26.3.jar",
+          "sha512": "86db71d8953a8187a81583786aa5ba078d1f46c7ef4753a047824e5fee9e26cf51bf456a9a16e9d737f4b93312dbae8f7d2fe5c95e7e533156c44d0ed28050fe",
+          "size": 2570616
+        }
+      ]
     }
   ],
   "kits": {
@@ -764,6 +833,19 @@
       "components": [
         "saoaincrad",
         "geckolib"
+      ],
+      "defaultOn": {
+        "basic": false,
+        "full": false,
+        "recommended": false
+      }
+    },
+    "architect": {
+      "name": "The Architect (AI build helper)",
+      "components": [
+        "architect",
+        "litematica",
+        "malilib"
       ],
       "defaultOn": {
         "basic": false,
