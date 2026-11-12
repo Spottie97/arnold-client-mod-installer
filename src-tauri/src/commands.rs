@@ -546,8 +546,7 @@ pub fn set_quality(level: String, state: State<AppState>) -> Result<InstalledSta
 pub async fn check_update(_app: AppHandle) -> Result<UpdateStatus, ErrorPayload> {
     #[cfg(feature = "updater")]
     {
-        use tauri_plugin_updater::UpdaterExt;
-        match _app.updater() {
+        match crate::updater::configured_updater(&_app) {
             Ok(updater) => match updater.check().await {
                 Ok(Some(update)) => Ok(UpdateStatus {
                     available: true,
@@ -584,8 +583,7 @@ pub async fn check_update(_app: AppHandle) -> Result<UpdateStatus, ErrorPayload>
 pub async fn download_and_install(_app: AppHandle) -> Result<(), ErrorPayload> {
     #[cfg(feature = "updater")]
     {
-        use tauri_plugin_updater::UpdaterExt;
-        let updater = _app.updater().map_err(|e| {
+        let updater = crate::updater::configured_updater(&_app).map_err(|e| {
             AppError::NotImplemented {
                 what: format!("self-update: {e}"),
             }

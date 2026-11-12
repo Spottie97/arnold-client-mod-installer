@@ -75,7 +75,7 @@ jobs:
           releaseDraft: true
           includeUpdaterJson: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
           # Never pass --features local-source. That flag is test-only.
-          args: --bundles ${{ matrix.bundles }} ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' && '--features updater' || '' }}
+          args: --bundles ${{ matrix.bundles }} ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' && '--features updater --config src-tauri/tauri.updater.conf.json' || '' }}
       - name: Build slim AppImage (system WebKit, Discord-sized)
         if: matrix.platform == 'ubuntu-22.04'
         run: |
@@ -114,3 +114,40 @@ jobs:
             fi
           done
           exit "$failed"
+
+  updater-feed:
+    name: Stage latest.json on the app-updater draft
+    needs: release
+    if: success()
+    permissions:
+      contents: write
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Copy the updater feed onto the rolling app-updater tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$VERSION_TAG" =~ ^app-v ]]; then
+            echo "expected an app-v* tag, got $VERSION_TAG"
+            exit 1
+          fi
+          mkdir -p dist/updater-feed
+          gh release download "$VERSION_TAG" --dir dist/updater-feed --pattern 'latest.json' --clobber
+          # Platform .sig files live next to the installers; copy any that are present.
+          gh release download "$VERSION_TAG" --dir dist/updater-feed --pattern '*.sig' --clobber || true
+          test -s dist/updater-feed/latest.json
+          if ! gh release view app-updater >/dev/null 2>&1; then
+            gh release create app-updater               --draft               --prerelease               --title "App updater feed"               --notes "Rolling feed for the installer self-update. The app reads /releases/download/app-updater/latest.json so the feed is not tied to /releases/latest (that URL serves the mods manifest). Keep this release a prerelease when publishing so it never becomes Latest. Publish this draft only after the matching app-v* draft is published, otherwise latest.json would point at unpublished installers."
+          fi
+          # Do not publish this draft here.
+          gh release upload app-updater dist/updater-feed/latest.json --clobber
+          shopt -s nullglob
+          sigs=(dist/updater-feed/*.sig)
+          if [ ${#sigs[@]} -gt 0 ]; then
+            gh release upload app-updater "${sigs[@]}" --clobber
+          fi
+          draft="$(gh release view app-updater --json isDraft,isPrerelease --jq '{isDraft,isPrerelease}')"
+          echo "Updated draft/prerelease app-updater: $draft"
+          echo "A human still has to publish the app-v* draft, then publish this app-updater feed as a prerelease."

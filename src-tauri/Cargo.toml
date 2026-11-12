@@ -1,6 +1,6 @@
 [package]
 name = "arnold-client-mods"
-version = "3.0.0"
+version = "3.1.0"
 description = "Optional looks and effects for the Arnold server"
 authors = ["Arnold Client Mods"]
 license = "Apache-2.0"

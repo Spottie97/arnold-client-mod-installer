@@ -1,6 +1,8 @@
 fn main() {
     println!("cargo:rerun-if-env-changed=ARNOLD_MANIFEST_PUBKEY");
+    println!("cargo:rerun-if-env-changed=TAURI_UPDATER_PUBKEY");
     println!("cargo:rerun-if-changed=src/manifest.rs");
+    inject_updater_pubkey();
 
     let profile = std::env::var("PROFILE").unwrap_or_default();
     let local_source = std::env::var("CARGO_FEATURE_LOCAL_SOURCE").is_ok();
@@ -46,4 +48,25 @@ fn public_manifest_key_rejected(key: &str, test_key: &str) -> bool {
         return true;
     }
     key == test_key || key.chars().all(|c| c == '0')
+}
+
+fn inject_updater_pubkey() {
+    let updater = std::env::var("CARGO_FEATURE_UPDATER").is_ok();
+    if !updater {
+        return;
+    }
+    let key = std::env::var("TAURI_UPDATER_PUBKEY")
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+    let profile = std::env::var("PROFILE").unwrap_or_default();
+    if key.is_empty() {
+        if profile == "release" {
+            panic!(
+                "release build with --features updater requires TAURI_UPDATER_PUBKEY (the public half, injected at release build time)."
+            );
+        }
+        return;
+    }
+    println!("cargo:rustc-env=TAURI_UPDATER_PUBKEY={key}");
 }

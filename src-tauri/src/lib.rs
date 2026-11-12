@@ -41,7 +41,13 @@ pub fn run() {
     let builder = tauri::Builder::default().manage(AppState::with_local_source(local_dir));
 
     #[cfg(feature = "updater")]
-    let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+    let builder = builder.plugin({
+        let mut updater = tauri_plugin_updater::Builder::new();
+        if let Some(key) = crate::updater::injected_updater_pubkey() {
+            updater = updater.pubkey(key);
+        }
+        updater.build()
+    });
 
     builder
         .invoke_handler(tauri::generate_handler![
