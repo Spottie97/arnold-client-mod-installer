@@ -1,8 +1,8 @@
 # Updater signing key
 
-The installer can self-update from `latest.json` on this project's GitHub Releases:
+The installer can self-update from `latest.json` on a dedicated rolling GitHub release whose tag is always `app-updater` (kept as a prerelease so it never becomes `/releases/latest`, which serves the mods manifest):
 
-`https://github.com/Spottie97/arnold-client-mod-installer/releases/latest/download/latest.json`
+`https://github.com/Spottie97/arnold-client-mod-installer/releases/download/app-updater/latest.json`
 
 The **private** updater key is a CI secret. It is never committed. A default `cargo build` / `npm run tauri build` works without it; `check_update` then reports that the updater is disabled.
 
@@ -35,6 +35,8 @@ cargo build --manifest-path src-tauri/Cargo.toml --features updater
 ```
 
 `tauri-action` can emit `latest.json` when those secrets are present (`includeUpdaterJson: true`). Without the secrets, app-v* releases still publish unsigned `.msi` / `.dmg` / slim AppImage artifacts.
+
+The app-release workflow also stages that `latest.json` (and any `.sig` files) onto a **draft** `app-updater` prerelease. Publish the `app-v*` draft first so the URLs inside `latest.json` work, then publish `app-updater` as a prerelease. Do not publish `app-updater` as a normal latest release.
 
 ## Manifest signing is a different key
 

@@ -62,3 +62,24 @@ jobs:
         run: cargo build --manifest-path src-tauri/Cargo.toml
       - name: build (local-source, not a release)
         run: cargo build --manifest-path src-tauri/Cargo.toml --features local-source
+
+  updater-secrets:
+    name: Updater secrets present
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Report whether updater signing secrets are configured
+        env:
+          HAS_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+          HAS_PUB: ${{ secrets.TAURI_UPDATER_PUBKEY != '' }}
+          HAS_PW: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD != '' }}
+        run: |
+          set -euo pipefail
+          # Boolean only. Do not print secret values.
+          echo "TAURI_SIGNING_PRIVATE_KEY present: $HAS_KEY"
+          echo "TAURI_UPDATER_PUBKEY present: $HAS_PUB"
+          echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD present: $HAS_PW"
+          if [ "$HAS_KEY" != "true" ] || [ "$HAS_PUB" != "true" ]; then
+            echo "Missing required updater secrets. Do not tag an app release until Reinhardt adds them."
+            exit 1
+          fi
