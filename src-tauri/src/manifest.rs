@@ -981,32 +981,39 @@ mod tests {
         );
         assert_eq!(wakes.size, 292_134);
 
-        let gecko = file_of(&manifest, "geckolib", "geckolib-fabric-26.3-5.5.7.jar");
+        let malilib = file_of(&manifest, "malilib", "malilib-fabric-26.3-0.30.2.jar");
         assert_eq!(
-            gecko.url,
-            "https://cdn.modrinth.com/data/8BmcQJ2H/versions/kSxHvs99/geckolib-fabric-26.3-5.5.7.jar"
+            malilib.url,
+            "https://cdn.modrinth.com/data/GcWjdA9I/versions/JX9bESec/malilib-fabric-26.3-0.30.2.jar"
         );
         assert_eq!(
-            gecko.sha512,
-            "c7c89bd6c5f2801ef1575e2e1212202f5a3eff480d73503beff12b1d60dfb751112fccf36e36c243b26b6b492261cef12d8b2c1a92a734bb0b621daa8c158fc5"
+            malilib.sha512,
+            "8f17a5d70cb2f461aeb540f4a99de01c3351f8d3678d902d3d00cfe5d10c039fdc111c1079fe23aacb7936b793ad1cd045a8dc3a9e7926865820c254d92345b8"
         );
-        assert_eq!(gecko.size, 1_191_230);
+        assert_eq!(malilib.size, 2_081_094);
 
-        let sao = file_of(
-            &manifest,
-            "saoaincrad",
-            "sao_aincrad-0.0.3-spike+1c25315.jar",
+        let litematica = file_of(&manifest, "litematica", "litematica-fabric-26.3-0.29.1.jar");
+        assert_eq!(
+            litematica.url,
+            "https://cdn.modrinth.com/data/bEpr0Arc/versions/ZqV316KY/litematica-fabric-26.3-0.29.1.jar"
         );
         assert_eq!(
-            sao.url,
-            "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.5/sao_aincrad-0.0.3-spike+1c25315.jar"
+            litematica.sha512,
+            "45a8d468463afb97b3fc72efa168024ad69e670e77f5455ecf588583434a1787b32795edf5236579c32c828b02873efb39a4808caa08bbbaf1d8b6b090b160c3"
+        );
+        assert_eq!(litematica.size, 1_972_556);
+
+        let architect = file_of(&manifest, "architect", "architect-0.3.2+26.3.jar");
+        assert_eq!(
+            architect.url,
+            "https://app.thearchitectmod.com/dl/architect-0.3.2+26.3.jar"
         );
         assert_eq!(
-            sao.sha512,
-            "80b6d884c82e5ff9c49bb1ea33181ad0d6d6068d4ddf8bbf37940896bc1926d48bad1b54437cee1e97d5dae3e38fcb042cb84f7fef1a32a2635ebaf28d1778bd"
+            architect.sha512,
+            "86db71d8953a8187a81583786aa5ba078d1f46c7ef4753a047824e5fee9e26cf51bf456a9a16e9d737f4b93312dbae8f7d2fe5c95e7e533156c44d0ed28050fe"
         );
-        assert_eq!(sao.size, 608_813);
-        assert_eq!(sao.match_glob, "sao_aincrad-*.jar");
+        assert_eq!(architect.size, 2_570_616);
+        assert_eq!(architect.match_glob, "architect-*.jar");
     }
 
     #[test]
@@ -1034,7 +1041,7 @@ mod tests {
                 );
             }
         }
-        assert_eq!(github_files, 4);
+        assert_eq!(github_files, 3);
     }
 
     #[test]

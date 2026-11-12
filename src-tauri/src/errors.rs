@@ -110,7 +110,7 @@ impl AppError {
             Self::UrlNotAllowed { url } => ErrorPayload {
                 code: self.code(),
                 title: "That download address is not allowed".to_string(),
-                hint: "The installer only fetches from cdn.modrinth.com, this project's GitHub Releases, and Fabric meta for the loader profile.".to_string(),
+                hint: "The installer only fetches from cdn.modrinth.com, this project's GitHub Releases, Fabric meta for the loader profile, and The Architect's official download site.".to_string(),
                 detail: url.clone(),
             },
             Self::SignatureInvalid { detail } => ErrorPayload {
