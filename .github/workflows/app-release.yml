@@ -14,7 +14,8 @@ jobs:
       matrix:
         include:
           - platform: windows-latest
-            bundles: msi
+            # nsis is the primary Windows updater artifact; msi is kept as an extra.
+            bundles: nsis,msi
           # dmg alone is not an updater target; app produces .app.tar.gz + .sig.
           - platform: macos-latest
             bundles: app,dmg
@@ -83,6 +84,8 @@ jobs:
           releaseName: ${{ github.ref_name }}
           releaseDraft: true
           includeUpdaterJson: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+          # Default is false and would point windows-x86_64 at the MSI when both exist.
+          updaterJsonPreferNsis: true
           # Never pass --features local-source. That flag is test-only.
           args: --bundles ${{ matrix.bundles }} ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' && '--features updater --config src-tauri/tauri.updater.conf.json' || '' }}
       - name: Build slim AppImage (system WebKit, Discord-sized)
@@ -107,10 +110,10 @@ jobs:
           files=()
           while IFS= read -r f; do
             files+=("$f")
-          done < <(find src-tauri/target -type f \( -name '*.msi' -o -name '*.dmg' -o -name '*-slim.AppImage' \) 2>/dev/null || true)
+          done < <(find src-tauri/target -type f \( -name '*setup.exe' -o -name '*.msi' -o -name '*.dmg' -o -name '*-slim.AppImage' \) 2>/dev/null || true)
           if [ ${#files[@]} -eq 0 ]; then
-            echo "No msi/dmg/slim AppImage artifacts found"
-            find src-tauri/target -type f \( -name '*.msi' -o -name '*.dmg' -o -name '*.AppImage' \) | head
+            echo "No nsis/msi/dmg/slim AppImage artifacts found"
+            find src-tauri/target -type f \( -name '*setup.exe' -o -name '*.msi' -o -name '*.dmg' -o -name '*.AppImage' \) | head
             exit 1
           fi
           failed=0
@@ -135,6 +138,7 @@ jobs:
       - name: Copy the updater feed onto the rolling app-updater tag
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
           VERSION_TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
