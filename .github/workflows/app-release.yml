@@ -15,8 +15,9 @@ jobs:
         include:
           - platform: windows-latest
             bundles: msi
+          # dmg alone is not an updater target; app produces .app.tar.gz + .sig.
           - platform: macos-latest
-            bundles: dmg
+            bundles: app,dmg
           - platform: ubuntu-22.04
             bundles: appimage
     runs-on: ${{ matrix.platform }}
