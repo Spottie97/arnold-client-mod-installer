@@ -70,7 +70,7 @@ jobs:
         run: |
           set -euo pipefail
           # The public key is not secret, but do not print it and do not enable xtrace.
-          node tools/inject-updater-pubkey.js src-tauri/tauri.updater.conf.json
+          node tools/inject-updater-pubkey.cjs src-tauri/tauri.updater.conf.json
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
