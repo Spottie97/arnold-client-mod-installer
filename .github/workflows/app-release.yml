@@ -63,6 +63,39 @@ jobs:
         run: |
           cargo test --manifest-path src-tauri/Cargo.toml
           npm test
+      - name: Inject updater public key into the release config
+        if: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+        env:
+          TAURI_UPDATER_PUBKEY: ${{ secrets.TAURI_UPDATER_PUBKEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The public key is not secret, but do not print it and do not enable xtrace.
+          if [ -z "${TAURI_UPDATER_PUBKEY:-}" ]; then
+            echo "TAURI_UPDATER_PUBKEY is missing"
+            exit 1
+          fi
+          node <<'NODE'
+          const fs = require("fs");
+          const path = "src-tauri/tauri.updater.conf.json";
+          const key = (process.env.TAURI_UPDATER_PUBKEY || "").trim();
+          if (!key) {
+            console.error("TAURI_UPDATER_PUBKEY is empty");
+            process.exit(1);
+          }
+          const conf = JSON.parse(fs.readFileSync(path, "utf8"));
+          conf.plugins = conf.plugins || {};
+          conf.plugins.updater = conf.plugins.updater || {};
+          conf.plugins.updater.pubkey = key;
+          fs.writeFileSync(path, JSON.stringify(conf, null, 2) + "\n");
+          const written = JSON.parse(fs.readFileSync(path, "utf8"));
+          const pubkey = written.plugins?.updater?.pubkey || "";
+          if (!pubkey) {
+            console.error("plugins.updater.pubkey was not written");
+            process.exit(1);
+          }
+          console.log("Wrote plugins.updater.pubkey into tauri.updater.conf.json (length " + pubkey.length + ", value not printed).");
+          NODE
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
