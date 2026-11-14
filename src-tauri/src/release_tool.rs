@@ -9,7 +9,7 @@ pub const TEST_PRIVATE_KEY_HEX: &str =
     "48ab0651056657627942de64e86d5435d7391e1ecd922679081c2fbadc376c98";
 pub const TEST_PUBLIC_KEY_HEX: &str =
     "b44547ef0ceb7e4bac652ab9b73b46b2ff3d86d27196a479b674be29e87fdbef";
-pub const DEFAULT_TAG: &str = "mods-2026.11.5";
+pub const DEFAULT_TAG: &str = "mods-2026.11.6";
 
 fn sha512_hex(data: &[u8]) -> String {
     hex::encode(Sha512::digest(data))
@@ -111,6 +111,41 @@ pub fn verify_release_assets(
                     ));
                 }
             }
+            let actual = sha512_hex(&bytes);
+            if actual != expected {
+                return Err(format!(
+                    "{name} sha512 mismatch: manifest {expected}, file {actual}"
+                ));
+            }
+            checked += 1;
+        }
+    }
+    if let Some(loader) = manifest.get("loader") {
+        let url = loader
+            .get("url")
+            .and_then(|value| value.as_str())
+            .unwrap_or("");
+        if url.starts_with("https://github.com/Spottie97/arnold-client-mod-installer/releases/") {
+            let name = url.rsplit('/').next().unwrap_or("");
+            if name.is_empty() {
+                return Err("loader release asset is missing a file name".into());
+            }
+            let expected_url = format!("{prefix}{name}");
+            if url != expected_url {
+                return Err(format!(
+                    "{name} url is not {expected_url} (manifest tag must be {tag})"
+                ));
+            }
+            let expected = loader
+                .get("sha512")
+                .and_then(|value| value.as_str())
+                .unwrap_or("")
+                .to_ascii_lowercase();
+            let path = assets.join(name);
+            if !path.is_file() {
+                return Err(format!("missing release asset {name}"));
+            }
+            let bytes = fs::read(&path).map_err(|e| format!("{name}: {e}"))?;
             let actual = sha512_hex(&bytes);
             if actual != expected {
                 return Err(format!(
@@ -405,8 +440,8 @@ mod tests {
             ]}}]}}"#,
             size = bytes.len()
         );
-        let err = verify_release_assets(manifest.as_bytes(), dir, "mods-2026.11.5").unwrap_err();
-        assert!(err.contains("mods-2026.11.5"), "{err}");
+        let err = verify_release_assets(manifest.as_bytes(), dir, "mods-2026.11.6").unwrap_err();
+        assert!(err.contains("mods-2026.11.6"), "{err}");
         assert!(err.contains("url is not"), "{err}");
     }
 }

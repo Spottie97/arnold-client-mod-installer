@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build and sign manifest.json + SHA512SUMS.txt for GitHub release tag mods-2026.11.5.
+# Build and sign manifest.json + SHA512SUMS.txt for GitHub release tag mods-2026.11.6.
 # Usage:
 #   tools/release-manifest --test-key
 #   tools/release-manifest --from-folder /path/to/release-mods-2026.11.1
@@ -9,5 +9,5 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 exec cargo run --quiet --manifest-path "$root/src-tauri/Cargo.toml" --bin release-manifest -- \
   --in "$root/fixtures/manifest.v3.json" \
   --assets "$root/tools/release-data" \
-  --tag mods-2026.11.5 \
+  --tag mods-2026.11.6 \
   "$@"

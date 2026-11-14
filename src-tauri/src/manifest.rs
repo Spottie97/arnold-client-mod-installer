@@ -864,7 +864,7 @@ mod tests {
     fn bundled_fixture_verifies_with_embedded_test_key() {
         let manifest = load_bundled_manifest_with_key(TEST_MANIFEST_PUBLIC_KEY_HEX).unwrap();
         assert_eq!(manifest.schema, 3);
-        assert_eq!(manifest.manifest_version, "2026.11.04-2");
+        assert_eq!(manifest.manifest_version, "2026.11.6");
         assert_eq!(manifest.minecraft, "26.3");
         assert_eq!(
             manifest.current_server_shipwright.as_deref(),
@@ -1020,7 +1020,7 @@ mod tests {
     fn github_release_files_use_the_tag_publish_checks() {
         let manifest = load_fixture_manifest().unwrap();
         let tag = crate::download::ARNOLD_RELEASE_TAG;
-        assert_eq!(tag, "mods-2026.11.5");
+        assert_eq!(tag, "mods-2026.11.6");
         let prefix = format!(
             "https://github.com/{}/{}/releases/download/{tag}/",
             crate::download::RELEASE_OWNER,
@@ -1042,6 +1042,14 @@ mod tests {
             }
         }
         assert_eq!(github_files, 3);
+        assert_eq!(
+            manifest.loader.url,
+            format!("{prefix}fabric-loader-0.20.1-26.3.json")
+        );
+        assert_eq!(
+            manifest.loader.sha512,
+            "babd24cc307a2654b95026e3a82d83e60028d9dfc2974531b45f51498352372637091ee062d7d7b29580a7c2ed8f7bccbaf69acd20d061422ed4d9c7c06436a1"
+        );
     }
 
     #[test]
