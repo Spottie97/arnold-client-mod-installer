@@ -9,7 +9,7 @@ pub const RELEASE_REPO: &str = "arnold-client-mod-installer";
 pub const MODRINTH_HOST: &str = "cdn.modrinth.com";
 pub const GITHUB_HOST: &str = "github.com";
 pub const FABRIC_META_HOST: &str = "meta.fabricmc.net";
-pub const ARNOLD_RELEASE_TAG: &str = "mods-2026.11.5";
+pub const ARNOLD_RELEASE_TAG: &str = "mods-2026.11.6";
 /// Official Architect download hosts. The short link on app. redirects to /assets/downloads/.
 pub const ARCHITECT_APP_HOST: &str = "app.thearchitectmod.com";
 pub const ARCHITECT_SITE_HOST: &str = "thearchitectmod.com";
@@ -225,6 +225,36 @@ mod tests {
             .unwrap(),
             AllowedSource::Architect
         );
+    }
+
+    #[test]
+    fn loader_may_use_this_repos_github_release_and_its_asset_hosts() {
+        let url = format!(
+            "https://github.com/{RELEASE_OWNER}/{RELEASE_REPO}/releases/download/{ARNOLD_RELEASE_TAG}/fabric-loader-0.20.1-26.3.json"
+        );
+        assert_eq!(
+            classify_loader_url(&url).unwrap(),
+            AllowedSource::GitHubReleases
+        );
+        // meta.fabricmc.net remains allowed for the loader (not as a generic source).
+        assert_eq!(
+            classify_loader_url(
+                "https://meta.fabricmc.net/v2/versions/loader/26.3/0.20.1/profile/json"
+            )
+            .unwrap(),
+            AllowedSource::FabricMeta
+        );
+        assert!(is_allowed_redirect(
+            &url,
+            "https://release-assets.githubusercontent.com/github-production-release-asset/1"
+        )
+        .is_ok());
+        assert!(is_allowed_redirect(
+            &url,
+            "https://objects.githubusercontent.com/github-production-release-asset/1"
+        )
+        .is_ok());
+        assert!(is_allowed_redirect(&url, "https://evil.com/a").is_err());
     }
 
     #[test]
