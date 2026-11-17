@@ -9,7 +9,7 @@ pub const RELEASE_REPO: &str = "arnold-client-mod-installer";
 pub const MODRINTH_HOST: &str = "cdn.modrinth.com";
 pub const GITHUB_HOST: &str = "github.com";
 pub const FABRIC_META_HOST: &str = "meta.fabricmc.net";
-pub const ARNOLD_RELEASE_TAG: &str = "mods-2026.11.6";
+pub const ARNOLD_RELEASE_TAG: &str = "mods-2026.11.7";
 /// Official Architect download hosts. The short link on app. redirects to /assets/downloads/.
 pub const ARCHITECT_APP_HOST: &str = "app.thearchitectmod.com";
 pub const ARCHITECT_SITE_HOST: &str = "thearchitectmod.com";

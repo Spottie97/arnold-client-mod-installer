@@ -864,7 +864,7 @@ mod tests {
     fn bundled_fixture_verifies_with_embedded_test_key() {
         let manifest = load_bundled_manifest_with_key(TEST_MANIFEST_PUBLIC_KEY_HEX).unwrap();
         assert_eq!(manifest.schema, 3);
-        assert_eq!(manifest.manifest_version, "2026.11.6");
+        assert_eq!(manifest.manifest_version, "2026.11.7");
         assert_eq!(manifest.minecraft, "26.3");
         assert_eq!(
             manifest.current_server_shipwright.as_deref(),
@@ -1020,7 +1020,7 @@ mod tests {
     fn github_release_files_use_the_tag_publish_checks() {
         let manifest = load_fixture_manifest().unwrap();
         let tag = crate::download::ARNOLD_RELEASE_TAG;
-        assert_eq!(tag, "mods-2026.11.6");
+        assert_eq!(tag, "mods-2026.11.7");
         let prefix = format!(
             "https://github.com/{}/{}/releases/download/{tag}/",
             crate::download::RELEASE_OWNER,
@@ -1041,7 +1041,7 @@ mod tests {
                 );
             }
         }
-        assert_eq!(github_files, 3);
+        assert_eq!(github_files, 4);
         assert_eq!(
             manifest.loader.url,
             format!("{prefix}fabric-loader-0.20.1-26.3.json")
@@ -1050,6 +1050,78 @@ mod tests {
             manifest.loader.sha512,
             "babd24cc307a2654b95026e3a82d83e60028d9dfc2974531b45f51498352372637091ee062d7d7b29580a7c2ed8f7bccbaf69acd20d061422ed4d9c7c06436a1"
         );
+    }
+
+    #[test]
+    fn diet_plus_is_in_every_kit_and_appleskin_in_full_and_recommended() {
+        let manifest = load_fixture_manifest().unwrap();
+        let by_id = |id: &str| {
+            manifest
+                .components
+                .iter()
+                .find(|c| c.id == id)
+                .unwrap_or_else(|| panic!("missing {id}"))
+        };
+
+        // Diet+ registers a synced attribute, so once the server runs it every
+        // client needs it. Keep it in every kit and locked in Custom.
+        let diet = by_id("dietplus");
+        assert_eq!(diet.version, "2.2.0");
+        assert_eq!(diet.group, ComponentGroup::Arnold);
+        assert!(diet.required_in_all_kits);
+        assert_eq!(diet.requires, vec!["base".to_string()]);
+        assert_eq!(diet.license.as_deref(), Some("LGPL-3.0-or-later"));
+        let diet_file = file_of(&manifest, "dietplus", "dietplus-fabric-2.2.0+26.3.jar");
+        assert_eq!(
+            diet_file.url,
+            crate::download::arnold_release_asset_url("dietplus-fabric-2.2.0+26.3.jar")
+        );
+        assert_eq!(
+            diet_file.sha512,
+            "605ceff04a93b8a243c351d0ff8f27e58e2088b24dfc95f6e07564a4e7dda941c6e9799fc453576d1d855679bb39c38c8ab198e5c04d18661f1ec4f08a8126c9"
+        );
+        assert_eq!(diet_file.size, 873_679);
+        assert_eq!(diet_file.match_glob, "dietplus-fabric-*.jar");
+
+        let apple = by_id("appleskin");
+        assert_eq!(apple.version, "3.0.10");
+        assert_eq!(apple.group, ComponentGroup::Arnold);
+        assert!(!apple.required_in_all_kits);
+        assert_eq!(apple.license.as_deref(), Some("Unlicense"));
+        let apple_file = file_of(&manifest, "appleskin", "appleskin-fabric-mc26.3-3.0.10.jar");
+        assert_eq!(
+            apple_file.url,
+            "https://cdn.modrinth.com/data/EsAfCjCV/versions/PHjDtQay/appleskin-fabric-mc26.3-3.0.10.jar"
+        );
+        assert_eq!(
+            apple_file.sha512,
+            "17d257af419b7530aa8617c2e8c0e4bbfabcf888f26655790e0188e7957e0bcd931f85f9a4c69fd27e889dee5082cf7b2b8741a14a6ed4425e9ef4bfe13a8b8c"
+        );
+        assert_eq!(apple_file.size, 180_194);
+        assert_eq!(apple_file.match_glob, "appleskin-*.jar");
+
+        for kit in ["basic", "full", "recommended"] {
+            assert!(
+                manifest.kits[kit]
+                    .components
+                    .iter()
+                    .any(|id| id == "dietplus"),
+                "{kit} missing dietplus"
+            );
+        }
+        for kit in ["full", "recommended"] {
+            assert!(
+                manifest.kits[kit]
+                    .components
+                    .iter()
+                    .any(|id| id == "appleskin"),
+                "{kit} missing appleskin"
+            );
+        }
+        assert!(!manifest.kits["basic"]
+            .components
+            .iter()
+            .any(|id| id == "appleskin"));
     }
 
     #[test]
