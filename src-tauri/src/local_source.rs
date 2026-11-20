@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use url::Url;
 
+use crate::detect::{current_os, HostOs};
 use crate::errors::AppError;
 use crate::fetch::{read_body, FetchKind, Fetcher, MAX_BODY_BYTES};
 use crate::manifest::{decode_signature, parse_and_verify, Manifest, ManifestLoad};
@@ -77,6 +78,11 @@ pub fn resolve_local_source(
 }
 
 pub fn search_roots_for_exe(exe: &Path) -> Vec<PathBuf> {
+    search_roots_for_exe_on(exe, current_os())
+}
+
+/// Exe directory, its parent, and on macOS the folder beside a `.app` bundle.
+pub fn search_roots_for_exe_on(exe: &Path, os: HostOs) -> Vec<PathBuf> {
     let mut roots = Vec::new();
     if let Some(dir) = exe.parent() {
         roots.push(dir.to_path_buf());
@@ -85,14 +91,16 @@ pub fn search_roots_for_exe(exe: &Path) -> Vec<PathBuf> {
         }
     }
     // macOS: <X>/Foo.app/Contents/MacOS/exe -> also search <X>.
-    if let Some(app) = exe.ancestors().find(|p| {
-        p.extension()
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("app"))
-    }) {
-        if let Some(beside) = app.parent() {
-            let beside = beside.to_path_buf();
-            if !roots.contains(&beside) {
-                roots.push(beside);
+    if os == HostOs::Macos {
+        if let Some(app) = exe.ancestors().find(|p| {
+            p.extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("app"))
+        }) {
+            if let Some(beside) = app.parent() {
+                let beside = beside.to_path_buf();
+                if !roots.contains(&beside) {
+                    roots.push(beside);
+                }
             }
         }
     }
@@ -599,7 +607,7 @@ mod tests {
     fn search_roots_for_exe_includes_folder_beside_mac_app() {
         let exe =
             Path::new("/Users/sam/Test/Arnold Client Mods.app/Contents/MacOS/arnold-client-mods");
-        let roots = search_roots_for_exe(exe);
+        let roots = search_roots_for_exe_on(exe, HostOs::Macos);
         assert!(
             roots
                 .iter()
@@ -607,8 +615,21 @@ mod tests {
             "{roots:?}"
         );
 
-        let windows = search_roots_for_exe(Path::new("C:/t/arnold-client-mods.exe"));
+        let windows =
+            search_roots_for_exe_on(Path::new("C:/t/arnold-client-mods.exe"), HostOs::Windows);
         assert_eq!(windows, vec![PathBuf::from("C:/t"), PathBuf::from("C:/")]);
+
+        let windows_app = search_roots_for_exe_on(
+            Path::new("C:/Apps/Tools.app/bin/arnold-client-mods.exe"),
+            HostOs::Windows,
+        );
+        assert_eq!(
+            windows_app,
+            vec![
+                PathBuf::from("C:/Apps/Tools.app/bin"),
+                PathBuf::from("C:/Apps/Tools.app"),
+            ]
+        );
 
         let tmp = tempdir().unwrap();
         let root = tmp.path().join("X");
@@ -617,7 +638,7 @@ mod tests {
         let exe = macos.join("arnold-client-mods");
         fs::write(&exe, b"").unwrap();
         touch_manifest(&root.join("mods-2026.11.7"));
-        let found = detect_local_source(&search_roots_for_exe(&exe)).unwrap();
+        let found = detect_local_source(&search_roots_for_exe_on(&exe, HostOs::Macos)).unwrap();
         assert!(found.ends_with("mods-2026.11.7"), "{}", found.display());
     }
 
