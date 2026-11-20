@@ -2,9 +2,10 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::backup::{
     create_snapshot, list_snapshots as list_snapshots_on_disk, rollback as rollback_on_disk,
@@ -27,6 +28,7 @@ use crate::manifest::{
 };
 use crate::plan::{build_plan, InstallPlan, Selection};
 use crate::prefs::{load_prefs, save_prefs, Prefs};
+use crate::progress::{ProgressThrottle, PROGRESS_MIN_GAP};
 use crate::quality::{apply_quality_change, QualityLevel};
 use crate::scan::{probe_hardware, recommend, Recommendation};
 use crate::state::{load_state, InstalledState};
@@ -35,6 +37,9 @@ use crate::updater::{check_update_sync, UpdateStatus};
 pub struct AppState {
     pub game_dir: Mutex<Option<PathBuf>>,
     pub cancel_flag: Mutex<Arc<AtomicBool>>,
+    /// True while `install` or `repair` is on the worker. A second call is rejected
+    /// so it cannot replace the running job's cancel flag.
+    pub install_running: AtomicBool,
     pub manifest: Mutex<Option<ManifestLoad>>,
     pub local_source: Mutex<Option<PathBuf>>,
 }
@@ -55,6 +60,7 @@ impl AppState {
         Self {
             game_dir: Mutex::new(prefs.last_game_dir),
             cancel_flag: Mutex::new(Arc::new(AtomicBool::new(false))),
+            install_running: AtomicBool::new(false),
             manifest: Mutex::new(None),
             local_source: Mutex::new(local_source),
         }
@@ -188,38 +194,107 @@ pub fn plan(sel: Selection, state: State<AppState>) -> Result<InstallPlan, Error
     .map_err(|e| e.to_payload())
 }
 
+fn fresh_cancel_flag(state: &AppState) -> Arc<AtomicBool> {
+    let next = Arc::new(AtomicBool::new(false));
+    if let Ok(mut guard) = state.cancel_flag.lock() {
+        *guard = next.clone();
+    }
+    next
+}
+
+struct InstallRunGuard<'a> {
+    flag: &'a AtomicBool,
+}
+
+impl Drop for InstallRunGuard<'_> {
+    fn drop(&mut self) {
+        self.flag.store(false, Ordering::SeqCst);
+    }
+}
+
+fn begin_install(state: &AppState) -> Result<InstallRunGuard<'_>, AppError> {
+    state
+        .install_running
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .map_err(|_| AppError::State("an install is already running".into()))?;
+    Ok(InstallRunGuard {
+        flag: &state.install_running,
+    })
+}
+
+struct PreparedInstall<'a> {
+    game: PathBuf,
+    loaded: ManifestLoad,
+    flag: Arc<AtomicBool>,
+    fetcher: LocalAwareFetcher<UreqFetcher>,
+    _running: InstallRunGuard<'a>,
+}
+
+fn prepare_install(state: &AppState) -> Result<PreparedInstall<'_>, AppError> {
+    // Take the running flag before replacing the cancel flag, so a second
+    // install or repair cannot steal cancellation from the job in progress.
+    let running = begin_install(state)?;
+    let game = game_dir_of(state)?;
+    let loaded = cached_or_load(state)?;
+    let flag = fresh_cancel_flag(state);
+    require_local_folder(state)?;
+    Ok(PreparedInstall {
+        game,
+        loaded,
+        flag,
+        fetcher: make_fetcher(state),
+        _running: running,
+    })
+}
+
+fn progress_sink(app: AppHandle) -> impl Fn(ProgressEvent) {
+    let throttle = Mutex::new(ProgressThrottle::new(PROGRESS_MIN_GAP));
+    move |event| {
+        let send = throttle
+            .lock()
+            .map(|mut gate| gate.should_emit(&event, Instant::now()))
+            .unwrap_or(true);
+        if send {
+            let _ = app.emit("install://progress", event);
+        }
+    }
+}
+
+async fn spawn_install_worker<F>(label: &'static str, work: F) -> Result<String, ErrorPayload>
+where
+    F: FnOnce() -> Result<String, ErrorPayload> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(work)
+        .await
+        .map_err(|err| AppError::Io(format!("{label} worker stopped: {err}")).to_payload())?
+}
+
 #[tauri::command]
-pub fn install(
+pub async fn install(
     app: AppHandle,
     plan: InstallPlan,
     replace_collisions: Option<bool>,
-    state: State<AppState>,
 ) -> Result<String, ErrorPayload> {
-    let game = game_dir_of(&state).map_err(|e| e.to_payload())?;
-    let loaded = cached_or_load(&state).map_err(|e| e.to_payload())?;
-    let flag = {
-        let next = Arc::new(AtomicBool::new(false));
-        if let Ok(mut guard) = state.cancel_flag.lock() {
-            *guard = next.clone();
-        }
-        next
-    };
-    let ram = probe_hardware().ram_gb;
+    let worker = app.clone();
     let replace = replace_collisions.unwrap_or(false);
-    require_local_folder(&state).map_err(|e| e.to_payload())?;
-    run_install(
-        &game,
-        &plan,
-        &loaded.manifest,
-        &make_fetcher(&state),
-        flag.as_ref(),
-        replace,
-        ram,
-        &|event: ProgressEvent| {
-            let _ = app.emit("install://progress", event);
-        },
-    )
-    .map_err(|e| e.to_payload())
+    spawn_install_worker("install", move || {
+        let state = worker.state::<AppState>();
+        let prepared = prepare_install(&state).map_err(|e| e.to_payload())?;
+        let ram = probe_hardware().ram_gb;
+        let sink = progress_sink(worker.clone());
+        run_install(
+            &prepared.game,
+            &plan,
+            &prepared.loaded.manifest,
+            &prepared.fetcher,
+            prepared.flag.as_ref(),
+            replace,
+            ram,
+            &sink,
+        )
+        .map_err(|e| e.to_payload())
+    })
+    .await
 }
 
 #[tauri::command]
@@ -231,28 +306,24 @@ pub fn cancel(state: State<AppState>) -> Result<(), ErrorPayload> {
 }
 
 #[tauri::command]
-pub fn repair(app: AppHandle, state: State<AppState>) -> Result<String, ErrorPayload> {
-    let game = game_dir_of(&state).map_err(|e| e.to_payload())?;
-    let loaded = cached_or_load(&state).map_err(|e| e.to_payload())?;
-    let flag = {
-        let next = Arc::new(AtomicBool::new(false));
-        if let Ok(mut guard) = state.cancel_flag.lock() {
-            *guard = next.clone();
-        }
-        next
-    };
-    require_local_folder(&state).map_err(|e| e.to_payload())?;
-    repair_tracked(
-        &game,
-        &loaded.manifest,
-        &make_fetcher(&state),
-        flag.as_ref(),
-        probe_hardware().ram_gb,
-        &|event: ProgressEvent| {
-            let _ = app.emit("install://progress", event);
-        },
-    )
-    .map_err(|e| e.to_payload())
+pub async fn repair(app: AppHandle) -> Result<String, ErrorPayload> {
+    let worker = app.clone();
+    spawn_install_worker("repair", move || {
+        let state = worker.state::<AppState>();
+        let prepared = prepare_install(&state).map_err(|e| e.to_payload())?;
+        let ram = probe_hardware().ram_gb;
+        let sink = progress_sink(worker.clone());
+        repair_tracked(
+            &prepared.game,
+            &prepared.loaded.manifest,
+            &prepared.fetcher,
+            prepared.flag.as_ref(),
+            ram,
+            &sink,
+        )
+        .map_err(|e| e.to_payload())
+    })
+    .await
 }
 
 #[tauri::command]

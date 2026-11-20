@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use url::Url;
 
 use crate::errors::AppError;
-use crate::fetch::{FetchKind, Fetcher};
+use crate::fetch::{read_body, FetchKind, Fetcher, MAX_BODY_BYTES};
 use crate::manifest::{decode_signature, parse_and_verify, Manifest, ManifestLoad};
 
 /// Shown in every local-source test build.
@@ -185,8 +185,7 @@ pub fn is_file_url(raw: &str) -> bool {
     raw.starts_with("file:")
 }
 
-/// Read a `file://` URL only when the canonical path stays inside `root`.
-pub fn read_local_file(url: &str, root: &Path) -> Result<Vec<u8>, AppError> {
+fn resolve_local_path(url: &str, root: &Path) -> Result<PathBuf, AppError> {
     let parsed = Url::parse(url).map_err(|_| AppError::UrlNotAllowed {
         url: url.to_string(),
     })?;
@@ -209,6 +208,12 @@ pub fn read_local_file(url: &str, root: &Path) -> Result<Vec<u8>, AppError> {
             url: url.to_string(),
         });
     }
+    Ok(canon)
+}
+
+/// Read a `file://` URL only when the canonical path stays inside `root`.
+pub fn read_local_file(url: &str, root: &Path) -> Result<Vec<u8>, AppError> {
+    let canon = resolve_local_path(url, root)?;
     Ok(fs::read(canon)?)
 }
 
@@ -285,17 +290,35 @@ impl<F> LocalAwareFetcher<F> {
     pub fn new(inner: F, root: Option<PathBuf>) -> Self {
         Self { inner, root }
     }
+
+    fn root_for(&self, url: &str) -> Result<&Path, AppError> {
+        self.root.as_deref().ok_or_else(|| AppError::UrlNotAllowed {
+            url: url.to_string(),
+        })
+    }
 }
 
 impl<F: Fetcher> Fetcher for LocalAwareFetcher<F> {
     fn fetch_kind(&self, url: &str, kind: FetchKind) -> Result<Vec<u8>, AppError> {
         if is_file_url(url) {
-            let root = self.root.as_ref().ok_or_else(|| AppError::UrlNotAllowed {
-                url: url.to_string(),
-            })?;
-            return read_local_file(url, root);
+            return read_local_file(url, self.root_for(url)?);
         }
         self.inner.fetch_kind(url, kind)
+    }
+
+    fn fetch_with_progress(
+        &self,
+        url: &str,
+        kind: FetchKind,
+        on_bytes: &mut dyn FnMut(u64, Option<u64>) -> bool,
+    ) -> Result<Vec<u8>, AppError> {
+        if is_file_url(url) {
+            let path = resolve_local_path(url, self.root_for(url)?)?;
+            let file = fs::File::open(&path)?;
+            let total = file.metadata()?.len();
+            return read_body(file, MAX_BODY_BYTES, Some(total), on_bytes);
+        }
+        self.inner.fetch_with_progress(url, kind, on_bytes)
     }
 
     fn local_root(&self) -> Option<&Path> {
@@ -480,6 +503,48 @@ mod tests {
         assert_eq!(read_local_file(&ok, &root).unwrap(), b"inside");
         let escaped = path_to_file_url(&outside).unwrap();
         let err = read_local_file(&escaped, &root).unwrap_err();
+        assert_eq!(err.code(), "E-URL-NOT-ALLOWED");
+    }
+
+    #[test]
+    fn fetch_with_progress_reads_inside_root_and_rejects_outside() {
+        let tmp = tempdir().unwrap();
+        let root = tmp.path().join("root");
+        fs::create_dir_all(&root).unwrap();
+        let bytes = vec![9_u8; 200 * 1024];
+        fs::write(root.join("ok.jar"), &bytes).unwrap();
+        let outside = tmp.path().join("outside.jar");
+        fs::write(&outside, b"nope").unwrap();
+        let fetcher = LocalAwareFetcher::new(MapFetcher::default(), Some(root.clone()));
+        let mut seen = Vec::new();
+        let got = fetcher
+            .fetch_with_progress(
+                &path_to_file_url(&root.join("ok.jar")).unwrap(),
+                FetchKind::Component,
+                &mut |done, total| {
+                    seen.push((done, total));
+                    true
+                },
+            )
+            .unwrap();
+        assert_eq!(got, bytes);
+        assert!(seen.len() > 1, "expected several chunks, got {seen:?}");
+        let len = bytes.len() as u64;
+        let mut previous = 0_u64;
+        for (done, total) in &seen {
+            assert_eq!(*total, Some(len));
+            assert!(*done > previous);
+            assert!(*done <= len);
+            previous = *done;
+        }
+        assert_eq!(seen.last().unwrap().0, len);
+        let err = fetcher
+            .fetch_with_progress(
+                &path_to_file_url(&outside).unwrap(),
+                FetchKind::Component,
+                &mut |_, _| true,
+            )
+            .unwrap_err();
         assert_eq!(err.code(), "E-URL-NOT-ALLOWED");
     }
 

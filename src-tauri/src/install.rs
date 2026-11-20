@@ -13,7 +13,7 @@ use crate::detect::{game_running_with, live_minecraft_processes, vanilla_jar_exi
 use crate::download::verify_sha512;
 use crate::errors::AppError;
 use crate::fabric::install_loader;
-use crate::fetch::Fetcher;
+use crate::fetch::{FetchKind, Fetcher};
 use crate::import::{is_known_legacy_snow_jar, SNOW_LEGACY_GLOBS};
 use crate::local_source::copy_local_settings;
 use crate::log::append_install_log;
@@ -234,6 +234,57 @@ fn build_new_state(
     state
 }
 
+fn expected_download_bytes(reported: Option<u64>, planned: u64) -> Option<u64> {
+    if let Some(total) = reported.filter(|n| *n > 0) {
+        return Some(total);
+    }
+    if planned > 0 {
+        Some(planned)
+    } else {
+        None
+    }
+}
+
+/// Percent inside this file's share of the download phase (5% through 65%).
+fn download_slot_percent(index: usize, total_files: usize, done: u64, expected: Option<u64>) -> u8 {
+    let total_files = total_files.max(1);
+    let slot_lo = 5 + index * 60 / total_files;
+    let slot_hi = 5 + (index + 1) * 60 / total_files;
+    let Some(expected) = expected.filter(|n| *n > 0) else {
+        return slot_lo as u8;
+    };
+    let span = (slot_hi - slot_lo) as u128;
+    let frac = u128::from(done.min(expected)) * span / u128::from(expected);
+    (slot_lo as u128 + frac).min(slot_hi as u128) as u8
+}
+
+fn download_progress_message(name: &str, version: &str, done: u64, expected: u64) -> String {
+    let done_mb = done as f64 / (1024.0 * 1024.0);
+    let expected_mb = expected as f64 / (1024.0 * 1024.0);
+    let what = if version.is_empty() {
+        name.to_string()
+    } else {
+        format!("{name} {version}")
+    };
+    format!("Downloading {what} — {done_mb:.1}/{expected_mb:.1} MB")
+}
+
+fn running_download(
+    run_id: &str,
+    file: Option<String>,
+    percent: u8,
+    message: String,
+) -> ProgressEvent {
+    ProgressEvent {
+        run_id: run_id.to_string(),
+        step: "download".into(),
+        file,
+        status: "running".into(),
+        percent,
+        message,
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn run_install<F: Fetcher>(
     game_dir: &Path,
@@ -295,11 +346,30 @@ pub fn run_install<F: Fetcher>(
             emit_log(
                 "download",
                 &format!("Downloading {} {}", file.name, file.version),
-                (5 + (index * 60 / total)) as u8,
+                download_slot_percent(index, total, 0, None),
                 "running",
                 Some(file.file.clone()),
             );
-            let bytes = fetcher.fetch(&file.url)?;
+            // Per-chunk updates stay out of the install log. The command sink throttles them.
+            let bytes = fetcher.fetch_with_progress(
+                &file.url,
+                FetchKind::Component,
+                &mut |done, content_len| {
+                    let expected = expected_download_bytes(content_len, file.size);
+                    progress(running_download(
+                        &run_id,
+                        Some(file.file.clone()),
+                        download_slot_percent(index, total, done, expected),
+                        download_progress_message(
+                            &file.name,
+                            &file.version,
+                            done,
+                            expected.unwrap_or(0),
+                        ),
+                    ));
+                    !cancel.load(Ordering::SeqCst)
+                },
+            )?;
             verify_sha512(&bytes, &file.sha512)?;
             let staged = staging.join(dest_rel(file));
             if let Some(parent) = staged.parent() {
@@ -317,7 +387,20 @@ pub fn run_install<F: Fetcher>(
                 "running",
                 Some(loader.id.clone()),
             );
-            let bytes = fetcher.fetch_loader(&loader.url)?;
+            let bytes = fetcher.fetch_with_progress(
+                &loader.url,
+                FetchKind::Loader,
+                &mut |done, content_len| {
+                    let expected = content_len.filter(|n| *n > 0).unwrap_or(0);
+                    progress(running_download(
+                        &run_id,
+                        Some(loader.id.clone()),
+                        66,
+                        download_progress_message("Fabric loader profile", "", done, expected),
+                    ));
+                    !cancel.load(Ordering::SeqCst)
+                },
+            )?;
             verify_sha512(&bytes, &loader.sha512)?;
             fs::write(staging.join("loader.json"), bytes)?;
         }
@@ -625,7 +708,7 @@ mod tests {
     use crate::fetch::MapFetcher;
     use crate::manifest::load_fixture_manifest;
     use crate::plan::{build_plan, PlanFile, Selection};
-    use std::sync::Mutex;
+    use std::sync::{Arc, Mutex};
     use tempfile::tempdir;
 
     fn test_manifest_and_fetcher() -> (crate::manifest::Manifest, MapFetcher, Vec<u8>) {
@@ -1101,5 +1184,150 @@ mod tests {
         assert!(found
             .iter()
             .all(|item| item.rel != "mods/FreshAnimations_v1.10.4.zip"));
+    }
+
+    #[test]
+    fn download_slot_percent_interpolates_inside_the_file() {
+        assert_eq!(download_slot_percent(0, 2, 0, None), 5);
+        assert_eq!(download_slot_percent(0, 2, 0, Some(100)), 5);
+        assert_eq!(download_slot_percent(0, 2, 50, Some(100)), 20);
+        assert_eq!(download_slot_percent(0, 2, 100, Some(100)), 35);
+        assert_eq!(download_slot_percent(1, 2, 0, Some(100)), 35);
+        assert_eq!(download_slot_percent(1, 2, 100, Some(100)), 65);
+        assert_eq!(download_slot_percent(0, 2, 1_000, Some(100)), 35);
+        assert_eq!(download_slot_percent(0, 2, 50, Some(0)), 5);
+    }
+
+    struct CancelOnFetch {
+        inner: MapFetcher,
+        cancel: Arc<AtomicBool>,
+    }
+
+    impl Fetcher for CancelOnFetch {
+        fn fetch_kind(&self, url: &str, kind: FetchKind) -> Result<Vec<u8>, AppError> {
+            self.inner.fetch_kind(url, kind)
+        }
+
+        fn fetch_with_progress(
+            &self,
+            url: &str,
+            kind: FetchKind,
+            on_bytes: &mut dyn FnMut(u64, Option<u64>) -> bool,
+        ) -> Result<Vec<u8>, AppError> {
+            self.cancel.store(true, Ordering::SeqCst);
+            self.inner.fetch_with_progress(url, kind, on_bytes)
+        }
+    }
+
+    struct ChunkedFetcher {
+        inner: MapFetcher,
+    }
+
+    impl Fetcher for ChunkedFetcher {
+        fn fetch_kind(&self, url: &str, kind: FetchKind) -> Result<Vec<u8>, AppError> {
+            self.inner.fetch_kind(url, kind)
+        }
+
+        fn fetch_with_progress(
+            &self,
+            url: &str,
+            kind: FetchKind,
+            on_bytes: &mut dyn FnMut(u64, Option<u64>) -> bool,
+        ) -> Result<Vec<u8>, AppError> {
+            let bytes = self.fetch_kind(url, kind)?;
+            let len = bytes.len() as u64;
+            let steps = 4_u64;
+            for step in 1..=steps {
+                let done = (u128::from(len) * u128::from(step) / u128::from(steps)) as u64;
+                if !on_bytes(done, Some(len)) {
+                    return Err(AppError::Cancelled);
+                }
+            }
+            Ok(bytes)
+        }
+    }
+
+    #[test]
+    fn cancel_during_download_rolls_back() {
+        let tmp = tempdir().unwrap();
+        let game = tmp.path();
+        prepare_game(game);
+        let (manifest, fetcher, _) = test_manifest_and_fetcher();
+        let plan = basic_plan(&manifest);
+        let cancel = Arc::new(AtomicBool::new(false));
+        let wrapped = CancelOnFetch {
+            inner: fetcher,
+            cancel: Arc::clone(&cancel),
+        };
+        let events = Mutex::new(Vec::new());
+        let err = run_install(
+            game,
+            &plan,
+            &manifest,
+            &wrapped,
+            cancel.as_ref(),
+            false,
+            16.0,
+            &|event| events.lock().unwrap().push(event),
+        )
+        .unwrap_err();
+        assert_eq!(err.code(), "E-CANCELLED");
+        let logged = events.lock().unwrap();
+        assert_eq!(logged.last().unwrap().status, "cancelled");
+        assert!(fs::read_dir(game.join("mods")).unwrap().next().is_none());
+    }
+
+    #[test]
+    fn download_progress_events_stay_in_file_slot() {
+        let tmp = tempdir().unwrap();
+        let game = tmp.path();
+        prepare_game(game);
+        let (manifest, fetcher, _) = test_manifest_and_fetcher();
+        let mut plan = basic_plan(&manifest);
+        assert!(
+            plan.add.len() >= 2,
+            "basic kit should download at least two files"
+        );
+        plan.add.truncate(2);
+        plan.update.clear();
+        plan.loader = None;
+        let wrapped = ChunkedFetcher { inner: fetcher };
+        let events = Mutex::new(Vec::new());
+        run_install(
+            game,
+            &plan,
+            &manifest,
+            &wrapped,
+            &AtomicBool::new(false),
+            false,
+            16.0,
+            &|event| events.lock().unwrap().push(event),
+        )
+        .unwrap();
+        let logged = events.lock().unwrap();
+        let downloads: Vec<_> = logged
+            .iter()
+            .filter(|event| event.step == "download")
+            .collect();
+        assert!(!downloads.is_empty());
+        let mut last_percent = 0_u8;
+        for event in &downloads {
+            assert!(
+                (5..=65).contains(&event.percent),
+                "download percent {} is outside 5..=65 ({})",
+                event.percent,
+                event.message
+            );
+            assert!(
+                event.percent >= last_percent,
+                "download percent went from {last_percent} to {}",
+                event.percent
+            );
+            last_percent = event.percent;
+        }
+        assert_eq!(downloads.last().unwrap().percent, 65);
+        let finished = logged.last().unwrap();
+        assert_eq!(finished.status, "done");
+        assert_eq!(finished.percent, 100);
     }
 }
