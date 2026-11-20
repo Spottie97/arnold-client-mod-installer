@@ -1912,6 +1912,16 @@ mod tests {
 
     #[test]
     fn client_cosmetics_are_rehosted_pack_builds() {
+        type CosmeticPin<'a> = (
+            &'a str,
+            &'a str,
+            u64,
+            &'a str,
+            &'a str,
+            &'a str,
+            Option<&'a [&'a str]>,
+            Option<&'a str>,
+        );
         let manifest = load_fixture_manifest().unwrap();
         let by_id = |id: &str| {
             manifest
@@ -1921,16 +1931,7 @@ mod tests {
                 .unwrap_or_else(|| panic!("missing {id}"))
         };
         let prefix = "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.7/";
-        let pins: [(
-            &str,
-            &str,
-            u64,
-            &str,
-            &str,
-            &str,
-            Option<&[&str]>,
-            Option<&str>,
-        ); 4] = [
+        let pins: [CosmeticPin<'_>; 4] = [
             (
                 "unboundthirdperson",
                 "UnboundThirdPerson-mc26.3-v1.0.6-fabric-no-zoom-animation.jar",
