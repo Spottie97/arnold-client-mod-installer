@@ -30,7 +30,7 @@ jobs:
           rustup target list --installed
       - run: npm ci
       - name: Build universal app + dmg (unsigned, test only)
-        run: npx tauri build --target universal-apple-darwin --bundles app,dmg
+        run: bash tools/macos-universal-test-build.sh
       - name: Confirm the binary is universal (arm64 + x86_64)
         run: |
           set -euo pipefail
