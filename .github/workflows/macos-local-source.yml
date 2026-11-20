@@ -1,0 +1,56 @@
+# Test-only macOS build. No signing secret.
+# Uploads an artifact. Does not create a release or a tag.
+name: macOS local-source test build
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  macos-local-source:
+    name: macOS universal local-source installer
+    runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      APP: src-tauri/target/universal-apple-darwin/release/bundle/macos/Arnold Client Mods.app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Add both Apple targets to the pinned toolchain
+        # rust-toolchain.toml pins 1.90.0; running rustup from the repo root targets that toolchain.
+        # (dtolnay's `targets:` input would add them to `stable`, not 1.90.0.)
+        run: |
+          rustup show active-toolchain
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+          rustup target list --installed
+      - run: npm ci
+      - name: Build universal app + dmg (unsigned, local-source, test only)
+        run: npx tauri build --target universal-apple-darwin --features local-source --bundles app,dmg
+      - name: Confirm the binary is universal (arm64 + x86_64)
+        run: |
+          set -euo pipefail
+          BIN="$APP/Contents/MacOS/arnold-client-mods"
+          test -x "$BIN"
+          archs=$(lipo -archs "$BIN"); echo "archs: $archs"; file "$BIN"
+          [[ " $archs " == *" arm64 "* && " $archs " == *" x86_64 "* ]] || { echo "not universal"; exit 1; }
+      - name: Report dmg size against the 10 MB release gate
+        run: |
+          set -euo pipefail
+          f=$(ls src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg)
+          size=$(wc -c < "$f"); echo "$f $size bytes"
+          [ "$size" -le 10485760 ] || { echo "FAIL: universal dmg over 10 MB"; exit 1; }
+      - name: Zip the .app (keeps exec bits and bundle symlinks)
+        # upload-artifact drops POSIX permissions, so never upload the raw .app directory.
+        run: |
+          mkdir -p out
+          ditto -c -k --sequesterRsrc --keepParent "$APP" out/Arnold-Client-Mods-macos-universal.app.zip
+          cp src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg out/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arnold-client-mods-macos-universal-local-source
+          if-no-files-found: error
+          path: out/*
