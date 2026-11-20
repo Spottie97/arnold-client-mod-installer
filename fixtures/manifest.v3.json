@@ -1,7 +1,7 @@
 {
   "schema": 3,
   "manifestVersion": "2026.11.7",
-  "minAppVersion": "3.0.0",
+  "minAppVersion": "3.2.0",
   "minecraft": "26.3",
   "currentServerShipwright": "0.11.2",
   "loader": {
@@ -2549,18 +2549,21 @@
       "group": "shaders",
       "kind": "download",
       "name": "Unbound Third Person",
-      "version": "1.0.6",
-      "description": "Client only. Free third-person camera. Not needed to join.",
+      "version": "1.0.6-no-zoom-animation",
+      "description": "Client only. Free third-person camera, Better Adventures+ build without the zoom animation. Not needed to join.",
       "license": "MIT",
+      "knownSha512": [
+        "43d4c15445b26decb24a350881545c6c578efaf402828c745bc5e0c179d775f14ae68498a1cda083e8b630a456f8922205a116bc5131bb3291e23509d2987a03"
+      ],
       "files": [
         {
-          "file": "UnboundThirdPerson-mc26.3-v1.0.6-fabric.jar",
+          "file": "UnboundThirdPerson-mc26.3-v1.0.6-fabric-no-zoom-animation.jar",
           "dest": "mods",
           "match": "UnboundThirdPerson-*.jar",
-          "url": "https://cdn.modrinth.com/data/PdTZt0rA/versions/kfgiQpXv/UnboundThirdPerson-mc26.3-v1.0.6-fabric.jar",
-          "sha512": "43d4c15445b26decb24a350881545c6c578efaf402828c745bc5e0c179d775f14ae68498a1cda083e8b630a456f8922205a116bc5131bb3291e23509d2987a03",
-          "size": 423139,
-          "sha1": "603a64e8884a1cd53a406a46cc0d5621ad7e590a"
+          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.7/UnboundThirdPerson-mc26.3-v1.0.6-fabric-no-zoom-animation.jar",
+          "sha512": "d804757fbf4b934109c19556f0d7959a5005f19d4e62993d2213caa54e9cb3cc6a870e0430c44a3481ff7ae58be67bd9a95cc620c58598ae3c9a603013410d15",
+          "size": 422446,
+          "sha1": "8d3123a17ac6f2358640abd1a65f6a1e4ba9046d"
         }
       ]
     },
@@ -2572,18 +2575,21 @@
         "base"
       ],
       "name": "Plane Advancements",
-      "version": "1.6",
-      "description": "Client only. Advancements laid out on a flat plane. Not needed to join.",
+      "version": "1.6-no-toolbar",
+      "description": "Client only. Advancements laid out on a flat plane, Better Adventures+ build without the toolbar. Not needed to join.",
       "license": "LGPL-3.0-only",
+      "knownSha512": [
+        "d6ab8cc78d1b3ada3c4fd647823026ce5b435964c5bcbcc67ac857d85b57e7cf124255d82edefee62161f854b3ca3761076bd55ccacc34c537c255e2cbdad966"
+      ],
       "files": [
         {
-          "file": "plane_advancements-1.6-mc26.3.jar",
+          "file": "plane_advancements-1.6-mc26.3-no-toolbar.jar",
           "dest": "mods",
           "match": "plane_advancements-*.jar",
-          "url": "https://cdn.modrinth.com/data/V1smGrYI/versions/yAejuECi/plane_advancements-1.6-mc26.3.jar",
-          "sha512": "d6ab8cc78d1b3ada3c4fd647823026ce5b435964c5bcbcc67ac857d85b57e7cf124255d82edefee62161f854b3ca3761076bd55ccacc34c537c255e2cbdad966",
-          "size": 405738,
-          "sha1": "1955e4636ca9a774aca1fb041a62ac8890eb0e2d"
+          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.7/plane_advancements-1.6-mc26.3-no-toolbar.jar",
+          "sha512": "91363f134aa0a0ea4f2780a4bf5f1cf82ecca9c06fb8f51699b253c87d7b63fd3d012918f78f1622b365537c2b9181292f3f54ef66a32e5b104fe159b2f4c178",
+          "size": 404997,
+          "sha1": "a9d206ff3174597a4b6600bc49e742859219cd88"
         }
       ]
     },
@@ -2595,18 +2601,174 @@
         "vanillaconfig"
       ],
       "name": "Audio Hotkeys",
-      "version": "1.0.14",
-      "description": "Client only. Hotkeys for sound volume. Not needed to join.",
+      "version": "1.0.14-no-overlay",
+      "description": "Client only. Hotkeys for sound volume, Better Adventures+ build without the on-screen overlay. Not needed to join.",
       "license": "GPL-3.0-only",
+      "knownSha512": [
+        "d68aa7ce486fa50db761336fed5882a0ebbb7a79017ed131cfb62275eecc5f5f054a8ff3080a9218c07f7ad299005588805f699287b1fe6c8d14af1049a858a6"
+      ],
       "files": [
         {
-          "file": "audio_hotkeys-1.0.14+26.3.jar",
+          "file": "audio_hotkeys-1.0.14+26.3-no-overlay.jar",
           "dest": "mods",
           "match": "audio_hotkeys-*.jar",
-          "url": "https://cdn.modrinth.com/data/oAKswYFJ/versions/L9l8zP9q/audio_hotkeys-1.0.14%2B26.3.jar",
-          "sha512": "d68aa7ce486fa50db761336fed5882a0ebbb7a79017ed131cfb62275eecc5f5f054a8ff3080a9218c07f7ad299005588805f699287b1fe6c8d14af1049a858a6",
-          "size": 52487,
-          "sha1": "3aa93bf17b3f0564be4c1e7cafa095542a175b3c"
+          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.7/audio_hotkeys-1.0.14+26.3-no-overlay.jar",
+          "sha512": "3a8e391f62e0a0ee91b88f373729462482d82ed17f75f354240de4ec7bade924ccd90606c2b64afa8b0044c35bb1ba8a7ff6339aebf40c2f41600ce7fa10defb",
+          "size": 51677,
+          "sha1": "8e81b2d01ca9a66913f8da1a9c7e45eed8e7d7ec"
+        }
+      ]
+    },
+    {
+      "id": "weatherglass",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "name": "Weather Glass",
+      "version": "0.6.0",
+      "description": "Client only. The weather shows on your windows: raindrops running down the glass when it rains, frost and snowflakes when it snows, sand after the storms of dry biomes. Glass blocks, panes, stained and tinted glass. Weather Glass by DuffoPuffo (PolyForm Shield 1.0.0). Not needed to join.",
+      "license": "PolyForm-Shield-1.0.0",
+      "files": [
+        {
+          "file": "weatherglass-0.6.0-26.3-fabric.jar",
+          "dest": "mods",
+          "match": "weatherglass-*.jar",
+          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.7/weatherglass-0.6.0-26.3-fabric.jar",
+          "sha512": "98df091fc6082772f7025c0117faa629abef9c3bc0989a5f8a9eaf83972bd5cf0b4d5dc058bfdba2bf372e60f2af79711eb55ace1e3afb8ff031b367f4cff4c7",
+          "size": 622512,
+          "sha1": "5ebc52e155265980d507d587b4475dfed49c2713"
+        }
+      ]
+    },
+    {
+      "id": "freshanimations",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "emf",
+        "etf"
+      ],
+      "name": "Fresh Animations",
+      "version": "1.10.5",
+      "description": "Client only. Resource pack: livelier mob animations (uses Entity Model Features). Turn it on under Options → Resource Packs. Not needed to join.",
+      "license": "LicenseRef-See-Terms-of-Use-in-Description",
+      "files": [
+        {
+          "file": "FreshAnimations_v1.10.5.zip",
+          "dest": "resourcepacks",
+          "match": "FreshAnimations_v*.zip",
+          "url": "https://cdn.modrinth.com/data/50dA9Sha/versions/RGIzA5em/FreshAnimations_v1.10.5.zip",
+          "sha512": "f4f2a1d294c2e0afe245b6987fea4a84ff120f131a7f2cfb16779e9cc5d0a00b3d49bf1585ac827d6690c36421e8dda203b0c6e642bb0c6aa067c5921dd8dc30",
+          "size": 645816,
+          "sha1": "0d069c5583d1dd4591e55ec5ff6dd0905f3f8615"
+        }
+      ]
+    },
+    {
+      "id": "mfrp",
+      "group": "shaders",
+      "kind": "download",
+      "name": "Matcha Flavoured resource pack",
+      "version": "1.12.7-alpha",
+      "description": "Client only. Better Adventures+ Matcha Flavoured resource pack. Turn it on under Options → Resource Packs. Not needed to join.",
+      "license": "CC-BY-NC-SA-4.0",
+      "files": [
+        {
+          "file": "MFRP_1_12_7_26_3.zip",
+          "dest": "resourcepacks",
+          "match": "MFRP_*.zip",
+          "url": "https://cdn.modrinth.com/data/QI0EmgZ1/versions/leNTHiGm/MFRP_1_12_7_26_3.zip",
+          "sha512": "d2d5a0fffa845298285fcc4f5142496bcf2924ed29919be9a9010043a0d03814fa9af21dcf14f641590c0d81b93b4cd91572a9de9343a5e07dd830091645c18d",
+          "size": 19729113,
+          "sha1": "6982ab0a3659e27759d55fc389f7817ee1080f99"
+        }
+      ]
+    },
+    {
+      "id": "matchablockoverlays",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "continuity"
+      ],
+      "name": "Matcha Block Overlays",
+      "version": "2+continuity",
+      "description": "Client only. Resource pack: block edge overlays (uses Continuity). Turn it on under Options → Resource Packs. Not needed to join.",
+      "license": "CC-BY-NC-SA-4.0",
+      "files": [
+        {
+          "file": "Matcha-Block-Overlays-2+continuity.zip",
+          "dest": "resourcepacks",
+          "match": "Matcha-Block-Overlays-*.zip",
+          "url": "https://cdn.modrinth.com/data/NsganuaN/versions/IcpWfApp/Matcha%20Block%20Overlays%202%2Bcontinuity.zip",
+          "sha512": "f3a227ab60e8b1e5dc329abb52a82104441c3f899796b7e10773a23b9d88583cec2bb0a172960e949b54bd09c28d814f2ae359c4d43d944eaf77f66bf7a69ad5",
+          "size": 1227532,
+          "sha1": "11b062960ca7b5c81173b14a6b11ad87066dfb6f"
+        }
+      ]
+    },
+    {
+      "id": "bushypetals",
+      "group": "shaders",
+      "kind": "download",
+      "name": "Bushy pink petals, wildflowers & leaf litter",
+      "version": "1.0.1",
+      "description": "Client only. Resource pack: bushier pink petals, wildflowers and leaf litter. Turn it on under Options → Resource Packs. Not needed to join.",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "file": "Bushy-pink-petals-wildflowers-leaf-litter.zip",
+          "dest": "resourcepacks",
+          "match": "Bushy-pink-petals-*.zip",
+          "url": "https://cdn.modrinth.com/data/IVU3SHSl/versions/y3AuodI0/Bushy%20pink%20petals%2C%20wildflowers%20%20leaf%20litter.zip",
+          "sha512": "aee85080703b79119b79b4ddcf79d7e5eccf8bbab47c0fbe03fba918bff1fbcd89368f72de6a86714b148eae86a3b59a780a0039b5bf228e5975435d4113f7ce",
+          "size": 230208,
+          "sha1": "a287f4205901ba93ed3b847e7332431df0872367"
+        }
+      ]
+    },
+    {
+      "id": "rainbowsfoliage",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "polytone"
+      ],
+      "name": "Rainbow's Foliage: Polytone",
+      "version": "2.0",
+      "description": "Client only. Resource pack: varied foliage colours (uses Polytone). Turn it on under Options → Resource Packs. Not needed to join.",
+      "license": "LicenseRef-All-Rights-Reserved",
+      "files": [
+        {
+          "file": "rainbows-foliage-polytone-edition-v2.0.zip",
+          "dest": "resourcepacks",
+          "match": "rainbows-foliage-*.zip",
+          "url": "https://cdn.modrinth.com/data/bY2CaVIh/versions/JcLjpSJg/rainbows-foliage-polytone-edition-v2.0.zip",
+          "sha512": "823a0afb2cc074046565de404bde4bbe63a9329fae9a5f95fb80ff519e0bbea831bf228d2f2e3f6985b6feba9b5d4d3141b2b91f84baeb79d97a891a0bddea76",
+          "size": 4434050,
+          "sha1": "290ea3c92c46ef78e977ec74806ad77c93e97af1"
+        }
+      ]
+    },
+    {
+      "id": "grassrise",
+      "group": "shaders",
+      "kind": "download",
+      "name": "Grassrise",
+      "version": "1.0.3",
+      "description": "Client only. Resource pack: taller-looking grass. Turn it on under Options → Resource Packs. Not needed to join.",
+      "license": "LicenseRef-All-Rights-Reserved",
+      "files": [
+        {
+          "file": "Grassrise-1.0.3-mc26.3.zip",
+          "dest": "resourcepacks",
+          "match": "Grassrise-*.zip",
+          "url": "https://cdn.modrinth.com/data/S5FvlY0N/versions/WFG9Lpck/Grassrise-1.0.3-mc26.3.zip",
+          "sha512": "8e03a816e982adb2059a2472c81efaf8616396486d17b7c6c3df87b5eccdad7377666a85a55492cd6a8a5c3d3890ef00a2821fbec55cce4668ef798747567d82",
+          "size": 35425,
+          "sha1": "47afa7eadaf3e62bee32d5c6887acb767f42e919"
         }
       ]
     },
@@ -2824,6 +2986,13 @@
         "unboundthirdperson",
         "planeadvancements",
         "audiohotkeys",
+        "weatherglass",
+        "freshanimations",
+        "mfrp",
+        "matchablockoverlays",
+        "bushypetals",
+        "rainbowsfoliage",
+        "grassrise",
         "miniature",
         "miniaturexl"
       ],
@@ -2932,6 +3101,13 @@
         "unboundthirdperson",
         "planeadvancements",
         "audiohotkeys",
+        "weatherglass",
+        "freshanimations",
+        "mfrp",
+        "matchablockoverlays",
+        "bushypetals",
+        "rainbowsfoliage",
+        "grassrise",
         "miniature",
         "miniaturexl"
       ],

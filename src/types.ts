@@ -13,7 +13,7 @@ export type Screen =
 
 export type ComponentGroup = "base" | "shaders" | "arnold" | "ocean";
 export type ComponentKind = "base" | "download" | "pending";
-export type FileDest = "mods" | "shaderpacks";
+export type FileDest = "mods" | "shaderpacks" | "resourcepacks";
 
 export interface ComponentFile {
   file: string;

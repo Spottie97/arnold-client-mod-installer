@@ -233,14 +233,7 @@ pub fn build_plan(
                 known_sha512: component.known_sha512.clone(),
             };
             bytes += file.size;
-            let dest_rel = format!(
-                "{}/{}",
-                match file.dest {
-                    FileDest::Mods => "mods",
-                    FileDest::Shaderpacks => "shaderpacks",
-                },
-                file.file
-            );
+            let dest_rel = format!("{}/{}", file.dest.folder(), file.file);
             match state.and_then(|s| s.file_by_path(&dest_rel)) {
                 Some(existing) if existing.sha512 == file.sha512 => {}
                 Some(_) => update.push(item),
@@ -258,7 +251,7 @@ pub fn build_plan(
                     name: tracked.component_id.clone(),
                     version: String::new(),
                     file: tracked.path.clone(),
-                    dest: FileDest::Mods,
+                    dest: FileDest::from_rel_path(&tracked.path).unwrap_or(FileDest::Mods),
                     url: String::new(),
                     sha512: tracked.sha512.clone(),
                     size: 0,
@@ -641,5 +634,153 @@ mod tests {
                 "basic has {id}"
             );
         }
+    }
+
+    const PACK_IDS: [&str; 6] = [
+        "freshanimations",
+        "mfrp",
+        "matchablockoverlays",
+        "bushypetals",
+        "rainbowsfoliage",
+        "grassrise",
+    ];
+
+    const PACK_FILES: [&str; 6] = [
+        "FreshAnimations_v1.10.5.zip",
+        "MFRP_1_12_7_26_3.zip",
+        "Matcha-Block-Overlays-2+continuity.zip",
+        "Bushy-pink-petals-wildflowers-leaf-litter.zip",
+        "rainbows-foliage-polytone-edition-v2.0.zip",
+        "Grassrise-1.0.3-mc26.3.zip",
+    ];
+
+    fn kit_plan(manifest: &Manifest, kit: &str) -> InstallPlan {
+        build_plan(
+            manifest,
+            &Selection {
+                kit: kit.into(),
+                custom_components: vec![],
+                ocean: false,
+                addons: BTreeMap::new(),
+                snow_lite: None,
+                quality: None,
+            },
+            None,
+            true,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn full_kit_plans_resource_packs_under_resourcepacks() {
+        let manifest = load_fixture_manifest().unwrap();
+        let full = kit_plan(&manifest, "full");
+        for (id, filename) in PACK_IDS.iter().zip(PACK_FILES) {
+            let file = full
+                .add
+                .iter()
+                .find(|item| item.component_id == *id)
+                .unwrap_or_else(|| panic!("full missing {id}"));
+            assert_eq!(file.dest, FileDest::Resourcepacks);
+            assert_eq!(file.file, filename);
+            assert!(!file.file.contains(' '));
+        }
+        let basic = kit_plan(&manifest, "basic");
+        for id in PACK_IDS {
+            assert!(
+                !basic.components.iter().any(|item| item == id),
+                "basic has {id}"
+            );
+        }
+        let recommended = kit_plan(&manifest, "recommended");
+        for id in PACK_IDS {
+            assert!(
+                recommended.components.iter().any(|item| item == id),
+                "recommended missing {id}"
+            );
+        }
+    }
+
+    #[test]
+    fn resource_pack_state_diff_uses_the_resourcepacks_path() {
+        let manifest = load_fixture_manifest().unwrap();
+        let sha512 = manifest
+            .components
+            .iter()
+            .find(|component| component.id == "freshanimations")
+            .unwrap()
+            .files[0]
+            .sha512
+            .clone();
+        let selection = Selection {
+            kit: "full".into(),
+            custom_components: vec![],
+            ocean: false,
+            addons: BTreeMap::new(),
+            snow_lite: None,
+            quality: None,
+        };
+        let mut present = InstalledState::new("installer", "old");
+        record_file(
+            &mut present,
+            "resourcepacks/FreshAnimations_v1.10.5.zip",
+            &sha512,
+            "freshanimations",
+        );
+        let same = build_plan(&manifest, &selection, Some(&present), true).unwrap();
+        assert!(!same
+            .add
+            .iter()
+            .any(|file| file.component_id == "freshanimations"));
+        assert!(!same
+            .update
+            .iter()
+            .any(|file| file.component_id == "freshanimations"));
+
+        let mut wrong_folder = InstalledState::new("installer", "old");
+        record_file(
+            &mut wrong_folder,
+            "mods/FreshAnimations_v1.10.5.zip",
+            &sha512,
+            "freshanimations",
+        );
+        let added = build_plan(&manifest, &selection, Some(&wrong_folder), true).unwrap();
+        assert!(added
+            .add
+            .iter()
+            .any(|file| file.component_id == "freshanimations"));
+
+        let mut stale = InstalledState::new("installer", "old");
+        record_file(&mut stale, "resourcepacks/old.zip", "x", "gonepack");
+        let removed = build_plan(&manifest, &selection, Some(&stale), true).unwrap();
+        let old = removed
+            .remove
+            .iter()
+            .find(|file| file.file == "resourcepacks/old.zip")
+            .expect("old pack removed");
+        assert_eq!(old.dest, FileDest::Resourcepacks);
+    }
+
+    #[test]
+    fn custom_resource_pack_pulls_its_mod_requires() {
+        let manifest = load_fixture_manifest().unwrap();
+        let plan = build_plan(
+            &manifest,
+            &Selection {
+                kit: "custom".into(),
+                custom_components: vec!["matchablockoverlays".into(), "rainbowsfoliage".into()],
+                ocean: false,
+                addons: BTreeMap::new(),
+                snow_lite: None,
+                quality: None,
+            },
+            None,
+            true,
+        )
+        .unwrap();
+        assert!(plan.components.contains(&"continuity".into()));
+        assert!(plan.components.contains(&"polytone".into()));
+        assert!(plan.components.contains(&"matchablockoverlays".into()));
+        assert!(plan.components.contains(&"rainbowsfoliage".into()));
     }
 }

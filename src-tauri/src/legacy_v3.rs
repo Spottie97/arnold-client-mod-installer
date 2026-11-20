@@ -1,18 +1,45 @@
 //! Schema the public 3.0.x app (main@6362dfe) uses to accept a mod list.
 //!
 //! That build deserializes `group` into a four-value enum and rejects any
-//! component id that is not lowercase letters and digits. A newer group or an
-//! underscore in an id fails the whole manifest, and every installed copy
-//! falls back to its cache or the bundled fixture.
+//! component id that is not lowercase letters and digits. A newer group, a
+//! newer file `dest` (such as `resourcepacks`), or an underscore in an id
+//! fails the whole manifest, and every installed copy falls back to its cache
+//! or the bundled fixture. app-v3.1.0 has the same `FileDest` (`Mods` and
+//! `Shaderpacks` only).
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Deserialize;
 
 use crate::download::{is_allowed_loader_url, is_allowed_source_url};
-use crate::manifest::{
-    Addon, ComponentFile, ComponentKind, Kit, Loader, BUNDLED_MANIFEST_JSON, MANIFEST_SCHEMA,
-};
+use crate::manifest::{Addon, ComponentKind, Kit, Loader, BUNDLED_MANIFEST_JSON, MANIFEST_SCHEMA};
+
+/// `FileDest` from main@6362dfe (and app-v3.1.0). No `resourcepacks`.
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+enum LegacyFileDest {
+    Mods,
+    Shaderpacks,
+}
+
+/// `ComponentFile` from main@6362dfe.
+#[allow(dead_code)]
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LegacyComponentFile {
+    file: String,
+    dest: LegacyFileDest,
+    #[serde(rename = "match")]
+    match_glob: String,
+    url: String,
+    sha512: String,
+    size: u64,
+    #[serde(default)]
+    sha1: Option<String>,
+    #[serde(default)]
+    keep_existing: bool,
+}
 use crate::quality::QualityTable;
 
 /// `ComponentGroup` from main@6362dfe. No `sao` variant.
@@ -77,7 +104,7 @@ struct LegacyComponent {
     legacy_match: Vec<String>,
     #[serde(default)]
     known_sha512: Vec<String>,
-    files: Vec<ComponentFile>,
+    files: Vec<LegacyComponentFile>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -278,10 +305,62 @@ fn assert_optional_addons_absent(ids: &[String], kit: &str, ocean: bool) {
 mod tests {
     use super::*;
 
+    fn fixture_without_resourcepacks() -> String {
+        let mut value: serde_json::Value = serde_json::from_str(BUNDLED_MANIFEST_JSON).unwrap();
+        let mut drop_ids = Vec::new();
+        for component in value["components"].as_array().unwrap() {
+            let has_pack = component["files"]
+                .as_array()
+                .is_some_and(|files| files.iter().any(|file| file["dest"] == "resourcepacks"));
+            if has_pack {
+                drop_ids.push(component["id"].as_str().unwrap().to_string());
+            }
+        }
+        let drop: std::collections::BTreeSet<String> = drop_ids.into_iter().collect();
+        let kept: Vec<serde_json::Value> = value["components"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|component| !drop.contains(component["id"].as_str().unwrap()))
+            .cloned()
+            .collect();
+        value["components"] = serde_json::Value::Array(kept);
+        for component in value["components"].as_array_mut().unwrap() {
+            if let Some(requires) = component.get_mut("requires").and_then(|v| v.as_array_mut()) {
+                requires.retain(|id| !drop.contains(id.as_str().unwrap()));
+            }
+        }
+        for kit in value["kits"].as_object_mut().unwrap().values_mut() {
+            if let Some(components) = kit.get_mut("components").and_then(|v| v.as_array_mut()) {
+                components.retain(|id| !drop.contains(id.as_str().unwrap()));
+            }
+        }
+        if let Some(addons) = value.get_mut("addons").and_then(|v| v.as_object_mut()) {
+            for addon in addons.values_mut() {
+                if let Some(components) = addon.get_mut("components").and_then(|v| v.as_array_mut())
+                {
+                    components.retain(|id| !drop.contains(id.as_str().unwrap()));
+                }
+            }
+        }
+        if let Some(presets) = value
+            .get_mut("qualityPresets")
+            .and_then(|v| v.as_object_mut())
+        {
+            for row in presets.values_mut() {
+                if let Some(skip) = row.get_mut("skipComponents").and_then(|v| v.as_array_mut()) {
+                    skip.retain(|id| !drop.contains(id.as_str().unwrap()));
+                }
+            }
+        }
+        value.to_string()
+    }
+
+    /// Answers "is anything *besides* the new dest unparseable on 3.0?" It is not a claim that 3.0 reads the shipped fixture; see the next test.
     #[test]
-    fn fixture_parses_on_the_6362dfe_schema_and_leaves_architect_off() {
-        let manifest = parse_legacy(BUNDLED_MANIFEST_JSON).expect("6362dfe schema");
-        assert_eq!(manifest.min_app_version, "3.0.0");
+    fn fixture_minus_resourcepacks_parses_on_the_6362dfe_schema_and_leaves_architect_off() {
+        let manifest = parse_legacy(&fixture_without_resourcepacks()).expect("6362dfe schema");
+        assert_eq!(manifest.min_app_version, "3.2.0");
         assert_eq!(manifest.minecraft, "26.3");
         assert!(manifest.addons.contains_key("architect"));
         assert!(manifest.addons.contains_key("ocean"));
@@ -381,7 +460,8 @@ mod tests {
             message.contains("sao") || message.contains("variant"),
             "{message}"
         );
-        let mut value: serde_json::Value = serde_json::from_str(BUNDLED_MANIFEST_JSON).unwrap();
+        let mut value: serde_json::Value =
+            serde_json::from_str(&fixture_without_resourcepacks()).unwrap();
         value["components"]
             .as_array_mut()
             .unwrap()
@@ -404,5 +484,28 @@ mod tests {
             .unwrap()["group"] = serde_json::json!("base");
         let err = parse_legacy(&value.to_string()).unwrap_err();
         assert!(err.contains("sao_aincrad"), "{err}");
+    }
+
+    /// 3.0.x and app-v3.1.0 fall back to cache/bundled on this manifest; see `minAppVersion` 3.2.0.
+    #[test]
+    fn bundled_fixture_with_resourcepacks_fails_on_the_6362dfe_schema() {
+        let err = parse_legacy(BUNDLED_MANIFEST_JSON).unwrap_err();
+        assert!(
+            err.contains("resourcepacks") || err.contains("variant"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn legacy_schema_rejects_the_resourcepacks_dest() {
+        assert!(serde_json::from_str::<LegacyFileDest>("\"resourcepacks\"").is_err());
+        assert_eq!(
+            serde_json::from_str::<LegacyFileDest>("\"mods\"").unwrap(),
+            LegacyFileDest::Mods
+        );
+        assert_eq!(
+            serde_json::from_str::<LegacyFileDest>("\"shaderpacks\"").unwrap(),
+            LegacyFileDest::Shaderpacks
+        );
     }
 }

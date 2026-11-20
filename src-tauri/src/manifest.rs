@@ -235,6 +235,29 @@ pub struct ComponentFile {
 pub enum FileDest {
     Mods,
     Shaderpacks,
+    Resourcepacks,
+}
+
+impl FileDest {
+    pub const fn folder(self) -> &'static str {
+        match self {
+            FileDest::Mods => "mods",
+            FileDest::Shaderpacks => "shaderpacks",
+            FileDest::Resourcepacks => "resourcepacks",
+        }
+    }
+
+    /// Dest of a tracked relative path such as `resourcepacks/x.zip`; `None` if unknown.
+    pub fn from_rel_path(path: &str) -> Option<FileDest> {
+        let folder = path.split('/').next()?;
+        [
+            FileDest::Mods,
+            FileDest::Shaderpacks,
+            FileDest::Resourcepacks,
+        ]
+        .into_iter()
+        .find(|dest| dest.folder() == folder)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -1031,12 +1054,14 @@ mod tests {
             crate::download::RELEASE_REPO
         );
         let mut github_files = 0;
+        let mut github_ids = std::collections::BTreeSet::new();
         for component in &manifest.components {
             for file in &component.files {
                 if !file.url.starts_with("https://github.com/") {
                     continue;
                 }
                 github_files += 1;
+                github_ids.insert(component.id.clone());
                 assert_eq!(
                     file.url,
                     format!("{prefix}{}", file.file),
@@ -1045,8 +1070,25 @@ mod tests {
                 );
             }
         }
-        // deck, ships, snow, Diet+. BA+ adds none: everything new is Modrinth CDN.
-        assert_eq!(github_files, 4);
+        // deck, ships, snow, Diet+, plus the rehosted BA+ cosmetics:
+        // unboundthirdperson, planeadvancements, audiohotkeys, weatherglass.
+        assert_eq!(github_files, 8);
+        assert_eq!(
+            github_ids,
+            [
+                "deck",
+                "ships",
+                "snow",
+                "dietplus",
+                "unboundthirdperson",
+                "planeadvancements",
+                "audiohotkeys",
+                "weatherglass",
+            ]
+            .into_iter()
+            .map(str::to_string)
+            .collect()
+        );
         assert_eq!(
             manifest.loader.url,
             format!("{prefix}fabric-loader-0.20.1-26.3.json")
@@ -1818,6 +1860,18 @@ mod tests {
                 "basic has {id}"
             );
             for file in &component.files {
+                // Those three cosmetics are rehosted on the GitHub release.
+                if matches!(
+                    id,
+                    "unboundthirdperson" | "planeadvancements" | "audiohotkeys"
+                ) {
+                    assert!(
+                        file.url.starts_with("https://github.com/Spottie97/"),
+                        "{id} {}",
+                        file.url
+                    );
+                    continue;
+                }
                 assert!(
                     file.url.starts_with("https://cdn.modrinth.com/"),
                     "{id} {}",
@@ -1857,7 +1911,132 @@ mod tests {
     }
 
     #[test]
-    fn client_cosmetics_are_stock_modrinth_builds() {
+    fn client_cosmetics_are_rehosted_pack_builds() {
+        let manifest = load_fixture_manifest().unwrap();
+        let by_id = |id: &str| {
+            manifest
+                .components
+                .iter()
+                .find(|component| component.id == id)
+                .unwrap_or_else(|| panic!("missing {id}"))
+        };
+        let prefix = "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.7/";
+        let pins: [(
+            &str,
+            &str,
+            u64,
+            &str,
+            &str,
+            &str,
+            Option<&[&str]>,
+            Option<&str>,
+        ); 4] = [
+            (
+                "unboundthirdperson",
+                "UnboundThirdPerson-mc26.3-v1.0.6-fabric-no-zoom-animation.jar",
+                422_446,
+                "d804757fbf4b934109c19556f0d7959a5005f19d4e62993d2213caa54e9cb3cc6a870e0430c44a3481ff7ae58be67bd9a95cc620c58598ae3c9a603013410d15",
+                "8d3123a17ac6f2358640abd1a65f6a1e4ba9046d",
+                "MIT",
+                None,
+                Some("43d4c15445b26decb24a350881545c6c578efaf402828c745bc5e0c179d775f14ae68498a1cda083e8b630a456f8922205a116bc5131bb3291e23509d2987a03"),
+            ),
+            (
+                "planeadvancements",
+                "plane_advancements-1.6-mc26.3-no-toolbar.jar",
+                404_997,
+                "91363f134aa0a0ea4f2780a4bf5f1cf82ecca9c06fb8f51699b253c87d7b63fd3d012918f78f1622b365537c2b9181292f3f54ef66a32e5b104fe159b2f4c178",
+                "a9d206ff3174597a4b6600bc49e742859219cd88",
+                "LGPL-3.0-only",
+                Some(&["base"][..]),
+                Some("d6ab8cc78d1b3ada3c4fd647823026ce5b435964c5bcbcc67ac857d85b57e7cf124255d82edefee62161f854b3ca3761076bd55ccacc34c537c255e2cbdad966"),
+            ),
+            (
+                "audiohotkeys",
+                "audio_hotkeys-1.0.14+26.3-no-overlay.jar",
+                51_677,
+                "3a8e391f62e0a0ee91b88f373729462482d82ed17f75f354240de4ec7bade924ccd90606c2b64afa8b0044c35bb1ba8a7ff6339aebf40c2f41600ce7fa10defb",
+                "8e81b2d01ca9a66913f8da1a9c7e45eed8e7d7ec",
+                "GPL-3.0-only",
+                Some(&["vanillaconfig"][..]),
+                Some("d68aa7ce486fa50db761336fed5882a0ebbb7a79017ed131cfb62275eecc5f5f054a8ff3080a9218c07f7ad299005588805f699287b1fe6c8d14af1049a858a6"),
+            ),
+            (
+                "weatherglass",
+                "weatherglass-0.6.0-26.3-fabric.jar",
+                622_512,
+                "98df091fc6082772f7025c0117faa629abef9c3bc0989a5f8a9eaf83972bd5cf0b4d5dc058bfdba2bf372e60f2af79711eb55ace1e3afb8ff031b367f4cff4c7",
+                "5ebc52e155265980d507d587b4475dfed49c2713",
+                "PolyForm-Shield-1.0.0",
+                Some(&["base"][..]),
+                None,
+            ),
+        ];
+        for (id, filename, size, sha512, sha1, license, requires, known_stock) in pins {
+            let component = by_id(id);
+            assert_eq!(component.group, ComponentGroup::Shaders, "{id}");
+            assert_eq!(component.kind, ComponentKind::Download, "{id}");
+            assert!(!component.required_in_all_kits, "{id}");
+            assert_eq!(component.license.as_deref(), Some(license), "{id}");
+            assert_eq!(component.files.len(), 1, "{id}");
+            let file = &component.files[0];
+            assert_eq!(file.dest, FileDest::Mods, "{id}");
+            assert_eq!(file.file, filename, "{id}");
+            assert_eq!(file.url, format!("{prefix}{filename}"), "{id}");
+            assert_eq!(file.sha512, sha512, "{id}");
+            assert_eq!(file.size, size, "{id}");
+            assert_eq!(file.sha1.as_deref(), Some(sha1), "{id}");
+            assert!(!file.url.starts_with("https://cdn.modrinth.com"), "{id}");
+            match requires {
+                Some(deps) => assert_eq!(
+                    component.requires,
+                    deps.iter()
+                        .map(|dep| (*dep).to_string())
+                        .collect::<Vec<_>>(),
+                    "{id}"
+                ),
+                None => assert!(component.requires.is_empty(), "{id}"),
+            }
+            match known_stock {
+                Some(stock) => assert_eq!(component.known_sha512, vec![stock.to_string()], "{id}"),
+                None => assert!(component.known_sha512.is_empty(), "{id}"),
+            }
+            for kit in ["full", "recommended"] {
+                assert!(
+                    manifest.kits[kit].components.iter().any(|item| item == id),
+                    "{kit} missing {id}"
+                );
+            }
+            assert!(
+                !manifest.kits["basic"]
+                    .components
+                    .iter()
+                    .any(|item| item == id),
+                "basic has {id}"
+            );
+        }
+
+        let stock_names = [
+            "UnboundThirdPerson-mc26.3-v1.0.6-fabric.jar",
+            "plane_advancements-1.6-mc26.3.jar",
+            "audio_hotkeys-1.0.14+26.3.jar",
+        ];
+        for component in &manifest.components {
+            assert_ne!(component.id, "touchnmotion");
+            for file in &component.files {
+                assert!(!file.file.starts_with("touch_n_motion"), "{}", file.file);
+                assert!(
+                    !file.file.starts_with("iris-fabric-1.11.6"),
+                    "{}",
+                    file.file
+                );
+                assert!(!stock_names.contains(&file.file.as_str()), "{}", file.file);
+            }
+        }
+    }
+
+    #[test]
+    fn ba_plus_resource_packs_install_from_modrinth() {
         let manifest = load_fixture_manifest().unwrap();
         let by_id = |id: &str| {
             manifest
@@ -1868,58 +2047,167 @@ mod tests {
         };
         let pins = [
             (
-                "unboundthirdperson",
-                "https://cdn.modrinth.com/data/PdTZt0rA/versions/kfgiQpXv/UnboundThirdPerson-mc26.3-v1.0.6-fabric.jar",
-                423_139_u64,
-                "43d4c15445b26decb24a350881545c6c578efaf402828c745bc5e0c179d775f14ae68498a1cda083e8b630a456f8922205a116bc5131bb3291e23509d2987a03",
-                "MIT",
-                None,
+                "freshanimations",
+                "Fresh Animations",
+                "1.10.5",
+                "LicenseRef-See-Terms-of-Use-in-Description",
+                &["emf", "etf"][..],
+                "FreshAnimations_v1.10.5.zip",
+                "FreshAnimations_v*.zip",
+                "https://cdn.modrinth.com/data/50dA9Sha/versions/RGIzA5em/FreshAnimations_v1.10.5.zip",
+                "f4f2a1d294c2e0afe245b6987fea4a84ff120f131a7f2cfb16779e9cc5d0a00b3d49bf1585ac827d6690c36421e8dda203b0c6e642bb0c6aa067c5921dd8dc30",
+                "0d069c5583d1dd4591e55ec5ff6dd0905f3f8615",
+                645_816_u64,
             ),
             (
-                "planeadvancements",
-                "https://cdn.modrinth.com/data/V1smGrYI/versions/yAejuECi/plane_advancements-1.6-mc26.3.jar",
-                405_738,
-                "d6ab8cc78d1b3ada3c4fd647823026ce5b435964c5bcbcc67ac857d85b57e7cf124255d82edefee62161f854b3ca3761076bd55ccacc34c537c255e2cbdad966",
-                "LGPL-3.0-only",
-                None,
+                "mfrp",
+                "Matcha Flavoured resource pack",
+                "1.12.7-alpha",
+                "CC-BY-NC-SA-4.0",
+                &[] as &[&str],
+                "MFRP_1_12_7_26_3.zip",
+                "MFRP_*.zip",
+                "https://cdn.modrinth.com/data/QI0EmgZ1/versions/leNTHiGm/MFRP_1_12_7_26_3.zip",
+                "d2d5a0fffa845298285fcc4f5142496bcf2924ed29919be9a9010043a0d03814fa9af21dcf14f641590c0d81b93b4cd91572a9de9343a5e07dd830091645c18d",
+                "6982ab0a3659e27759d55fc389f7817ee1080f99",
+                19_729_113,
             ),
             (
-                "audiohotkeys",
-                "https://cdn.modrinth.com/data/oAKswYFJ/versions/L9l8zP9q/audio_hotkeys-1.0.14%2B26.3.jar",
-                52_487,
-                "d68aa7ce486fa50db761336fed5882a0ebbb7a79017ed131cfb62275eecc5f5f054a8ff3080a9218c07f7ad299005588805f699287b1fe6c8d14af1049a858a6",
-                "GPL-3.0-only",
-                Some("vanillaconfig"),
+                "matchablockoverlays",
+                "Matcha Block Overlays",
+                "2+continuity",
+                "CC-BY-NC-SA-4.0",
+                &["continuity"][..],
+                "Matcha-Block-Overlays-2+continuity.zip",
+                "Matcha-Block-Overlays-*.zip",
+                "https://cdn.modrinth.com/data/NsganuaN/versions/IcpWfApp/Matcha%20Block%20Overlays%202%2Bcontinuity.zip",
+                "f3a227ab60e8b1e5dc329abb52a82104441c3f899796b7e10773a23b9d88583cec2bb0a172960e949b54bd09c28d814f2ae359c4d43d944eaf77f66bf7a69ad5",
+                "11b062960ca7b5c81173b14a6b11ad87066dfb6f",
+                1_227_532,
+            ),
+            (
+                "bushypetals",
+                "Bushy pink petals, wildflowers & leaf litter",
+                "1.0.1",
+                "Apache-2.0",
+                &[] as &[&str],
+                "Bushy-pink-petals-wildflowers-leaf-litter.zip",
+                "Bushy-pink-petals-*.zip",
+                "https://cdn.modrinth.com/data/IVU3SHSl/versions/y3AuodI0/Bushy%20pink%20petals%2C%20wildflowers%20%20leaf%20litter.zip",
+                "aee85080703b79119b79b4ddcf79d7e5eccf8bbab47c0fbe03fba918bff1fbcd89368f72de6a86714b148eae86a3b59a780a0039b5bf228e5975435d4113f7ce",
+                "a287f4205901ba93ed3b847e7332431df0872367",
+                230_208,
+            ),
+            (
+                "rainbowsfoliage",
+                "Rainbow's Foliage: Polytone",
+                "2.0",
+                "LicenseRef-All-Rights-Reserved",
+                &["polytone"][..],
+                "rainbows-foliage-polytone-edition-v2.0.zip",
+                "rainbows-foliage-*.zip",
+                "https://cdn.modrinth.com/data/bY2CaVIh/versions/JcLjpSJg/rainbows-foliage-polytone-edition-v2.0.zip",
+                "823a0afb2cc074046565de404bde4bbe63a9329fae9a5f95fb80ff519e0bbea831bf228d2f2e3f6985b6feba9b5d4d3141b2b91f84baeb79d97a891a0bddea76",
+                "290ea3c92c46ef78e977ec74806ad77c93e97af1",
+                4_434_050,
+            ),
+            (
+                "grassrise",
+                "Grassrise",
+                "1.0.3",
+                "LicenseRef-All-Rights-Reserved",
+                &[] as &[&str],
+                "Grassrise-1.0.3-mc26.3.zip",
+                "Grassrise-*.zip",
+                "https://cdn.modrinth.com/data/S5FvlY0N/versions/WFG9Lpck/Grassrise-1.0.3-mc26.3.zip",
+                "8e03a816e982adb2059a2472c81efaf8616396486d17b7c6c3df87b5eccdad7377666a85a55492cd6a8a5c3d3890ef00a2821fbec55cce4668ef798747567d82",
+                "47afa7eadaf3e62bee32d5c6887acb767f42e919",
+                35_425,
             ),
         ];
-        for (id, url, size, sha512, license, requires) in pins {
+        for (id, name, version, license, requires, filename, glob, url, sha512, sha1, size) in pins
+        {
             let component = by_id(id);
-            assert!(!component.required_in_all_kits, "{id}");
+            assert_eq!(component.name, name, "{id}");
+            assert_eq!(component.version, version, "{id}");
             assert_eq!(component.license.as_deref(), Some(license), "{id}");
+            assert_eq!(component.group, ComponentGroup::Shaders, "{id}");
+            assert_eq!(component.kind, ComponentKind::Download, "{id}");
+            assert!(!component.required_in_all_kits, "{id}");
+            assert_eq!(
+                component.requires,
+                requires
+                    .iter()
+                    .map(|dep| (*dep).to_string())
+                    .collect::<Vec<_>>(),
+                "{id}"
+            );
             assert_eq!(component.files.len(), 1, "{id}");
             let file = &component.files[0];
+            assert_eq!(file.dest, FileDest::Resourcepacks, "{id}");
+            assert_eq!(file.file, filename, "{id}");
+            assert_eq!(file.match_glob, glob, "{id}");
             assert_eq!(file.url, url, "{id}");
             assert_eq!(file.sha512, sha512, "{id}");
+            assert_eq!(file.sha1.as_deref(), Some(sha1), "{id}");
             assert_eq!(file.size, size, "{id}");
-            if let Some(dep) = requires {
-                assert_eq!(component.requires, vec![dep.to_string()], "{id}");
-            }
-        }
-
-        for component in &manifest.components {
-            assert_ne!(component.id, "touchnmotion");
-            assert_ne!(component.id, "weatherglass");
-            for file in &component.files {
-                assert!(!file.file.contains("no-zoom-animation"), "{}", file.file);
-                assert!(!file.file.contains("no-toolbar"), "{}", file.file);
-                assert!(!file.file.contains("no-overlay"), "{}", file.file);
+            assert!(file.url.starts_with("https://cdn.modrinth.com/"), "{id}");
+            assert!(component.description.contains("Client only"), "{id}");
+            assert!(component.description.contains("Not needed to join"), "{id}");
+            for kit in ["full", "recommended"] {
                 assert!(
-                    !file.file.starts_with("iris-fabric-1.11.6"),
-                    "{}",
-                    file.file
+                    manifest.kits[kit].components.iter().any(|item| item == id),
+                    "{kit} missing {id}"
+                );
+            }
+            assert!(
+                !manifest.kits["basic"]
+                    .components
+                    .iter()
+                    .any(|item| item == id),
+                "basic has {id}"
+            );
+            for addon in manifest.addons.values() {
+                assert!(
+                    !addon.components.iter().any(|item| item == id),
+                    "{id} is in an addon"
                 );
             }
         }
+        let mut pack_files = 0;
+        for component in &manifest.components {
+            for file in &component.files {
+                if file.dest == FileDest::Resourcepacks {
+                    pack_files += 1;
+                    assert!(
+                        file.url.starts_with("https://cdn.modrinth.com/"),
+                        "{}",
+                        file.file
+                    );
+                }
+            }
+        }
+        assert_eq!(pack_files, 6);
+    }
+
+    #[test]
+    fn file_dest_resourcepacks_round_trips() {
+        assert_eq!(
+            serde_json::from_str::<FileDest>("\"resourcepacks\"").unwrap(),
+            FileDest::Resourcepacks
+        );
+        assert_eq!(
+            serde_json::to_string(&FileDest::Resourcepacks).unwrap(),
+            "\"resourcepacks\""
+        );
+        assert_eq!(FileDest::Mods.folder(), "mods");
+        assert_eq!(FileDest::Shaderpacks.folder(), "shaderpacks");
+        assert_eq!(FileDest::Resourcepacks.folder(), "resourcepacks");
+        assert_eq!(
+            FileDest::from_rel_path("resourcepacks/a.zip"),
+            Some(FileDest::Resourcepacks)
+        );
+        assert_eq!(FileDest::from_rel_path("config/x"), None);
     }
 
     #[test]
@@ -1943,6 +2231,8 @@ mod tests {
             "axiom",
             "punchy",
             "voicechat",
+            "rainbowsfoliage",
+            "grassrise",
         ] {
             let component = by_id(id);
             assert_eq!(
@@ -1970,6 +2260,14 @@ mod tests {
                     component.id
                 );
             }
+        }
+        let fresh = by_id("freshanimations");
+        assert_eq!(
+            fresh.license.as_deref(),
+            Some("LicenseRef-See-Terms-of-Use-in-Description")
+        );
+        for file in &fresh.files {
+            assert!(!file.url.contains("github.com"), "{}", file.url);
         }
     }
 
