@@ -864,7 +864,7 @@ mod tests {
     fn bundled_fixture_verifies_with_embedded_test_key() {
         let manifest = load_bundled_manifest_with_key(TEST_MANIFEST_PUBLIC_KEY_HEX).unwrap();
         assert_eq!(manifest.schema, 3);
-        assert_eq!(manifest.manifest_version, "2026.11.6");
+        assert_eq!(manifest.manifest_version, "2026.11.7");
         assert_eq!(manifest.minecraft, "26.3");
         assert_eq!(
             manifest.current_server_shipwright.as_deref(),
@@ -1020,7 +1020,7 @@ mod tests {
     fn github_release_files_use_the_tag_publish_checks() {
         let manifest = load_fixture_manifest().unwrap();
         let tag = crate::download::ARNOLD_RELEASE_TAG;
-        assert_eq!(tag, "mods-2026.11.6");
+        assert_eq!(tag, "mods-2026.11.7");
         let prefix = format!(
             "https://github.com/{}/{}/releases/download/{tag}/",
             crate::download::RELEASE_OWNER,
@@ -1041,7 +1041,7 @@ mod tests {
                 );
             }
         }
-        assert_eq!(github_files, 3);
+        assert_eq!(github_files, 4);
         assert_eq!(
             manifest.loader.url,
             format!("{prefix}fabric-loader-0.20.1-26.3.json")
@@ -1049,6 +1049,140 @@ mod tests {
         assert_eq!(
             manifest.loader.sha512,
             "babd24cc307a2654b95026e3a82d83e60028d9dfc2974531b45f51498352372637091ee062d7d7b29580a7c2ed8f7bccbaf69acd20d061422ed4d9c7c06436a1"
+        );
+    }
+
+    #[test]
+    fn diet_plus_is_in_every_kit_and_appleskin_in_full_and_recommended() {
+        let manifest = load_fixture_manifest().unwrap();
+        let by_id = |id: &str| {
+            manifest
+                .components
+                .iter()
+                .find(|c| c.id == id)
+                .unwrap_or_else(|| panic!("missing {id}"))
+        };
+
+        // Diet+ registers a synced attribute, so once the server runs it every
+        // client needs it. Keep it in every kit and locked in Custom.
+        let diet = by_id("dietplus");
+        assert_eq!(diet.version, "2.2.0");
+        assert_eq!(diet.group, ComponentGroup::Arnold);
+        assert!(diet.required_in_all_kits);
+        assert_eq!(diet.requires, vec!["base".to_string()]);
+        assert_eq!(diet.license.as_deref(), Some("LGPL-3.0-or-later"));
+        let diet_file = file_of(&manifest, "dietplus", "dietplus-fabric-2.2.0+26.3.jar");
+        assert_eq!(
+            diet_file.url,
+            crate::download::arnold_release_asset_url("dietplus-fabric-2.2.0+26.3.jar")
+        );
+        assert_eq!(
+            diet_file.sha512,
+            "605ceff04a93b8a243c351d0ff8f27e58e2088b24dfc95f6e07564a4e7dda941c6e9799fc453576d1d855679bb39c38c8ab198e5c04d18661f1ec4f08a8126c9"
+        );
+        assert_eq!(diet_file.size, 873_679);
+        assert_eq!(diet_file.match_glob, "dietplus-fabric-*.jar");
+
+        let apple = by_id("appleskin");
+        assert_eq!(apple.version, "3.0.10");
+        assert_eq!(apple.group, ComponentGroup::Arnold);
+        assert!(!apple.required_in_all_kits);
+        assert_eq!(apple.license.as_deref(), Some("Unlicense"));
+        let apple_file = file_of(&manifest, "appleskin", "appleskin-fabric-mc26.3-3.0.10.jar");
+        assert_eq!(
+            apple_file.url,
+            "https://cdn.modrinth.com/data/EsAfCjCV/versions/PHjDtQay/appleskin-fabric-mc26.3-3.0.10.jar"
+        );
+        assert_eq!(
+            apple_file.sha512,
+            "17d257af419b7530aa8617c2e8c0e4bbfabcf888f26655790e0188e7957e0bcd931f85f9a4c69fd27e889dee5082cf7b2b8741a14a6ed4425e9ef4bfe13a8b8c"
+        );
+        assert_eq!(apple_file.size, 180_194);
+        assert_eq!(apple_file.match_glob, "appleskin-*.jar");
+
+        for kit in ["basic", "full", "recommended"] {
+            assert!(
+                manifest.kits[kit]
+                    .components
+                    .iter()
+                    .any(|id| id == "dietplus"),
+                "{kit} missing dietplus"
+            );
+        }
+        for kit in ["full", "recommended"] {
+            assert!(
+                manifest.kits[kit]
+                    .components
+                    .iter()
+                    .any(|id| id == "appleskin"),
+                "{kit} missing appleskin"
+            );
+        }
+        assert!(!manifest.kits["basic"]
+            .components
+            .iter()
+            .any(|id| id == "appleskin"));
+    }
+
+    #[test]
+    fn serene_seasons_and_glitchcore_come_from_modrinth_in_every_kit() {
+        let manifest = load_fixture_manifest().unwrap();
+        let by_id = |id: &str| {
+            manifest
+                .components
+                .iter()
+                .find(|c| c.id == id)
+                .unwrap_or_else(|| panic!("missing {id}"))
+        };
+
+        // Both are All Rights Reserved: download from Modrinth, never rehost.
+        let pins = [
+            (
+                "glitchcore",
+                "26.3.0.0.5",
+                "GlitchCore-fabric-26.3-26.3.0.0.5.jar",
+                "https://cdn.modrinth.com/data/s3dmwKy5/versions/kfFeDnrp/GlitchCore-fabric-26.3-26.3.0.0.5.jar",
+                "f975535e561285898163e7512008fe61ffaac66b6fc60a4e4763d0f2279617f75900d7a2ab2708d8dc348337119df61d2783aa101a9f1a24020f99888aa0d457",
+                339_788,
+            ),
+            (
+                "sereneseasons",
+                "26.1.2.0.7",
+                "SereneSeasons-fabric-26.3-26.1.2.0.7.jar",
+                "https://cdn.modrinth.com/data/e0bNACJD/versions/V9PxJPuw/SereneSeasons-fabric-26.3-26.1.2.0.7.jar",
+                "f0ef802ab4a7d95df76855100656f3c0f65c7954b52330d7e3c224a0900359d8e8db8953dde3aca52231a5a90428e9925cac99ca01b22485d4af37640620069c",
+                410_505,
+            ),
+        ];
+        for (id, version, name, url, sha512, size) in pins {
+            let component = by_id(id);
+            assert_eq!(component.version, version, "{id}");
+            assert_eq!(component.group, ComponentGroup::Arnold, "{id}");
+            assert!(component.required_in_all_kits, "{id} must be locked");
+            assert_eq!(
+                component.license.as_deref(),
+                Some("LicenseRef-All-Rights-Reserved"),
+                "{id}"
+            );
+            assert_eq!(component.files.len(), 1, "{id}");
+            let file = file_of(&manifest, id, name);
+            assert_eq!(file.url, url, "{id}");
+            assert!(
+                !file.url.starts_with("https://github.com/"),
+                "{id} must not be rehosted"
+            );
+            assert_eq!(file.sha512, sha512, "{id}");
+            assert_eq!(file.size, size, "{id}");
+            for kit in ["basic", "full", "recommended"] {
+                assert!(
+                    manifest.kits[kit].components.iter().any(|item| item == id),
+                    "{kit} missing {id}"
+                );
+            }
+        }
+        assert_eq!(
+            by_id("sereneseasons").requires,
+            vec!["base".to_string(), "glitchcore".to_string()]
         );
     }
 
