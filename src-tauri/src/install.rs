@@ -17,7 +17,7 @@ use crate::fetch::Fetcher;
 use crate::import::{is_known_legacy_snow_jar, SNOW_LEGACY_GLOBS};
 use crate::local_source::copy_local_settings;
 use crate::log::append_install_log;
-use crate::manifest::{component_by_id, lite_preset, FileDest, Manifest};
+use crate::manifest::{component_by_id, lite_preset, Manifest};
 use crate::plan::{match_glob, InstallPlan, PlanFile};
 use crate::quality::{apply_quality, quality_snapshot_paths, record_quality_files, QualityLevel};
 use crate::state::{
@@ -44,11 +44,7 @@ pub enum ReplaceAction {
 }
 
 pub fn dest_rel(file: &PlanFile) -> String {
-    let folder = match file.dest {
-        FileDest::Mods => "mods",
-        FileDest::Shaderpacks => "shaderpacks",
-    };
-    format!("{folder}/{}", file.file)
+    format!("{}/{}", file.dest.folder(), file.file)
 }
 
 pub fn decide_legacy_replace(
@@ -123,10 +119,7 @@ fn collect_replacements(
         .map(dest_rel)
         .collect();
     for file in plan.add.iter().chain(plan.update.iter()) {
-        let folder = match file.dest {
-            FileDest::Mods => "mods",
-            FileDest::Shaderpacks => "shaderpacks",
-        };
+        let folder = file.dest.folder();
         let patterns = snow_replace_patterns(&file.component_id, &file.legacy_match);
         let mut all_patterns = patterns;
         if !all_patterns.iter().any(|p| p == &file.match_glob) {
@@ -631,7 +624,7 @@ mod tests {
     use crate::download::sha512_hex;
     use crate::fetch::MapFetcher;
     use crate::manifest::load_fixture_manifest;
-    use crate::plan::{build_plan, Selection};
+    use crate::plan::{build_plan, PlanFile, Selection};
     use std::sync::Mutex;
     use tempfile::tempdir;
 
@@ -984,5 +977,129 @@ mod tests {
             .iter()
             .any(|f| f.path == "config/sodium-options.json"));
         assert!(!state.files.iter().any(|f| f.path == "options.txt"));
+    }
+
+    fn sample_plan_file(dest: crate::manifest::FileDest, file: &str) -> PlanFile {
+        PlanFile {
+            component_id: "sample".into(),
+            name: "Sample".into(),
+            version: "1".into(),
+            file: file.into(),
+            dest,
+            url: "https://cdn.modrinth.com/sample".into(),
+            sha512: "ab".into(),
+            size: 1,
+            match_glob: file.into(),
+            legacy_match: Vec::new(),
+            known_sha512: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn dest_rel_maps_every_dest() {
+        use crate::manifest::FileDest;
+        assert_eq!(dest_rel(&sample_plan_file(FileDest::Mods, "x")), "mods/x");
+        assert_eq!(
+            dest_rel(&sample_plan_file(FileDest::Shaderpacks, "x.zip")),
+            "shaderpacks/x.zip"
+        );
+        assert_eq!(
+            dest_rel(&sample_plan_file(FileDest::Resourcepacks, "x.zip")),
+            "resourcepacks/x.zip"
+        );
+    }
+
+    fn custom_pack_plan(manifest: &crate::manifest::Manifest, ids: &[&str]) -> InstallPlan {
+        build_plan(
+            manifest,
+            &Selection {
+                kit: "custom".into(),
+                custom_components: ids.iter().map(|id| (*id).to_string()).collect(),
+                ocean: false,
+                addons: Default::default(),
+                snow_lite: None,
+                quality: None,
+            },
+            None,
+            true,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn resource_pack_installs_under_resourcepacks() {
+        let tmp = tempdir().unwrap();
+        let game = tmp.path();
+        prepare_game(game);
+        let (manifest, fetcher, _) = test_manifest_and_fetcher();
+        let plan = custom_pack_plan(&manifest, &["freshanimations"]);
+        run_install(
+            game,
+            &plan,
+            &manifest,
+            &fetcher,
+            &AtomicBool::new(false),
+            false,
+            16.0,
+            &|_| {},
+        )
+        .unwrap();
+        let pack = game.join("resourcepacks/FreshAnimations_v1.10.5.zip");
+        assert!(pack.is_file());
+        assert_eq!(
+            fs::read(&pack).unwrap(),
+            b"blob-FreshAnimations_v1.10.5.zip"
+        );
+        assert!(!game.join("mods/FreshAnimations_v1.10.5.zip").exists());
+        assert!(!game
+            .join("shaderpacks/FreshAnimations_v1.10.5.zip")
+            .exists());
+        let state = load_state(game).unwrap().unwrap();
+        assert!(state.files.iter().any(|file| {
+            file.path == "resourcepacks/FreshAnimations_v1.10.5.zip"
+                && file.component_id == "freshanimations"
+        }));
+        for id in ["emf", "etf"] {
+            let name = manifest
+                .components
+                .iter()
+                .find(|component| component.id == id)
+                .unwrap()
+                .files[0]
+                .file
+                .clone();
+            assert!(game.join("mods").join(name).is_file(), "{id}");
+        }
+    }
+
+    #[test]
+    fn old_resource_pack_copy_is_found_in_resourcepacks_only() {
+        let tmp = tempdir().unwrap();
+        let game = tmp.path();
+        prepare_game(game);
+        fs::create_dir_all(game.join("resourcepacks")).unwrap();
+        fs::write(
+            game.join("resourcepacks/FreshAnimations_v1.10.4.zip"),
+            b"old-pack",
+        )
+        .unwrap();
+        fs::write(game.join("mods/FreshAnimations_v1.10.4.zip"), b"decoy").unwrap();
+        let (manifest, _, _) = test_manifest_and_fetcher();
+        let plan = custom_pack_plan(&manifest, &["freshanimations"]);
+        let found = collect_replacements(game, &plan, None).unwrap();
+        let asks: Vec<&PendingReplace> = found
+            .iter()
+            .filter(|item| item.action == ReplaceAction::Ask)
+            .collect();
+        assert_eq!(
+            asks.len(),
+            1,
+            "{:?}",
+            found.iter().map(|item| &item.rel).collect::<Vec<_>>()
+        );
+        assert_eq!(asks[0].rel, "resourcepacks/FreshAnimations_v1.10.4.zip");
+        assert!(found
+            .iter()
+            .all(|item| item.rel != "mods/FreshAnimations_v1.10.4.zip"));
     }
 }

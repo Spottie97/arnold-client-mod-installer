@@ -235,6 +235,29 @@ pub struct ComponentFile {
 pub enum FileDest {
     Mods,
     Shaderpacks,
+    Resourcepacks,
+}
+
+impl FileDest {
+    pub const fn folder(self) -> &'static str {
+        match self {
+            FileDest::Mods => "mods",
+            FileDest::Shaderpacks => "shaderpacks",
+            FileDest::Resourcepacks => "resourcepacks",
+        }
+    }
+
+    /// Dest of a tracked relative path such as `resourcepacks/x.zip`; `None` if unknown.
+    pub fn from_rel_path(path: &str) -> Option<FileDest> {
+        let folder = path.split('/').next()?;
+        [
+            FileDest::Mods,
+            FileDest::Shaderpacks,
+            FileDest::Resourcepacks,
+        ]
+        .into_iter()
+        .find(|dest| dest.folder() == folder)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -864,7 +887,7 @@ mod tests {
     fn bundled_fixture_verifies_with_embedded_test_key() {
         let manifest = load_bundled_manifest_with_key(TEST_MANIFEST_PUBLIC_KEY_HEX).unwrap();
         assert_eq!(manifest.schema, 3);
-        assert_eq!(manifest.manifest_version, "2026.11.6");
+        assert_eq!(manifest.manifest_version, "2026.11.7");
         assert_eq!(manifest.minecraft, "26.3");
         assert_eq!(
             manifest.current_server_shipwright.as_deref(),
@@ -892,16 +915,20 @@ mod tests {
     fn bundled_download_entries_match_verified_modrinth_and_arnold_assets() {
         let manifest = load_fixture_manifest().unwrap();
 
-        let fabric = file_of(&manifest, "base", "fabric-api-0.165.0+26.3.jar");
+        let fabric = file_of(&manifest, "base", "fabric-api-0.166.2+26.3.jar");
         assert_eq!(
             fabric.url,
-            "https://cdn.modrinth.com/data/P7dR8mSH/versions/EQKgpeKu/fabric-api-0.165.0%2B26.3.jar"
+            "https://cdn.modrinth.com/data/P7dR8mSH/versions/Zns5SSRA/fabric-api-0.166.2%2B26.3.jar"
         );
         assert_eq!(
             fabric.sha512,
-            "0a4b8a14e847b71567b557b43d906c2167fa263eeeef37454a821ba286996e3da1616dc2d9647736d28a250d5ecf400541cae808359b29a62324a8a6f2ad5e30"
+            "fb686a9fa923248328107a12498229d6951e316257f18b7d0e4cbd6885ba447ed50a44076a8a5ba47cfe2043b329db3587ab000aeab1face26b2587a5d4ba6b5"
         );
-        assert_eq!(fabric.size, 1_778_588);
+        assert_eq!(fabric.size, 1_797_523);
+        assert_eq!(
+            fabric.sha1.as_deref(),
+            Some("65636253571429971f25f5619692e6c1a6362028")
+        );
 
         let sodium = file_of(&manifest, "sodium", "sodium-fabric-0.9.2+mc26.3.jar");
         assert_eq!(
@@ -957,18 +984,18 @@ mod tests {
         let rain = file_of(
             &manifest,
             "particlerain",
-            "particlerain-4.0.2+26.3-fabric.jar",
+            "particlerain-4.0.3+26.3-fabric.jar",
         );
         assert_eq!(rain.match_glob, "particlerain-*.jar");
         assert_eq!(
             rain.url,
-            "https://cdn.modrinth.com/data/nrikgvxm/versions/ecVAaY1R/particlerain-4.0.2%2B26.3-fabric.jar"
+            "https://cdn.modrinth.com/data/nrikgvxm/versions/ddleyxF8/particlerain-4.0.3%2B26.3-fabric.jar"
         );
         assert_eq!(
             rain.sha512,
-            "b87684651246c05d0985c88cc0e05ba0e5bdf04d6e5c3ec90962d4342d9f70bc13a4ca86a4276022d71afdcfd69709596e070f3cfe1ae0ee3484dc2924121f19"
+            "c0e2ecea7d1ffc76e9b95103ff2c6443374907cdf050bdfb5838073c38c042299015ceb9421b8530635cd7c0e4011002d280d158719e4a0c6ac7bc46c4c1f2df"
         );
-        assert_eq!(rain.size, 627_188);
+        assert_eq!(rain.size, 628_245);
 
         let wakes = file_of(&manifest, "wakes", "wakes-0.7.3+26.3.jar");
         assert_eq!(
@@ -1020,19 +1047,21 @@ mod tests {
     fn github_release_files_use_the_tag_publish_checks() {
         let manifest = load_fixture_manifest().unwrap();
         let tag = crate::download::ARNOLD_RELEASE_TAG;
-        assert_eq!(tag, "mods-2026.11.6");
+        assert_eq!(tag, "mods-2026.11.7");
         let prefix = format!(
             "https://github.com/{}/{}/releases/download/{tag}/",
             crate::download::RELEASE_OWNER,
             crate::download::RELEASE_REPO
         );
         let mut github_files = 0;
+        let mut github_ids = std::collections::BTreeSet::new();
         for component in &manifest.components {
             for file in &component.files {
                 if !file.url.starts_with("https://github.com/") {
                     continue;
                 }
                 github_files += 1;
+                github_ids.insert(component.id.clone());
                 assert_eq!(
                     file.url,
                     format!("{prefix}{}", file.file),
@@ -1041,7 +1070,25 @@ mod tests {
                 );
             }
         }
-        assert_eq!(github_files, 3);
+        // deck, ships, snow, Diet+, plus the rehosted BA+ cosmetics:
+        // unboundthirdperson, planeadvancements, audiohotkeys, weatherglass.
+        assert_eq!(github_files, 8);
+        assert_eq!(
+            github_ids,
+            [
+                "deck",
+                "ships",
+                "snow",
+                "dietplus",
+                "unboundthirdperson",
+                "planeadvancements",
+                "audiohotkeys",
+                "weatherglass",
+            ]
+            .into_iter()
+            .map(str::to_string)
+            .collect()
+        );
         assert_eq!(
             manifest.loader.url,
             format!("{prefix}fabric-loader-0.20.1-26.3.json")
@@ -1050,6 +1097,93 @@ mod tests {
             manifest.loader.sha512,
             "babd24cc307a2654b95026e3a82d83e60028d9dfc2974531b45f51498352372637091ee062d7d7b29580a7c2ed8f7bccbaf69acd20d061422ed4d9c7c06436a1"
         );
+    }
+
+    #[test]
+    fn diet_plus_is_in_every_kit_and_appleskin_in_full_and_recommended() {
+        let manifest = load_fixture_manifest().unwrap();
+        let by_id = |id: &str| {
+            manifest
+                .components
+                .iter()
+                .find(|c| c.id == id)
+                .unwrap_or_else(|| panic!("missing {id}"))
+        };
+
+        // Diet+ registers a synced attribute, so once the server runs it every
+        // client needs it. Keep it in every kit and locked in Custom.
+        let diet = by_id("dietplus");
+        assert_eq!(diet.version, "2.2.0");
+        assert_eq!(diet.group, ComponentGroup::Arnold);
+        assert!(diet.required_in_all_kits);
+        assert_eq!(diet.requires, vec!["base".to_string()]);
+        assert_eq!(diet.license.as_deref(), Some("LGPL-3.0-or-later"));
+        let diet_file = file_of(&manifest, "dietplus", "dietplus-fabric-2.2.0+26.3.jar");
+        assert_eq!(
+            diet_file.url,
+            crate::download::arnold_release_asset_url("dietplus-fabric-2.2.0+26.3.jar")
+        );
+        assert_eq!(
+            diet_file.sha512,
+            "605ceff04a93b8a243c351d0ff8f27e58e2088b24dfc95f6e07564a4e7dda941c6e9799fc453576d1d855679bb39c38c8ab198e5c04d18661f1ec4f08a8126c9"
+        );
+        assert_eq!(diet_file.size, 873_679);
+        assert_eq!(diet_file.match_glob, "dietplus-fabric-*.jar");
+
+        let apple = by_id("appleskin");
+        assert_eq!(apple.version, "3.0.10");
+        assert_eq!(apple.group, ComponentGroup::Arnold);
+        assert!(!apple.required_in_all_kits);
+        assert_eq!(apple.license.as_deref(), Some("Unlicense"));
+        let apple_file = file_of(&manifest, "appleskin", "appleskin-fabric-mc26.3-3.0.10.jar");
+        assert_eq!(
+            apple_file.url,
+            "https://cdn.modrinth.com/data/EsAfCjCV/versions/PHjDtQay/appleskin-fabric-mc26.3-3.0.10.jar"
+        );
+        assert_eq!(
+            apple_file.sha512,
+            "17d257af419b7530aa8617c2e8c0e4bbfabcf888f26655790e0188e7957e0bcd931f85f9a4c69fd27e889dee5082cf7b2b8741a14a6ed4425e9ef4bfe13a8b8c"
+        );
+        assert_eq!(apple_file.size, 180_194);
+        assert_eq!(apple_file.match_glob, "appleskin-*.jar");
+
+        for kit in ["basic", "full", "recommended"] {
+            assert!(
+                manifest.kits[kit]
+                    .components
+                    .iter()
+                    .any(|id| id == "dietplus"),
+                "{kit} missing dietplus"
+            );
+        }
+        for kit in ["full", "recommended"] {
+            assert!(
+                manifest.kits[kit]
+                    .components
+                    .iter()
+                    .any(|id| id == "appleskin"),
+                "{kit} missing appleskin"
+            );
+        }
+        assert!(!manifest.kits["basic"]
+            .components
+            .iter()
+            .any(|id| id == "appleskin"));
+    }
+
+    #[test]
+    fn serene_seasons_and_glitchcore_stay_out_until_reinhardt_decides() {
+        // Provisional: PR 19 holds them for Arnold Colonies. To restore, see the BA+ plan §9.2.
+        let manifest = load_fixture_manifest().unwrap();
+        for id in ["sereneseasons", "glitchcore"] {
+            assert!(
+                manifest.components.iter().all(|c| c.id != id),
+                "{id} should stay out"
+            );
+            for (kit_id, kit) in &manifest.kits {
+                assert!(!kit.components.iter().any(|i| i == id), "{kit_id} has {id}");
+            }
+        }
     }
 
     #[test]
@@ -1064,7 +1198,7 @@ mod tests {
         };
 
         let fabric = by_id("base");
-        assert_eq!(fabric.version, "0.165.0");
+        assert_eq!(fabric.version, "0.166.2");
         assert!(fabric.required);
         let sodium = by_id("sodium");
         assert_eq!(sodium.version, "0.9.2");
@@ -1073,8 +1207,6 @@ mod tests {
         let added = [
             ("badoptimizations", "2.4.1", "MIT"),
             ("modernfix", "5.27.20-build.2", "LGPL-3.0-only"),
-            ("lithium", "0.26.3", "LGPL-3.0-only"),
-            ("clumps", "26.3.2", "MIT"),
             ("sodiumextra", "0.9.5", "LGPL-3.0-only"),
             ("immediatelyfast", "1.17.1", "LGPL-3.0-or-later"),
             (
@@ -1121,12 +1253,24 @@ mod tests {
             }
         }
 
+        // Lithium and Clumps are in the Better Adventures+ server set: locked in every kit.
+        // Provisional: Lithium stays on our 0.26.3 (the pack ships 0.26.2). Flip here and in the manifest if Reinhardt picks 0.26.2.
+        for (id, version, license) in [
+            ("lithium", "0.26.3", "LGPL-3.0-only"),
+            ("clumps", "26.3.2", "MIT"),
+        ] {
+            let component = by_id(id);
+            assert_eq!(component.version, version, "{id}");
+            assert_eq!(component.license.as_deref(), Some(license), "{id}");
+            assert_eq!(component.group, ComponentGroup::Arnold, "{id}");
+            assert!(component.required_in_all_kits, "{id} must be locked");
+        }
+
         for skipped in [
             "fism",
             "spark",
             "zfastnoise",
             "zconfig",
-            "modmenu",
             "cupboard",
             "gpumemleakfix",
             "embeddium",
@@ -1489,5 +1633,763 @@ mod tests {
         let cached = load_best_manifest(&offline, tmp.path()).unwrap();
         assert_eq!(cached.source, "error");
         assert!(cached.manifest.components.is_empty());
+    }
+
+    const BA_PLUS_SERVER_SET: [&str; 42] = [
+        "base",
+        "fallingtree",
+        "c2me",
+        "soundphysics",
+        "inventorysorter",
+        "universalbonemeal",
+        "geckolib",
+        "voicechat",
+        "lootr",
+        "fzzyconfig",
+        "clumps",
+        "vanillaconfig",
+        "puzzleslib",
+        "hidearmor",
+        "scholar",
+        "forgeconfigapiport",
+        "clothconfig",
+        "rightclickharvest",
+        "zoomify",
+        "diagonalfences",
+        "amplifiednether",
+        "matcha",
+        "cristellib",
+        "architectury",
+        "mru",
+        "connectiblechains",
+        "jakesbuildtools",
+        "easyshulkerboxes",
+        "tradecycling",
+        "modonomicon",
+        "yacl",
+        "diagonalwalls",
+        "streamsreflowing",
+        "kotlin",
+        "shulkerboxtooltip",
+        "lithium",
+        "axiom",
+        "terrainslabs",
+        "bettertrees",
+        "jamlib",
+        "slabbed",
+        "nullscape",
+    ];
+    const BA_PLUS_CLIENT: [&str; 37] = [
+        "freecam",
+        "modmenu",
+        "sounds",
+        "bettersnowcoverage",
+        "flyspeed",
+        "betterclouds",
+        "smoothsteps",
+        "denseflowers",
+        "bridgingmod",
+        "atmosfera",
+        "windy",
+        "betterclimbing",
+        "continuity",
+        "overflowingbars",
+        "visuality",
+        "musiccontrol",
+        "invmove",
+        "bettersmoke",
+        "emfcompat",
+        "emf",
+        "etf",
+        "advancementsfullscreen",
+        "punchy",
+        "coolrain",
+        "stacktonearbychests",
+        "presencefootsteps",
+        "irissearch",
+        "mousetweaks",
+        "smoothswapping",
+        "polytone",
+        "flashback",
+        "disablefrontcamera",
+        "mossylib",
+        "bobby",
+        "lambdynlights",
+        "clickthrough",
+        "betterf3",
+    ];
+    const CLIENT_EXTRAS: [&str; 5] = [
+        "unboundthirdperson",
+        "planeadvancements",
+        "audiohotkeys",
+        "miniature",
+        "miniaturexl",
+    ];
+
+    fn is_lower_sha1(value: &str) -> bool {
+        value.len() == 40
+            && value
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    }
+
+    #[test]
+    fn ba_plus_server_set_is_locked_in_every_kit() {
+        let manifest = load_fixture_manifest().unwrap();
+        let by_id = |id: &str| {
+            manifest
+                .components
+                .iter()
+                .find(|c| c.id == id)
+                .unwrap_or_else(|| panic!("missing {id}"))
+        };
+        let mut ids: Vec<&str> = BA_PLUS_SERVER_SET.to_vec();
+        ids.push("midnightlib");
+        for id in ids {
+            let component = by_id(id);
+            assert!(component.required_in_all_kits, "{id}");
+            for kit in ["basic", "full", "recommended"] {
+                assert!(
+                    manifest.kits[kit].components.iter().any(|item| item == id),
+                    "{kit} missing {id}"
+                );
+            }
+            let group = if id == "base" {
+                ComponentGroup::Base
+            } else {
+                ComponentGroup::Arnold
+            };
+            assert_eq!(component.group, group, "{id}");
+            for file in &component.files {
+                assert!(
+                    file.url.starts_with("https://cdn.modrinth.com/"),
+                    "{id} {}",
+                    file.url
+                );
+                if id != "lithium" && id != "clumps" {
+                    let sha1 = file
+                        .sha1
+                        .as_deref()
+                        .unwrap_or_else(|| panic!("{id} missing sha1"));
+                    assert!(is_lower_sha1(sha1), "{id} sha1 {sha1}");
+                }
+            }
+        }
+
+        let locked: std::collections::BTreeSet<String> = manifest
+            .components
+            .iter()
+            .filter(|component| component.required_in_all_kits)
+            .map(|component| component.id.clone())
+            .collect();
+        let mut expected: std::collections::BTreeSet<String> = BA_PLUS_SERVER_SET
+            .iter()
+            .map(|id| (*id).to_string())
+            .collect();
+        expected.insert("midnightlib".to_string());
+        expected.insert("dietplus".to_string());
+        expected.insert("deck".to_string());
+        assert_eq!(locked.len(), 45);
+        assert_eq!(locked, expected);
+    }
+
+    #[test]
+    fn midnightlib_is_pinned_for_terrain_slabs() {
+        let manifest = load_fixture_manifest().unwrap();
+        let midnight = file_of(
+            &manifest,
+            "midnightlib",
+            "midnightlib-fabric-1.9.3+26.3-rc-2.jar",
+        );
+        assert_eq!(
+            midnight.url,
+            "https://cdn.modrinth.com/data/codAaoxh/versions/wJeXgIoa/midnightlib-fabric-1.9.3%2B26.3-rc-2.jar"
+        );
+        assert_eq!(
+            midnight.sha512,
+            "2b5c5ed195d44d97dd6fafdb8583d1d883f10303c0cde331da72c6004f88cf27207167aaf77f0c692113399db42f616d1174144671898a25dfa69e9525135b8b"
+        );
+        assert_eq!(midnight.size, 60_602);
+        assert_eq!(
+            midnight.sha1.as_deref(),
+            Some("2c0e2ba8a9a2b66729b6074325b40a901740238b")
+        );
+
+        let terrain = manifest
+            .components
+            .iter()
+            .find(|component| component.id == "terrainslabs")
+            .unwrap();
+        assert!(terrain.requires.iter().any(|id| id == "midnightlib"));
+        assert!(terrain.requires.iter().any(|id| id == "architectury"));
+        let slabs = file_of(&manifest, "terrainslabs", "TerrainSlabs-v3.4.2-26.3.jar");
+        assert_eq!(slabs.file, "TerrainSlabs-v3.4.2-26.3.jar");
+        assert_eq!(slabs.match_glob, "Terrain*.jar");
+        assert!(slabs.url.ends_with("Terrain%20Slabs%20v3.4.2-26.3.jar"));
+        assert!(crate::plan::match_glob(
+            "Terrain*.jar",
+            "Terrain Slabs v3.4.2-26.3.jar"
+        ));
+    }
+
+    #[test]
+    fn ba_plus_client_mods_are_full_and_recommended_only() {
+        let manifest = load_fixture_manifest().unwrap();
+        let by_id = |id: &str| {
+            manifest
+                .components
+                .iter()
+                .find(|component| component.id == id)
+                .unwrap_or_else(|| panic!("missing {id}"))
+        };
+        for id in BA_PLUS_CLIENT.into_iter().chain(CLIENT_EXTRAS) {
+            let component = by_id(id);
+            assert!(!component.required_in_all_kits, "{id}");
+            assert_eq!(component.group, ComponentGroup::Shaders, "{id}");
+            for kit in ["full", "recommended"] {
+                assert!(
+                    manifest.kits[kit].components.iter().any(|item| item == id),
+                    "{kit} missing {id}"
+                );
+            }
+            assert!(
+                !manifest.kits["basic"]
+                    .components
+                    .iter()
+                    .any(|item| item == id),
+                "basic has {id}"
+            );
+            for file in &component.files {
+                // Those three cosmetics are rehosted on the GitHub release.
+                if matches!(
+                    id,
+                    "unboundthirdperson" | "planeadvancements" | "audiohotkeys"
+                ) {
+                    assert!(
+                        file.url.starts_with("https://github.com/Spottie97/"),
+                        "{id} {}",
+                        file.url
+                    );
+                    continue;
+                }
+                assert!(
+                    file.url.starts_with("https://cdn.modrinth.com/"),
+                    "{id} {}",
+                    file.url
+                );
+            }
+        }
+
+        for id in ["sodium", "entityculling"] {
+            let component = by_id(id);
+            assert_eq!(component.group, ComponentGroup::Shaders, "{id}");
+            assert!(!component.required_in_all_kits, "{id}");
+            for kit in ["basic", "full", "recommended"] {
+                assert!(
+                    manifest.kits[kit].components.iter().any(|item| item == id),
+                    "{kit} missing {id}"
+                );
+            }
+        }
+
+        let rain = by_id("particlerain");
+        assert_eq!(rain.version, "4.0.3");
+        assert_eq!(rain.group, ComponentGroup::Ocean);
+        for (kit_id, kit) in &manifest.kits {
+            assert!(
+                !kit.components.iter().any(|id| id == "particlerain"),
+                "{kit_id} includes particlerain"
+            );
+        }
+        assert!(manifest.addons["ocean"]
+            .components
+            .iter()
+            .any(|id| id == "particlerain"));
+        assert_eq!(by_id("irissearch").requires, vec!["shaders".to_string()]);
+        assert_eq!(by_id("miniature").requires, vec!["shaders".to_string()]);
+        assert_eq!(by_id("miniaturexl").requires, vec!["shaders".to_string()]);
+    }
+
+    #[test]
+    fn client_cosmetics_are_rehosted_pack_builds() {
+        type CosmeticPin<'a> = (
+            &'a str,
+            &'a str,
+            u64,
+            &'a str,
+            &'a str,
+            &'a str,
+            Option<&'a [&'a str]>,
+            Option<&'a str>,
+        );
+        let manifest = load_fixture_manifest().unwrap();
+        let by_id = |id: &str| {
+            manifest
+                .components
+                .iter()
+                .find(|component| component.id == id)
+                .unwrap_or_else(|| panic!("missing {id}"))
+        };
+        let prefix = "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.7/";
+        let pins: [CosmeticPin<'_>; 4] = [
+            (
+                "unboundthirdperson",
+                "UnboundThirdPerson-mc26.3-v1.0.6-fabric-no-zoom-animation.jar",
+                422_446,
+                "d804757fbf4b934109c19556f0d7959a5005f19d4e62993d2213caa54e9cb3cc6a870e0430c44a3481ff7ae58be67bd9a95cc620c58598ae3c9a603013410d15",
+                "8d3123a17ac6f2358640abd1a65f6a1e4ba9046d",
+                "MIT",
+                None,
+                Some("43d4c15445b26decb24a350881545c6c578efaf402828c745bc5e0c179d775f14ae68498a1cda083e8b630a456f8922205a116bc5131bb3291e23509d2987a03"),
+            ),
+            (
+                "planeadvancements",
+                "plane_advancements-1.6-mc26.3-no-toolbar.jar",
+                404_997,
+                "91363f134aa0a0ea4f2780a4bf5f1cf82ecca9c06fb8f51699b253c87d7b63fd3d012918f78f1622b365537c2b9181292f3f54ef66a32e5b104fe159b2f4c178",
+                "a9d206ff3174597a4b6600bc49e742859219cd88",
+                "LGPL-3.0-only",
+                Some(&["base"][..]),
+                Some("d6ab8cc78d1b3ada3c4fd647823026ce5b435964c5bcbcc67ac857d85b57e7cf124255d82edefee62161f854b3ca3761076bd55ccacc34c537c255e2cbdad966"),
+            ),
+            (
+                "audiohotkeys",
+                "audio_hotkeys-1.0.14+26.3-no-overlay.jar",
+                51_677,
+                "3a8e391f62e0a0ee91b88f373729462482d82ed17f75f354240de4ec7bade924ccd90606c2b64afa8b0044c35bb1ba8a7ff6339aebf40c2f41600ce7fa10defb",
+                "8e81b2d01ca9a66913f8da1a9c7e45eed8e7d7ec",
+                "GPL-3.0-only",
+                Some(&["vanillaconfig"][..]),
+                Some("d68aa7ce486fa50db761336fed5882a0ebbb7a79017ed131cfb62275eecc5f5f054a8ff3080a9218c07f7ad299005588805f699287b1fe6c8d14af1049a858a6"),
+            ),
+            (
+                "weatherglass",
+                "weatherglass-0.6.0-26.3-fabric.jar",
+                622_512,
+                "98df091fc6082772f7025c0117faa629abef9c3bc0989a5f8a9eaf83972bd5cf0b4d5dc058bfdba2bf372e60f2af79711eb55ace1e3afb8ff031b367f4cff4c7",
+                "5ebc52e155265980d507d587b4475dfed49c2713",
+                "PolyForm-Shield-1.0.0",
+                Some(&["base"][..]),
+                None,
+            ),
+        ];
+        for (id, filename, size, sha512, sha1, license, requires, known_stock) in pins {
+            let component = by_id(id);
+            assert_eq!(component.group, ComponentGroup::Shaders, "{id}");
+            assert_eq!(component.kind, ComponentKind::Download, "{id}");
+            assert!(!component.required_in_all_kits, "{id}");
+            assert_eq!(component.license.as_deref(), Some(license), "{id}");
+            assert_eq!(component.files.len(), 1, "{id}");
+            let file = &component.files[0];
+            assert_eq!(file.dest, FileDest::Mods, "{id}");
+            assert_eq!(file.file, filename, "{id}");
+            assert_eq!(file.url, format!("{prefix}{filename}"), "{id}");
+            assert_eq!(file.sha512, sha512, "{id}");
+            assert_eq!(file.size, size, "{id}");
+            assert_eq!(file.sha1.as_deref(), Some(sha1), "{id}");
+            assert!(!file.url.starts_with("https://cdn.modrinth.com"), "{id}");
+            match requires {
+                Some(deps) => assert_eq!(
+                    component.requires,
+                    deps.iter()
+                        .map(|dep| (*dep).to_string())
+                        .collect::<Vec<_>>(),
+                    "{id}"
+                ),
+                None => assert!(component.requires.is_empty(), "{id}"),
+            }
+            match known_stock {
+                Some(stock) => assert_eq!(component.known_sha512, vec![stock.to_string()], "{id}"),
+                None => assert!(component.known_sha512.is_empty(), "{id}"),
+            }
+            for kit in ["full", "recommended"] {
+                assert!(
+                    manifest.kits[kit].components.iter().any(|item| item == id),
+                    "{kit} missing {id}"
+                );
+            }
+            assert!(
+                !manifest.kits["basic"]
+                    .components
+                    .iter()
+                    .any(|item| item == id),
+                "basic has {id}"
+            );
+        }
+
+        let stock_names = [
+            "UnboundThirdPerson-mc26.3-v1.0.6-fabric.jar",
+            "plane_advancements-1.6-mc26.3.jar",
+            "audio_hotkeys-1.0.14+26.3.jar",
+        ];
+        for component in &manifest.components {
+            assert_ne!(component.id, "touchnmotion");
+            for file in &component.files {
+                assert!(!file.file.starts_with("touch_n_motion"), "{}", file.file);
+                assert!(
+                    !file.file.starts_with("iris-fabric-1.11.6"),
+                    "{}",
+                    file.file
+                );
+                assert!(!stock_names.contains(&file.file.as_str()), "{}", file.file);
+            }
+        }
+    }
+
+    #[test]
+    fn ba_plus_resource_packs_install_from_modrinth() {
+        let manifest = load_fixture_manifest().unwrap();
+        let by_id = |id: &str| {
+            manifest
+                .components
+                .iter()
+                .find(|component| component.id == id)
+                .unwrap_or_else(|| panic!("missing {id}"))
+        };
+        let pins = [
+            (
+                "freshanimations",
+                "Fresh Animations",
+                "1.10.5",
+                "LicenseRef-See-Terms-of-Use-in-Description",
+                &["emf", "etf"][..],
+                "FreshAnimations_v1.10.5.zip",
+                "FreshAnimations_v*.zip",
+                "https://cdn.modrinth.com/data/50dA9Sha/versions/RGIzA5em/FreshAnimations_v1.10.5.zip",
+                "f4f2a1d294c2e0afe245b6987fea4a84ff120f131a7f2cfb16779e9cc5d0a00b3d49bf1585ac827d6690c36421e8dda203b0c6e642bb0c6aa067c5921dd8dc30",
+                "0d069c5583d1dd4591e55ec5ff6dd0905f3f8615",
+                645_816_u64,
+            ),
+            (
+                "mfrp",
+                "Matcha Flavoured resource pack",
+                "1.12.7-alpha",
+                "CC-BY-NC-SA-4.0",
+                &[] as &[&str],
+                "MFRP_1_12_7_26_3.zip",
+                "MFRP_*.zip",
+                "https://cdn.modrinth.com/data/QI0EmgZ1/versions/leNTHiGm/MFRP_1_12_7_26_3.zip",
+                "d2d5a0fffa845298285fcc4f5142496bcf2924ed29919be9a9010043a0d03814fa9af21dcf14f641590c0d81b93b4cd91572a9de9343a5e07dd830091645c18d",
+                "6982ab0a3659e27759d55fc389f7817ee1080f99",
+                19_729_113,
+            ),
+            (
+                "matchablockoverlays",
+                "Matcha Block Overlays",
+                "2+continuity",
+                "CC-BY-NC-SA-4.0",
+                &["continuity"][..],
+                "Matcha-Block-Overlays-2+continuity.zip",
+                "Matcha-Block-Overlays-*.zip",
+                "https://cdn.modrinth.com/data/NsganuaN/versions/IcpWfApp/Matcha%20Block%20Overlays%202%2Bcontinuity.zip",
+                "f3a227ab60e8b1e5dc329abb52a82104441c3f899796b7e10773a23b9d88583cec2bb0a172960e949b54bd09c28d814f2ae359c4d43d944eaf77f66bf7a69ad5",
+                "11b062960ca7b5c81173b14a6b11ad87066dfb6f",
+                1_227_532,
+            ),
+            (
+                "bushypetals",
+                "Bushy pink petals, wildflowers & leaf litter",
+                "1.0.1",
+                "Apache-2.0",
+                &[] as &[&str],
+                "Bushy-pink-petals-wildflowers-leaf-litter.zip",
+                "Bushy-pink-petals-*.zip",
+                "https://cdn.modrinth.com/data/IVU3SHSl/versions/y3AuodI0/Bushy%20pink%20petals%2C%20wildflowers%20%20leaf%20litter.zip",
+                "aee85080703b79119b79b4ddcf79d7e5eccf8bbab47c0fbe03fba918bff1fbcd89368f72de6a86714b148eae86a3b59a780a0039b5bf228e5975435d4113f7ce",
+                "a287f4205901ba93ed3b847e7332431df0872367",
+                230_208,
+            ),
+            (
+                "rainbowsfoliage",
+                "Rainbow's Foliage: Polytone",
+                "2.0",
+                "LicenseRef-All-Rights-Reserved",
+                &["polytone"][..],
+                "rainbows-foliage-polytone-edition-v2.0.zip",
+                "rainbows-foliage-*.zip",
+                "https://cdn.modrinth.com/data/bY2CaVIh/versions/JcLjpSJg/rainbows-foliage-polytone-edition-v2.0.zip",
+                "823a0afb2cc074046565de404bde4bbe63a9329fae9a5f95fb80ff519e0bbea831bf228d2f2e3f6985b6feba9b5d4d3141b2b91f84baeb79d97a891a0bddea76",
+                "290ea3c92c46ef78e977ec74806ad77c93e97af1",
+                4_434_050,
+            ),
+            (
+                "grassrise",
+                "Grassrise",
+                "1.0.3",
+                "LicenseRef-All-Rights-Reserved",
+                &[] as &[&str],
+                "Grassrise-1.0.3-mc26.3.zip",
+                "Grassrise-*.zip",
+                "https://cdn.modrinth.com/data/S5FvlY0N/versions/WFG9Lpck/Grassrise-1.0.3-mc26.3.zip",
+                "8e03a816e982adb2059a2472c81efaf8616396486d17b7c6c3df87b5eccdad7377666a85a55492cd6a8a5c3d3890ef00a2821fbec55cce4668ef798747567d82",
+                "47afa7eadaf3e62bee32d5c6887acb767f42e919",
+                35_425,
+            ),
+        ];
+        for (id, name, version, license, requires, filename, glob, url, sha512, sha1, size) in pins
+        {
+            let component = by_id(id);
+            assert_eq!(component.name, name, "{id}");
+            assert_eq!(component.version, version, "{id}");
+            assert_eq!(component.license.as_deref(), Some(license), "{id}");
+            assert_eq!(component.group, ComponentGroup::Shaders, "{id}");
+            assert_eq!(component.kind, ComponentKind::Download, "{id}");
+            assert!(!component.required_in_all_kits, "{id}");
+            assert_eq!(
+                component.requires,
+                requires
+                    .iter()
+                    .map(|dep| (*dep).to_string())
+                    .collect::<Vec<_>>(),
+                "{id}"
+            );
+            assert_eq!(component.files.len(), 1, "{id}");
+            let file = &component.files[0];
+            assert_eq!(file.dest, FileDest::Resourcepacks, "{id}");
+            assert_eq!(file.file, filename, "{id}");
+            assert_eq!(file.match_glob, glob, "{id}");
+            assert_eq!(file.url, url, "{id}");
+            assert_eq!(file.sha512, sha512, "{id}");
+            assert_eq!(file.sha1.as_deref(), Some(sha1), "{id}");
+            assert_eq!(file.size, size, "{id}");
+            assert!(file.url.starts_with("https://cdn.modrinth.com/"), "{id}");
+            assert!(component.description.contains("Client only"), "{id}");
+            assert!(component.description.contains("Not needed to join"), "{id}");
+            for kit in ["full", "recommended"] {
+                assert!(
+                    manifest.kits[kit].components.iter().any(|item| item == id),
+                    "{kit} missing {id}"
+                );
+            }
+            assert!(
+                !manifest.kits["basic"]
+                    .components
+                    .iter()
+                    .any(|item| item == id),
+                "basic has {id}"
+            );
+            for addon in manifest.addons.values() {
+                assert!(
+                    !addon.components.iter().any(|item| item == id),
+                    "{id} is in an addon"
+                );
+            }
+        }
+        let mut pack_files = 0;
+        for component in &manifest.components {
+            for file in &component.files {
+                if file.dest == FileDest::Resourcepacks {
+                    pack_files += 1;
+                    assert!(
+                        file.url.starts_with("https://cdn.modrinth.com/"),
+                        "{}",
+                        file.file
+                    );
+                }
+            }
+        }
+        assert_eq!(pack_files, 6);
+    }
+
+    #[test]
+    fn file_dest_resourcepacks_round_trips() {
+        assert_eq!(
+            serde_json::from_str::<FileDest>("\"resourcepacks\"").unwrap(),
+            FileDest::Resourcepacks
+        );
+        assert_eq!(
+            serde_json::to_string(&FileDest::Resourcepacks).unwrap(),
+            "\"resourcepacks\""
+        );
+        assert_eq!(FileDest::Mods.folder(), "mods");
+        assert_eq!(FileDest::Shaderpacks.folder(), "shaderpacks");
+        assert_eq!(FileDest::Resourcepacks.folder(), "resourcepacks");
+        assert_eq!(
+            FileDest::from_rel_path("resourcepacks/a.zip"),
+            Some(FileDest::Resourcepacks)
+        );
+        assert_eq!(FileDest::from_rel_path("config/x"), None);
+    }
+
+    #[test]
+    fn ba_plus_arr_mods_download_only_from_modrinth() {
+        let manifest = load_fixture_manifest().unwrap();
+        let by_id = |id: &str| {
+            manifest
+                .components
+                .iter()
+                .find(|component| component.id == id)
+                .unwrap_or_else(|| panic!("missing {id}"))
+        };
+        // Serene Seasons and GlitchCore are ARR too: if restored (plan §9.2), add them to this list.
+        for id in [
+            "coolrain",
+            "tradecycling",
+            "flashback",
+            "streamsreflowing",
+            "sounds",
+            "mru",
+            "axiom",
+            "punchy",
+            "voicechat",
+            "rainbowsfoliage",
+            "grassrise",
+        ] {
+            let component = by_id(id);
+            assert_eq!(
+                component.license.as_deref(),
+                Some("LicenseRef-All-Rights-Reserved"),
+                "{id}"
+            );
+            for file in &component.files {
+                assert!(
+                    file.url.starts_with("https://cdn.modrinth.com/"),
+                    "{id} {}",
+                    file.url
+                );
+                assert!(!file.url.starts_with("https://github.com/"), "{id}");
+            }
+        }
+        for component in &manifest.components {
+            if component.license.as_deref() != Some("LicenseRef-All-Rights-Reserved") {
+                continue;
+            }
+            for file in &component.files {
+                assert!(
+                    !file.url.starts_with("https://github.com/"),
+                    "{}",
+                    component.id
+                );
+            }
+        }
+        let fresh = by_id("freshanimations");
+        assert_eq!(
+            fresh.license.as_deref(),
+            Some("LicenseRef-See-Terms-of-Use-in-Description")
+        );
+        for file in &fresh.files {
+            assert!(!file.url.contains("github.com"), "{}", file.url);
+        }
+    }
+
+    #[test]
+    fn locked_components_only_require_locked_components() {
+        let manifest = load_fixture_manifest().unwrap();
+        let locked: std::collections::BTreeSet<String> = manifest
+            .components
+            .iter()
+            .filter(|component| component.required_in_all_kits)
+            .map(|component| component.id.clone())
+            .collect();
+        for component in &manifest.components {
+            if !component.required_in_all_kits {
+                continue;
+            }
+            for req in &component.requires {
+                assert!(
+                    locked.contains(req),
+                    "{} requires unlocked {req}",
+                    component.id
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn match_globs_never_claim_another_components_file() {
+        let manifest = load_fixture_manifest().unwrap();
+        let mut rows: Vec<(&str, FileDest, &str, &str)> = Vec::new();
+        for component in &manifest.components {
+            for file in &component.files {
+                assert!(
+                    crate::plan::match_glob(&file.match_glob, &file.file),
+                    "{} {} does not match {}",
+                    component.id,
+                    file.file,
+                    file.match_glob
+                );
+                assert!(!file.file.contains(' '), "{}", file.file);
+                rows.push((
+                    component.id.as_str(),
+                    file.dest,
+                    file.file.as_str(),
+                    file.match_glob.as_str(),
+                ));
+            }
+        }
+        for left in &rows {
+            for right in &rows {
+                if left.0 != right.0 && left.1 == right.1 {
+                    assert!(
+                        !crate::plan::match_glob(left.3, right.2),
+                        "glob overlap {} {} ~ {} {}",
+                        left.0,
+                        left.3,
+                        right.0,
+                        right.2
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn miniature_shader_ships_once() {
+        let manifest = load_fixture_manifest().unwrap();
+        let sha512 = "bc2d9f3d135e8608f4735e5372b893e17cdc630b7536ec1e0b9a4d2734167d1a2102e60de60731d21d8a9741cec1a82530d03bf634b7e7cf9a0f107077c0e7fa";
+        let mut count = 0;
+        for component in &manifest.components {
+            for file in &component.files {
+                if file.sha512 == sha512 && file.dest == FileDest::Shaderpacks {
+                    count += 1;
+                }
+            }
+        }
+        assert_eq!(count, 1);
+        let by_id = |id: &str| {
+            manifest
+                .components
+                .iter()
+                .find(|component| component.id == id)
+                .unwrap()
+        };
+        assert_eq!(
+            by_id("miniature").files[0].match_glob,
+            "miniature-shader-*.zip"
+        );
+        assert_eq!(by_id("miniaturexl").files[0].match_glob, "MiniatureXL*.zip");
+        assert!(!crate::plan::match_glob(
+            "miniature-shader-*.zip",
+            "MiniatureXL-1.0.zip"
+        ));
+        assert!(!crate::plan::match_glob(
+            "MiniatureXL*.zip",
+            "miniature-shader-2.19.zip"
+        ));
+    }
+
+    #[test]
+    fn quality_presets_never_skip_a_locked_component() {
+        let manifest = load_fixture_manifest().unwrap();
+        let locked: Vec<String> = manifest
+            .components
+            .iter()
+            .filter(|component| component.required_in_all_kits)
+            .map(|component| component.id.clone())
+            .collect();
+        let table = manifest.quality_presets.expect("qualityPresets");
+        for (level, row) in [
+            ("potato", &table.potato),
+            ("lite", &table.lite),
+            ("normal", &table.normal),
+            ("ultra", &table.ultra),
+        ] {
+            for skip in &row.skip_components {
+                assert!(
+                    !locked.iter().any(|id| id == skip),
+                    "{level} skips locked {skip}"
+                );
+            }
+        }
     }
 }

@@ -33,7 +33,8 @@ describe("The Architect addon stays off", () => {
       expect(manifest.kits[kit].components).not.toContain("litematica");
       expect(manifest.kits[kit].components).not.toContain("malilib");
       expect(manifest.kits[kit].components).not.toContain("saoaincrad");
-      expect(manifest.kits[kit].components).not.toContain("geckolib");
+      // GeckoLib is a Better Adventures+ library now (locked in every kit), not the old SAO addon.
+      expect(manifest.kits[kit].components).toContain("geckolib");
     }
     for (const level of ["potato", "lite", "normal", "ultra"] as const) {
       const row = manifest.qualityPresets?.[level];
