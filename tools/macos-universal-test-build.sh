@@ -6,12 +6,10 @@
 # The bundler then fails looking for
 # src-tauri/target/universal-apple-darwin/release/release-manifest.
 # release-manifest stays a normal package bin (Linux CI and
-# tools/release-manifest need it). If the universal build fails because
-# that bin was not lipo'd, create it from the aarch64 and x86_64 outputs
-# and re-run the same build. Tauri does not remove sibling files in the
-# universal release dir, so the lipo'd bin is still there when bundling
-# runs again. If a lipo input is missing, print the path and exit with
-# the original build status without a second build.
+# tools/release-manifest need it). Recovery runs only when the first
+# build's output shows that specific missing-binary copy error. Other
+# failures keep their original status and are not retried. If a lipo
+# input is missing, print the path and exit with the original status.
 set -euo pipefail
 
 cd "$(cd "$(dirname "$0")" && pwd)/.."
@@ -20,17 +18,28 @@ universal="src-tauri/target/universal-apple-darwin/release"
 arm64="src-tauri/target/aarch64-apple-darwin/release"
 x64="src-tauri/target/x86_64-apple-darwin/release"
 
+log="$(mktemp)"
+cleanup() { rm -f "${log}"; }
+trap cleanup EXIT
+
 set +e
-npx tauri build --target universal-apple-darwin "$@" --bundles app,dmg
-status=$?
+set +o pipefail
+npx tauri build --target universal-apple-darwin "$@" --bundles app,dmg 2>&1 | tee "${log}"
+status="${PIPESTATUS[0]}"
 set -e
+set -o pipefail
 if [[ "${status}" -eq 0 ]]; then
   exit 0
 fi
 
+if ! grep -E -q 'Failed to copy binary from ".*universal-apple-darwin/release/release-manifest"' "${log}" \
+  || ! grep -F -q 'does not exist' "${log}"; then
+  echo "tauri build failed for a reason other than a missing universal release-manifest; not retrying" >&2
+  exit "${status}"
+fi
+
 if [[ ! -d "${universal}" ]]; then
-  echo "FAIL: ${universal} does not exist." >&2
-  echo "tauri build failed before the universal release dir was created; not retrying." >&2
+  echo "FAIL: ${universal} does not exist after a missing release-manifest error." >&2
   exit "${status}"
 fi
 
