@@ -597,4 +597,49 @@ mod tests {
         let base_at = plan.components.iter().position(|id| id == "base").unwrap();
         assert!(base_at < malilib_at && malilib_at < litematica_at && litematica_at < architect_at);
     }
+
+    #[test]
+    fn basic_kit_installs_midnightlib_without_coolrain() {
+        let manifest = load_fixture_manifest().unwrap();
+        let plan = build_plan(
+            &manifest,
+            &Selection {
+                kit: "basic".into(),
+                custom_components: vec![],
+                ocean: false,
+                addons: BTreeMap::new(),
+                snow_lite: None,
+                quality: None,
+            },
+            None,
+            true,
+        )
+        .unwrap();
+        for id in [
+            "midnightlib",
+            "terrainslabs",
+            "architectury",
+            "lithium",
+            "clumps",
+            "dietplus",
+            "base",
+        ] {
+            assert!(
+                plan.components.iter().any(|item| item == id),
+                "basic missing {id}"
+            );
+        }
+        for id in [
+            "coolrain",
+            "flashback",
+            "appleskin",
+            "miniature",
+            "glitchcore",
+        ] {
+            assert!(
+                !plan.components.iter().any(|item| item == id),
+                "basic has {id}"
+            );
+        }
+    }
 }

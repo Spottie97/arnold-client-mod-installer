@@ -1,12 +1,12 @@
 {
   "schema": 3,
-  "manifestVersion": "2026.11.6",
+  "manifestVersion": "2026.11.7",
   "minAppVersion": "3.0.0",
   "minecraft": "26.3",
   "currentServerShipwright": "0.11.2",
   "loader": {
     "id": "fabric-loader-0.20.1-26.3",
-    "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.6/fabric-loader-0.20.1-26.3.json",
+    "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.7/fabric-loader-0.20.1-26.3.json",
     "sha512": "babd24cc307a2654b95026e3a82d83e60028d9dfc2974531b45f51498352372637091ee062d7d7b29580a7c2ed8f7bccbaf69acd20d061422ed4d9c7c06436a1"
   },
   "components": [
@@ -15,19 +15,20 @@
       "group": "base",
       "kind": "base",
       "required": true,
-      "requiredInAllKits": false,
+      "requiredInAllKits": true,
       "name": "Fabric API",
-      "version": "0.165.0",
-      "description": "Fabric API used by every Arnold client mod.",
+      "version": "0.166.2",
+      "description": "Fabric API used by every Arnold and Better Adventures+ mod.",
       "license": "Apache-2.0",
       "files": [
         {
-          "file": "fabric-api-0.165.0+26.3.jar",
+          "file": "fabric-api-0.166.2+26.3.jar",
           "dest": "mods",
           "match": "fabric-api-*.jar",
-          "url": "https://cdn.modrinth.com/data/P7dR8mSH/versions/EQKgpeKu/fabric-api-0.165.0%2B26.3.jar",
-          "sha512": "0a4b8a14e847b71567b557b43d906c2167fa263eeeef37454a821ba286996e3da1616dc2d9647736d28a250d5ecf400541cae808359b29a62324a8a6f2ad5e30",
-          "size": 1778588
+          "url": "https://cdn.modrinth.com/data/P7dR8mSH/versions/Zns5SSRA/fabric-api-0.166.2%2B26.3.jar",
+          "sha512": "fb686a9fa923248328107a12498229d6951e316257f18b7d0e4cbd6885ba447ed50a44076a8a5ba47cfe2043b329db3587ab000aeab1face26b2587a5d4ba6b5",
+          "size": 1797523,
+          "sha1": "65636253571429971f25f5619692e6c1a6362028"
         }
       ]
     },
@@ -110,7 +111,7 @@
           "file": "arnold-deck-client-0.11.1.jar",
           "dest": "mods",
           "match": "arnold-deck-client-*.jar",
-          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.6/arnold-deck-client-0.11.1.jar",
+          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.7/arnold-deck-client-0.11.1.jar",
           "sha512": "a5619fffe5e4008054340f8f2bb6b40a30861b2763404b7f398534831907bdfce3fbdb15f307c1d52ecaf4e51522e47f70c7c25267b0206769108b43660b0b58",
           "size": 11243
         }
@@ -197,7 +198,7 @@
           "file": "arnold-ships-client-0.10.3.jar",
           "dest": "mods",
           "match": "arnold-ships-client-*.jar",
-          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.6/arnold-ships-client-0.10.3.jar",
+          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.7/arnold-ships-client-0.10.3.jar",
           "sha512": "bf6a3a5a3395b46e69a16144af682b9610b0868bd40b0ae531698705c1c16f552b41eb914176564cbf2f4406dcb8e4c2cb0cb71b47663f5534a22c5b252f7249",
           "size": 7460714
         }
@@ -338,9 +339,54 @@
           "file": "arnold-snowfall-1.3.3.jar",
           "dest": "mods",
           "match": "arnold-snowfall*.jar",
-          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.6/arnold-snowfall-1.3.3.jar",
+          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.7/arnold-snowfall-1.3.3.jar",
           "sha512": "2c8e4c8a8adf564475765bdca2bd3aaa9873d8f2f79ba76e1f7fac531adbf389f32914d13e1ded9daa8f004dc2e8ccd6007fbb1d94e8c1cfc165215ab51d1199",
           "size": 152127
+        }
+      ]
+    },
+    {
+      "id": "dietplus",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "requiredInAllKits": true,
+      "name": "Diet+",
+      "version": "2.2.0",
+      "description": "Food groups for the Arnold server: eating fruits, grains, vegetables, proteins and sugars gives bonuses. The server runs it too, so every kit installs it.",
+      "license": "LGPL-3.0-or-later",
+      "files": [
+        {
+          "file": "dietplus-fabric-2.2.0+26.3.jar",
+          "dest": "mods",
+          "match": "dietplus-fabric-*.jar",
+          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.7/dietplus-fabric-2.2.0+26.3.jar",
+          "sha512": "605ceff04a93b8a243c351d0ff8f27e58e2088b24dfc95f6e07564a4e7dda941c6e9799fc453576d1d855679bb39c38c8ab198e5c04d18661f1ec4f08a8126c9",
+          "size": 873679
+        }
+      ]
+    },
+    {
+      "id": "appleskin",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "name": "AppleSkin",
+      "version": "3.0.10",
+      "description": "Client HUD: shows how much hunger and saturation food restores. Pairs with Diet+.",
+      "license": "Unlicense",
+      "files": [
+        {
+          "file": "appleskin-fabric-mc26.3-3.0.10.jar",
+          "dest": "mods",
+          "match": "appleskin-*.jar",
+          "url": "https://cdn.modrinth.com/data/EsAfCjCV/versions/PHjDtQay/appleskin-fabric-mc26.3-3.0.10.jar",
+          "sha512": "17d257af419b7530aa8617c2e8c0e4bbfabcf888f26655790e0188e7957e0bcd931f85f9a4c69fd27e889dee5082cf7b2b8741a14a6ed4425e9ef4bfe13a8b8c",
+          "size": 180194
         }
       ]
     },
@@ -352,17 +398,18 @@
         "base"
       ],
       "name": "Particle Rain",
-      "version": "4.0.2",
+      "version": "4.0.3",
       "description": "Rain splash and weather particles.",
       "license": "MIT",
       "files": [
         {
-          "file": "particlerain-4.0.2+26.3-fabric.jar",
+          "file": "particlerain-4.0.3+26.3-fabric.jar",
           "dest": "mods",
           "match": "particlerain-*.jar",
-          "url": "https://cdn.modrinth.com/data/nrikgvxm/versions/ecVAaY1R/particlerain-4.0.2%2B26.3-fabric.jar",
-          "sha512": "b87684651246c05d0985c88cc0e05ba0e5bdf04d6e5c3ec90962d4342d9f70bc13a4ca86a4276022d71afdcfd69709596e070f3cfe1ae0ee3484dc2924121f19",
-          "size": 627188
+          "url": "https://cdn.modrinth.com/data/nrikgvxm/versions/ddleyxF8/particlerain-4.0.3%2B26.3-fabric.jar",
+          "sha512": "c0e2ecea7d1ffc76e9b95103ff2c6443374907cdf050bdfb5838073c38c042299015ceb9421b8530635cd7c0e4011002d280d158719e4a0c6ac7bc46c4c1f2df",
+          "size": 628245,
+          "sha1": "7b77b734bc5cbfc48307a2876d5c4e1cb193444b"
         }
       ]
     },
@@ -446,11 +493,12 @@
     },
     {
       "id": "lithium",
-      "group": "shaders",
+      "group": "arnold",
       "kind": "download",
+      "requiredInAllKits": true,
       "name": "Lithium",
       "version": "0.26.3",
-      "description": "Speeds up game logic on this client. The Arnold server does not need Lithium.",
+      "description": "Speeds up game logic. Part of the Better Adventures+ set the Arnold server runs, so every kit installs it.",
       "license": "LGPL-3.0-only",
       "files": [
         {
@@ -465,14 +513,15 @@
     },
     {
       "id": "clumps",
-      "group": "shaders",
+      "group": "arnold",
       "kind": "download",
       "requires": [
         "base"
       ],
+      "requiredInAllKits": true,
       "name": "Clumps",
       "version": "26.3.2",
-      "description": "Merges experience orbs so they cause less lag. Client only here. The server does not need it.",
+      "description": "Merges experience orbs so they cause less lag. Part of the Better Adventures+ set the Arnold server runs, so every kit installs it.",
       "license": "MIT",
       "files": [
         {
@@ -695,6 +744,1917 @@
           "size": 2570616
         }
       ]
+    },
+    {
+      "id": "fallingtree",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "requiredInAllKits": true,
+      "name": "FallingTree",
+      "version": "25",
+      "description": "Chop a whole tree by breaking one log. Needed to join the Arnold server (Better Adventures+). The server runs it, so every kit installs it.",
+      "license": "LGPL-3.0-only",
+      "files": [
+        {
+          "file": "FallingTree-26.3-25.jar",
+          "dest": "mods",
+          "match": "FallingTree-*.jar",
+          "url": "https://cdn.modrinth.com/data/Fb4jn8m6/versions/MGpq6CjC/FallingTree-26.3-25.jar",
+          "sha512": "c0c40ce1f7e07db33d42f19aeef707ef143f567e59f96b87663afc3af77c1413e131a97b9c3b405f1e4e21735625429381f55023d9cfb09b87deaabf5deecf2e",
+          "size": 493893,
+          "sha1": "ed3407d378c10e2382af1a8a550bca80f94bf448"
+        }
+      ]
+    },
+    {
+      "id": "c2me",
+      "group": "arnold",
+      "kind": "download",
+      "requiredInAllKits": true,
+      "name": "C2ME",
+      "version": "0.4.2-alpha.0.103",
+      "description": "Faster chunk loading and generation. Needed to join the Arnold server (Better Adventures+). The server runs it, so every kit installs it.",
+      "license": "LGPL-3.0-only",
+      "files": [
+        {
+          "file": "c2me-fabric-mc26.3-0.4.2-alpha.0.103.jar",
+          "dest": "mods",
+          "match": "c2me-fabric-*.jar",
+          "url": "https://cdn.modrinth.com/data/VSNURh3q/versions/1kwL6YC2/c2me-fabric-mc26.3-0.4.2-alpha.0.103.jar",
+          "sha512": "0925dbf961917666cc8b64d35532261090998e90f7c7432512e12d7fff3b1e18602653e5b56a2aefacfc7613931c50b4065bd3accb4555bcb0a14d5d4337a79b",
+          "size": 3890858,
+          "sha1": "c5e3e525fe7cb37583c30a8285a47d29f3b9d09c"
+        }
+      ]
+    },
+    {
+      "id": "soundphysics",
+      "group": "arnold",
+      "kind": "download",
+      "requiredInAllKits": true,
+      "name": "Sound Physics Remastered",
+      "version": "1.5.2",
+      "description": "Echo and muffled sound through walls. Needed to join the Arnold server (Better Adventures+). The server runs it, so every kit installs it.",
+      "license": "GPL-3.0-only",
+      "files": [
+        {
+          "file": "sound-physics-remastered-fabric-1.5.2+26.3.jar",
+          "dest": "mods",
+          "match": "sound-physics-remastered-*.jar",
+          "url": "https://cdn.modrinth.com/data/qyVF9oeo/versions/gA7nKz5g/sound-physics-remastered-fabric-1.5.2%2B26.3.jar",
+          "sha512": "1752e63f490b97617f62f8a32713e40b305d87e35b471d956335bcce4ab8b3a40df5b398896ab9b24b930e7869533c3086baa31b4adb35faf5851d3eecf46c0c",
+          "size": 202171,
+          "sha1": "71bd05396d44481fd48171c6d24e047285a93781"
+        }
+      ]
+    },
+    {
+      "id": "inventorysorter",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base",
+        "clothconfig"
+      ],
+      "requiredInAllKits": true,
+      "name": "Inventory Sorter",
+      "version": "3.0.1",
+      "description": "Middle-click to sort a chest or your inventory. Needed to join the Arnold server (Better Adventures+). The server runs it, so every kit installs it.",
+      "license": "MIT",
+      "files": [
+        {
+          "file": "inventorysorter-fabric-3.0.1+mc26.3.jar",
+          "dest": "mods",
+          "match": "inventorysorter-*.jar",
+          "url": "https://cdn.modrinth.com/data/5ibSyLAz/versions/SJkiyopK/inventorysorter-fabric-3.0.1%2Bmc26.3.jar",
+          "sha512": "712d4cda1e91d59c7e9cac876df1e37fb8e82afa0afff666a88e63eb7dd9dbad4b32c83eb98b01f6c07863d9b2ff844f79526cd806b0a69fe0c60e6ca220f12e",
+          "size": 3798151,
+          "sha1": "2b0f704848bcb5e6e807e49ce9c502af6fee9f72"
+        }
+      ]
+    },
+    {
+      "id": "universalbonemeal",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base",
+        "forgeconfigapiport",
+        "puzzleslib"
+      ],
+      "requiredInAllKits": true,
+      "name": "Universal Bone Meal",
+      "version": "26.3.1",
+      "description": "Bone meal works on more plants. Needed to join the Arnold server (Better Adventures+). The server runs it, so every kit installs it.",
+      "license": "MPL-2.0",
+      "files": [
+        {
+          "file": "universalbonemeal-v26.3.1-mc26.3.x+fabric.jar",
+          "dest": "mods",
+          "match": "universalbonemeal-*.jar",
+          "url": "https://cdn.modrinth.com/data/66VIiT1y/versions/ikcuA9Cf/universalbonemeal-v26.3.1-mc26.3.x%2Bfabric.jar",
+          "sha512": "a4286a94fc8b62c093565858a564c76b49e5046bf3894a8a72f297b94827c00bfdeed0a30e224e5f058dcc4f2b2623f81ae815d9cc47df4fd0390a7dfbf45202",
+          "size": 252821,
+          "sha1": "9371da945e5fec742a68db47261abfc1497a7e6f"
+        }
+      ]
+    },
+    {
+      "id": "geckolib",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "requiredInAllKits": true,
+      "name": "GeckoLib",
+      "version": "5.5.7",
+      "description": "Animation library used by Better Adventures+ mods. Needed to join the Arnold server (Better Adventures+). The server runs it, so every kit installs it.",
+      "license": "MIT",
+      "files": [
+        {
+          "file": "geckolib-fabric-26.3-5.5.7.jar",
+          "dest": "mods",
+          "match": "geckolib-*.jar",
+          "url": "https://cdn.modrinth.com/data/8BmcQJ2H/versions/kSxHvs99/geckolib-fabric-26.3-5.5.7.jar",
+          "sha512": "c7c89bd6c5f2801ef1575e2e1212202f5a3eff480d73503beff12b1d60dfb751112fccf36e36c243b26b6b492261cef12d8b2c1a92a734bb0b621daa8c158fc5",
+          "size": 1191230,
+          "sha1": "064ad66ea62bcf3fd0e89a719843b1a06c81925c"
+        }
+      ]
+    },
+    {
+      "id": "voicechat",
+      "group": "arnold",
+      "kind": "download",
+      "requiredInAllKits": true,
+      "name": "Simple Voice Chat",
+      "version": "2.6.27",
+      "description": "Proximity voice chat. Needed to join the Arnold server (Better Adventures+). The server runs it, so every kit installs it.",
+      "license": "LicenseRef-All-Rights-Reserved",
+      "files": [
+        {
+          "file": "voicechat-fabric-2.6.27+26.3.jar",
+          "dest": "mods",
+          "match": "voicechat-*.jar",
+          "url": "https://cdn.modrinth.com/data/9eGKb6K1/versions/x9jLR94Q/voicechat-fabric-2.6.27%2B26.3.jar",
+          "sha512": "f2de66761c0f249bb0f9a4b348f98b97ab4e89d3ed3fd37638420364b7431b757933aa08c0cc3e7ba3dd85a602d6c2de313c2309fc587e93cabf31fc5f6df27e",
+          "size": 5611159,
+          "sha1": "23442735927fe3839650196c0656eb82b0322d87"
+        }
+      ]
+    },
+    {
+      "id": "lootr",
+      "group": "arnold",
+      "kind": "download",
+      "requiredInAllKits": true,
+      "name": "Lootr",
+      "version": "1.25.42.124",
+      "description": "Every player gets their own loot from structure chests. Needed to join the Arnold server (Better Adventures+). The server runs it, so every kit installs it.",
+      "license": "MIT",
+      "files": [
+        {
+          "file": "lootr-fabric-26.3-1.25.42.124.jar",
+          "dest": "mods",
+          "match": "lootr-*.jar",
+          "url": "https://cdn.modrinth.com/data/EltpO5cN/versions/gVwn7m2v/lootr-fabric-26.3-1.25.42.124.jar",
+          "sha512": "290786fd4af4011c4f09c425d262bacc80f6ef47e23fbf6424193c719b6045a70cae70308c95d30c5ab78bf1f5a3d089cc3b01db8cc4dacc1a74c0f2d70c245d",
+          "size": 1583342,
+          "sha1": "34451e642ef673386359a584c4b83d381c69d252"
+        }
+      ]
+    },
+    {
+      "id": "fzzyconfig",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base",
+        "kotlin"
+      ],
+      "requiredInAllKits": true,
+      "name": "Fzzy Config",
+      "version": "0.7.7+fix3",
+      "description": "Config library used by Better Adventures+ mods. Needed to join the Arnold server (Better Adventures+). The server runs it, so every kit installs it.",
+      "license": "LicenseRef-TDL-M",
+      "files": [
+        {
+          "file": "fzzy_config-0.7.7+fix3+26.3.jar",
+          "dest": "mods",
+          "match": "fzzy_config-*.jar",
+          "url": "https://cdn.modrinth.com/data/hYykXjDp/versions/YkOumqzV/fzzy_config-0.7.7%2Bfix3%2B26.3.jar",
+          "sha512": "bbf47ab921fec1215d6e59ab0d875b565c22bbf039ae985b6e64313412b66835c443006c428ac9b8ef7ba396a4e0aa2bb0d65126c95a595bc56376655cb1c9ee",
+          "size": 2375413,
+          "sha1": "373b6365bb9f447d2810c151ec2f698ee789366f"
+        }
+      ]
+    },
+    {
+      "id": "vanillaconfig",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "requiredInAllKits": true,
+      "name": "VanillaConfig",
+      "version": "1.2.18",
+      "description": "Config library used by Better Adventures+ mods. Needed to join the Arnold server (Better Adventures+). The server runs it, so every kit installs it.",
+      "license": "GPL-3.0-only",
+      "files": [
+        {
+          "file": "vanillaconfig-1.2.18+26.3.jar",
+          "dest": "mods",
+          "match": "vanillaconfig-*.jar",
+          "url": "https://cdn.modrinth.com/data/vtYpD93u/versions/lCymx8GV/vanillaconfig-1.2.18%2B26.3.jar",
+          "sha512": "b4a91dda3b92c86e33a61c2a8f73645a3fcfec1e4049c5ed5369363c8394ae5638a949af1d18a43184e7980557e79b67e012986c8b0f68af56c60691aed28d3c",
+          "size": 104155,
+          "sha1": "a3f74738ef7e49545cbcb5a9e225ca892414a559"
+        }
+      ]
+    },
+    {
+      "id": "puzzleslib",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base",
+        "forgeconfigapiport"
+      ],
+      "requiredInAllKits": true,
+      "name": "Puzzles Lib",
+      "version": "26.3.14",
+      "description": "Library used by Better Adventures+ mods. Needed to join the Arnold server (Better Adventures+). The server runs it, so every kit installs it.",
+      "license": "MPL-2.0",
+      "files": [
+        {
+          "file": "puzzleslib-v26.3.14-mc26.3.x+fabric.jar",
+          "dest": "mods",
+          "match": "puzzleslib-*.jar",
+          "url": "https://cdn.modrinth.com/data/QAGBst4M/versions/7SSd41Tf/puzzleslib-v26.3.14-mc26.3.x%2Bfabric.jar",
+          "sha512": "48a9a77a8c0bb3a0aa0738d1a36c3a185d561494d9cfebd23199f0643d557fdc4571073cd974af2a6ad81b7c9b381d5b1baf9c1249380123acec7af99a7d0d9a",
+          "size": 1092880,
+          "sha1": "72a8a1c67a0a582399c028eba4f423ca604d0cbd"
+        }
+      ]
+    },
+    {
+      "id": "hidearmor",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "requiredInAllKits": true,
+      "name": "Hide Your Armor",
+      "version": "1.7.1",
+      "description": "Choose which armour pieces show on your character. Needed to join the Arnold server (Better Adventures+). The server runs it, so every kit installs it.",
+      "license": "MIT",
+      "files": [
+        {
+          "file": "HideYourArmor-1.7.1+mc26.3-universal.jar",
+          "dest": "mods",
+          "match": "HideYourArmor-*.jar",
+          "url": "https://cdn.modrinth.com/data/htFd9eMF/versions/JA8k1Tf0/HideYourArmor-1.7.1%2Bmc26.3-universal.jar",
+          "sha512": "8c7c4f4cf334a59506b65593b6d76a18e0b8634371e141b3723443c4283796e488273279e203a7720057d3bff9957dde249b6c51cd4cf07efbfff1f491e6ace4",
+          "size": 1884076,
+          "sha1": "13ef63ca1a997c397fd061533a884e9cafee9e56"
+        }
+      ]
+    },
+    {
+      "id": "scholar",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base",
+        "forgeconfigapiport"
+      ],
+      "requiredInAllKits": true,
+      "name": "Scholar",
+      "version": "1.2.12",
+      "description": "Better book and lectern screens. Needed to join the Arnold server (Better Adventures+). The server runs it, so every kit installs it.",
+      "license": "GPL-3.0-only",
+      "files": [
+        {
+          "file": "scholar-fabric-26.3-1.2.12.jar",
+          "dest": "mods",
+          "match": "scholar-*.jar",
+          "url": "https://cdn.modrinth.com/data/fX4dIQCo/versions/43vc4YZi/scholar-fabric-26.3-1.2.12.jar",
+          "sha512": "09b6f85554548510b7e96cd76610a76ae323d48e400a1af2036b8c320347a9f1f10f50a2cf3db7ba0bfdc1394bbf2fb4a8f11966347fb4aa8cf43deb6c6d9a29",
+          "size": 742828,
+          "sha1": "96512caad30a5085c83cffc1ce69d866f6572f84"
+        }
+      ]
+    },
+    {
+      "id": "forgeconfigapiport",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "requiredInAllKits": true,
+      "name": "Forge Config API Port",
+      "version": "26.3.1",
+      "description": "Config library used by Better Adventures+ mods. Needed to join the Arnold server (Better Adventures+). The server runs it, so every kit installs it.",
+      "license": "MPL-2.0",
+      "files": [
+        {
+          "file": "ForgeConfigAPIPort-v26.3.1-mc26.3.x-Fabric.jar",
+          "dest": "mods",
+          "match": "ForgeConfigAPIPort-*.jar",
+          "url": "https://cdn.modrinth.com/data/ohNO6lps/versions/JpKvrr9J/ForgeConfigAPIPort-v26.3.1-mc26.3.x-Fabric.jar",
+          "sha512": "b9339c21e14beec2eae0ca215317284bcaacef72e1d1dee8b3dfbe2de0eefaa758a172446df85419b6534557c479abe972d7d21f4ec194f2d436f9ed4329cb9f",
+          "size": 609574,
+          "sha1": "a0d802d2cb010a5054c72f1ccf248433b6e0bafb"
+        }
+      ]
+    },
+    {
+      "id": "clothconfig",
+      "group": "arnold",
+      "kind": "download",
+      "requiredInAllKits": true,
+      "name": "Cloth Config API",
+      "version": "26.3.159",
+      "description": "Config library used by Better Adventures+ mods. Needed to join the Arnold server (Better Adventures+). The server runs it, so every kit installs it.",
+      "license": "LGPL-3.0-only",
+      "files": [
+        {
+          "file": "cloth-config-fabric-26.3.159.jar",
+          "dest": "mods",
+          "match": "cloth-config-*.jar",
+          "url": "https://cdn.modrinth.com/data/9s6osm5g/versions/fg2uyxOW/cloth-config-fabric-26.3.159.jar",
+          "sha512": "8924e19d41845096724fa10f3717bc51964a0edbbbcad0ff1e6c6187a398b08f356e49579a657c2dc44a7f92e3850771f3ca70bf8c1f654de60425163b91dbb1",
+          "size": 1135009,
+          "sha1": "9a5cce069380a2047250831dcb19f4ef1b15872d"
+        }
+      ]
+    },
+    {
+      "id": "rightclickharvest",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base",
+        "jamlib"
+      ],
+      "requiredInAllKits": true,
+      "name": "RightClickHarvest",
+      "version": "4.6.2",
+      "description": "Right-click ripe crops to harvest and replant. Needed to join the Arnold server (Better Adventures+). The server runs it, so every kit installs it.",
+      "license": "MIT",
+      "files": [
+        {
+          "file": "rightclickharvest-fabric-4.6.2+26.3.x.jar",
+          "dest": "mods",
+          "match": "rightclickharvest-*.jar",
+          "url": "https://cdn.modrinth.com/data/Cnejf5xM/versions/MTui9kST/rightclickharvest-fabric-4.6.2%2B26.3.x.jar",
+          "sha512": "a08edf8b52ba4197df1befcf6288dbd4292fe86b19c7f076c4f7ebfebda29a5f1b23530436b45c113ebe6db53409fa654acac0cdc403948e82fba22bfb8769c9",
+          "size": 280022,
+          "sha1": "980234046f202dc3890c499f1c7378714c3ff511"
+        }
+      ]
+    },
+    {
+      "id": "zoomify",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "yacl"
+      ],
+      "requiredInAllKits": true,
+      "name": "Zoomify",
+      "version": "2.17.0",
+      "description": "Zoom key. Needed to join the Arnold server (Better Adventures+). The server runs it, so every kit installs it.",
+      "license": "LGPL-3.0-only",
+      "files": [
+        {
+          "file": "zoomify-2.17.0+mc26.3-universal.jar",
+          "dest": "mods",
+          "match": "zoomify-*.jar",
+          "url": "https://cdn.modrinth.com/data/w7ThoJFB/versions/RUBpNu00/zoomify-2.17.0%2Bmc26.3-universal.jar",
+          "sha512": "1c5bc8e46a3575847584bb6993034dbe7d8060be32ee676c473d36bd4bbbc4df21d03a8f3b3f8904e42312667e9716050cca2cf7a098c8ebf6985d52eea4d637",
+          "size": 579146,
+          "sha1": "7f18090fea4a2ddae01e032d09629d14fa381d3f"
+        }
+      ]
+    },
+    {
+      "id": "diagonalfences",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base",
+        "forgeconfigapiport",
+        "puzzleslib"
+      ],
+      "requiredInAllKits": true,
+      "name": "Diagonal Fences",
+      "version": "26.3.0",
+      "description": "Fences connect diagonally. Needed to join the Arnold server (Better Adventures+). The server runs it, so every kit installs it.",
+      "license": "MPL-2.0",
+      "files": [
+        {
+          "file": "diagonalfences-v26.3.0-mc26.3.x+fabric.jar",
+          "dest": "mods",
+          "match": "diagonalfences-*.jar",
+          "url": "https://cdn.modrinth.com/data/IKARgflD/versions/CHD6edDK/diagonalfences-v26.3.0-mc26.3.x%2Bfabric.jar",
+          "sha512": "597f7583970b419ae735a0161b2751bb17a0c4fc24604c55d1057ac05548bbb1e8c4e25fcb0053c39f6fe31bcf464cee331579d759eeb50ced15f515baa5ddfd",
+          "size": 126116,
+          "sha1": "98b5e5215cb84500a8b00cdde605aedf49090933"
+        }
+      ]
+    },
+    {
+      "id": "amplifiednether",
+      "group": "arnold",
+      "kind": "download",
+      "requiredInAllKits": true,
+      "name": "Amplified Nether",
+      "version": "1.3.0",
+      "description": "Taller Nether terrain. Needed to join the Arnold server (Better Adventures+). The server runs it, so every kit installs it.",
+      "license": "LicenseRef-Stardust-Labs-License",
+      "files": [
+        {
+          "file": "Amplified_Nether_26.3_v1.3.0+26.3.jar",
+          "dest": "mods",
+          "match": "Amplified_Nether_*.jar",
+          "url": "https://cdn.modrinth.com/data/wXiGiyGX/versions/IYaFP7y8/Amplified_Nether_26.3_v1.3.0%2B26.3.jar",
+          "sha512": "0b5a61fb524495ad63a64aaa7144ef74917506ec9ff2881d9d3bedf4bab15335f259536e4fcd44845860a6840f93abb0e699243619e7acf13bf8528e49d18914",
+          "size": 91597,
+          "sha1": "0c61d13da0999830871292ac4595fb223e71db51"
+        }
+      ]
+    },
+    {
+      "id": "matcha",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "requiredInAllKits": true,
+      "name": "Matcha Flavoured",
+      "version": "1.12.9",
+      "description": "Better Adventures+ core content and tweaks. Needed to join the Arnold server (Better Adventures+). The server runs it, so every kit installs it.",
+      "license": "CC-BY-NC-SA-4.0",
+      "files": [
+        {
+          "file": "matcha-flavoured-1.12.9.jar",
+          "dest": "mods",
+          "match": "matcha-flavoured-*.jar",
+          "url": "https://cdn.modrinth.com/data/QI0EmgZ1/versions/iGP26eHl/matcha-flavoured-1.12.9.jar",
+          "sha512": "cf7eebd1bf4c9dc577eebfa5d56f393f9c1a17b96065f6a441fbdf7178556a853dae22065e503126d234236b9a0705ef88768892baf367b88cecd0cbf478980e",
+          "size": 32146832,
+          "sha1": "42345ce7cfea468b03dda506b967d3aa3b8c3cda"
+        }
+      ]
+    },
+    {
+      "id": "cristellib",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "requiredInAllKits": true,
+      "name": "Cristel Lib",
+      "version": "3.1.13",
+      "description": "Worldgen library used by Better Adventures+ mods. Needed to join the Arnold server (Better Adventures+). The server runs it, so every kit installs it.",
+      "license": "CC-BY-NC-ND-4.0",
+      "files": [
+        {
+          "file": "cristellib-fabric-26.3-3.1.13.jar",
+          "dest": "mods",
+          "match": "cristellib-*.jar",
+          "url": "https://cdn.modrinth.com/data/cl223EMc/versions/rWxmPrGC/cristellib-fabric-26.3-3.1.13.jar",
+          "sha512": "96198dfc067ce7003cad9b211286e58e36efcaa29729af3c09c643d3e8bd8a54e5814eb8d88680a38caf9e6328a541151b6c6b1bd9ac117d9c7278d93d6de88c",
+          "size": 588323,
+          "sha1": "9cc655e54a8e613ccacdd0e372e360067986174d"
+        }
+      ]
+    },
+    {
+      "id": "architectury",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "requiredInAllKits": true,
+      "name": "Architectury API",
+      "version": "22.0.5",
+      "description": "Library used by Better Adventures+ mods. Needed to join the Arnold server (Better Adventures+). The server runs it, so every kit installs it.",
+      "license": "LGPL-3.0-only",
+      "files": [
+        {
+          "file": "architectury-fabric-22.0.5.jar",
+          "dest": "mods",
+          "match": "architectury-*.jar",
+          "url": "https://cdn.modrinth.com/data/lhGA9TYQ/versions/1pMaB6So/architectury-fabric-22.0.5.jar",
+          "sha512": "14c61af2088b80b465f06edd3b3005038fa5be1c95a2161ce712c8da408a358038b7cd7ae4acf3198f6d47c693e4fdf65d646dac7e124f7cdd7f32bbc0dcd0ce",
+          "size": 622542,
+          "sha1": "8c5f566e32bd47fbb80be4932b9be1cfa97c4e3a"
+        }
+      ]
+    },
+    {
+      "id": "mru",
+      "group": "arnold",
+      "kind": "download",
+      "requiredInAllKits": true,
+      "name": "MRU",
+      "version": "1.0.43",
+      "description": "Library used by Better Adventures+ mods. Needed to join the Arnold server (Better Adventures+). The server runs it, so every kit installs it.",
+      "license": "LicenseRef-All-Rights-Reserved",
+      "files": [
+        {
+          "file": "mru-1.0.43+26.3-fabric.jar",
+          "dest": "mods",
+          "match": "mru-*.jar",
+          "url": "https://cdn.modrinth.com/data/SNVQ2c0g/versions/wpEZ3KrZ/mru-1.0.43%2B26.3-fabric.jar",
+          "sha512": "27e271eeeb62d99180101000d00b7fe471703278a307bd3e99195f13a0e8017e448709ad620b2a1d61f23e711a1f10f54e3bba7c8ca1e2d5a6810978ddb069a5",
+          "size": 157553,
+          "sha1": "7e58e709188cc0648fe63bd5edf2372e2fc8c688"
+        }
+      ]
+    },
+    {
+      "id": "connectiblechains",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base",
+        "yacl"
+      ],
+      "requiredInAllKits": true,
+      "name": "Reconnectible Chains",
+      "version": "2.4.4",
+      "description": "Hang chains between fences and walls. Needed to join the Arnold server (Better Adventures+). The server runs it, so every kit installs it.",
+      "license": "LGPL-3.0-or-later",
+      "files": [
+        {
+          "file": "connectiblechains-2.4.4+26.3-fabric.jar",
+          "dest": "mods",
+          "match": "connectiblechains-*.jar",
+          "url": "https://cdn.modrinth.com/data/5pzBXDS3/versions/8ZLglFmD/connectiblechains-2.4.4%2B26.3-fabric.jar",
+          "sha512": "1c718f80e498ad1fb367375191c4ddedd1f1831380028aa912a5f85d08f36e7c20980d3069c73654d1875a7f0f662a805aac5dd5903045c726c82fe23ea9a857",
+          "size": 266872,
+          "sha1": "c09b30ad82c8b16221b4556ed9558da87ddd048a"
+        }
+      ]
+    },
+    {
+      "id": "jakesbuildtools",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "requiredInAllKits": true,
+      "name": "Jake's Build Tools",
+      "version": "5.0.8",
+      "description": "Extra building blocks. Needed to join the Arnold server (Better Adventures+). The server runs it, so every kit installs it.",
+      "license": "LicenseRef-JBT-License",
+      "files": [
+        {
+          "file": "jakes-build-tools-v5.0.8.jar",
+          "dest": "mods",
+          "match": "jakes-build-tools-*.jar",
+          "url": "https://cdn.modrinth.com/data/DosZdmJF/versions/XYGw2tkI/jakes-build-tools-v5.0.8.jar",
+          "sha512": "569d7b6fa93ec3c240c4503f48d35c21f28ff63b981c0d4f02a3a2c22381181de64a078473fb9f16a5df73fc148b02800c79eb9a6e74b7aa0222cdb0397e06ef",
+          "size": 1279901,
+          "sha1": "986dcd9a7b2733202ac2c9f3b61d08cac795e48d"
+        }
+      ]
+    },
+    {
+      "id": "easyshulkerboxes",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base",
+        "forgeconfigapiport",
+        "puzzleslib"
+      ],
+      "requiredInAllKits": true,
+      "name": "Easy Shulker Boxes",
+      "version": "26.3.3",
+      "description": "Use shulker boxes from your inventory. Needed to join the Arnold server (Better Adventures+). The server runs it, so every kit installs it.",
+      "license": "MPL-2.0",
+      "files": [
+        {
+          "file": "easyshulkerboxes-v26.3.3-mc26.3.x+fabric.jar",
+          "dest": "mods",
+          "match": "easyshulkerboxes-*.jar",
+          "url": "https://cdn.modrinth.com/data/gA5euN8S/versions/DzZ9tjVr/easyshulkerboxes-v26.3.3-mc26.3.x%2Bfabric.jar",
+          "sha512": "11196cd096de6742649166e758cedcef585bb9ad9f7899963aa6342c98162aa80115ff99b836c23e3e82a8c1f0996768a0e3206e7e5129e17ba23e1d1004e1dc",
+          "size": 652549,
+          "sha1": "9ad8263061535a77c53d4f8a5794c6c33aaf9ba1"
+        }
+      ]
+    },
+    {
+      "id": "tradecycling",
+      "group": "arnold",
+      "kind": "download",
+      "requiredInAllKits": true,
+      "name": "Trade Cycling",
+      "version": "1.0.23",
+      "description": "Re-roll a villager's trades before you trade. Needed to join the Arnold server (Better Adventures+). The server runs it, so every kit installs it.",
+      "license": "LicenseRef-All-Rights-Reserved",
+      "files": [
+        {
+          "file": "trade-cycling-fabric-1.0.23+26.3.jar",
+          "dest": "mods",
+          "match": "trade-cycling-*.jar",
+          "url": "https://cdn.modrinth.com/data/qpPoAL6m/versions/FKbMeHEw/trade-cycling-fabric-1.0.23%2B26.3.jar",
+          "sha512": "5a1a29ac015f1a0ee702db24c28df9191617e3f1e00f31af5e40ba55a05c33088d6f426290684e48f83b32d17ded92a1db6bd355f6af231609f847e5fe483aa2",
+          "size": 554933,
+          "sha1": "b4dedc2e9941caf7ebf08c9352f49a5ceb317cdf"
+        }
+      ]
+    },
+    {
+      "id": "modonomicon",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "requiredInAllKits": true,
+      "name": "Modonomicon",
+      "version": "2.17.1",
+      "description": "In-game guide books. Needed to join the Arnold server (Better Adventures+). The server runs it, so every kit installs it.",
+      "license": "MIT AND CC-BY-4.0",
+      "files": [
+        {
+          "file": "modonomicon-26.3-fabric-2.17.1.jar",
+          "dest": "mods",
+          "match": "modonomicon-*.jar",
+          "url": "https://cdn.modrinth.com/data/692GClaE/versions/u5mJ3wYn/modonomicon-26.3-fabric-2.17.1.jar",
+          "sha512": "a930fc6097dd439d20812e5b09eae0659345f3b46492095d90cccf43aa84677ab61a50dcfbd59e0797812bc910a20793ff9287ac9cb20d90689a317a1a8f7ba5",
+          "size": 3348288,
+          "sha1": "c2c4d16e882d9e4c992ed5d2d0df7c87e9f9ba57"
+        }
+      ]
+    },
+    {
+      "id": "yacl",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "requiredInAllKits": true,
+      "name": "YetAnotherConfigLib",
+      "version": "3.9.7",
+      "description": "Config library used by Better Adventures+ mods. Needed to join the Arnold server (Better Adventures+). The server runs it, so every kit installs it.",
+      "license": "LGPL-3.0-or-later",
+      "files": [
+        {
+          "file": "yet_another_config_lib_v3-3.9.7+26.3-fabric.jar",
+          "dest": "mods",
+          "match": "yet_another_config_lib_v3-*.jar",
+          "url": "https://cdn.modrinth.com/data/1eAoo2KR/versions/s9SjoFu1/yet_another_config_lib_v3-3.9.7%2B26.3-fabric.jar",
+          "sha512": "f3957028dd31cae78f08aee3e768f61bd12c4c8423257d357bc3c1a2172047c769d37901f99775c7ffff1e5ee794025dc72738b2869cab06f1c2811841d68b24",
+          "size": 1125377,
+          "sha1": "e54d86dd4a78f95cd6ec0309d96fae01e661c00d"
+        }
+      ]
+    },
+    {
+      "id": "diagonalwalls",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base",
+        "forgeconfigapiport",
+        "puzzleslib"
+      ],
+      "requiredInAllKits": true,
+      "name": "Diagonal Walls",
+      "version": "26.3.0",
+      "description": "Walls connect diagonally. Needed to join the Arnold server (Better Adventures+). The server runs it, so every kit installs it.",
+      "license": "MPL-2.0",
+      "files": [
+        {
+          "file": "diagonalwalls-v26.3.0-mc26.3.x+fabric.jar",
+          "dest": "mods",
+          "match": "diagonalwalls-*.jar",
+          "url": "https://cdn.modrinth.com/data/FQgc8dib/versions/o4zUnUre/diagonalwalls-v26.3.0-mc26.3.x%2Bfabric.jar",
+          "sha512": "575705b0198198a5a2ce904f12adcf68d0ab63405c542a6311609a74c70d91445b98a0502627e1782a6a752b70a5d55df592867e4dd274c325184c690e0185d2",
+          "size": 126450,
+          "sha1": "de3ec8269f190d9fbe3cc274a2c86103536839fa"
+        }
+      ]
+    },
+    {
+      "id": "streamsreflowing",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "requiredInAllKits": true,
+      "name": "Streams Reflowing",
+      "version": "2.17.1",
+      "description": "Flowing rivers and streams in new terrain. Needed to join the Arnold server (Better Adventures+). The server runs it, so every kit installs it.",
+      "license": "LicenseRef-All-Rights-Reserved",
+      "files": [
+        {
+          "file": "StreamsReflowing-26.3-fabric-2.17.1.jar",
+          "dest": "mods",
+          "match": "StreamsReflowing-*.jar",
+          "url": "https://cdn.modrinth.com/data/oLS8HdJ1/versions/ipeb4Pmd/StreamsReflowing-26.3-fabric-2.17.1.jar",
+          "sha512": "55cddb09a8a6558e6043f59f29068b66544fa126c318f1d58beb06ab7ce589a085af900e9abf3e61f099b65cc1e8cba8c0aa86d5c4dbe690170784a8f0b45513",
+          "size": 3410952,
+          "sha1": "e794cd9cf8f623fb44c07572d74899838649c316"
+        }
+      ]
+    },
+    {
+      "id": "kotlin",
+      "group": "arnold",
+      "kind": "download",
+      "requiredInAllKits": true,
+      "name": "Fabric Language Kotlin",
+      "version": "1.14.2",
+      "description": "Kotlin runtime used by Better Adventures+ mods. Needed to join the Arnold server (Better Adventures+). The server runs it, so every kit installs it.",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "file": "fabric-language-kotlin-1.14.2+kotlin.2.4.21.jar",
+          "dest": "mods",
+          "match": "fabric-language-kotlin-*.jar",
+          "url": "https://cdn.modrinth.com/data/Ha28R6CL/versions/SKW1BTL3/fabric-language-kotlin-1.14.2%2Bkotlin.2.4.21.jar",
+          "sha512": "7fb475c4a7e7bdf8d0aca4b5798a58a354c51443d5b1fbde3e8cf34dfbf7191ef4238b5f07d08ec9490ec180b371624523326c3ad45d4ed2b2be541de9407e5d",
+          "size": 8142878,
+          "sha1": "f1d4ab6ecd54d9782521333a87eb50724ecb03e0"
+        }
+      ]
+    },
+    {
+      "id": "shulkerboxtooltip",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "requiredInAllKits": true,
+      "name": "Shulker Box Tooltip",
+      "version": "5.4.2",
+      "description": "See what is inside a shulker box. Needed to join the Arnold server (Better Adventures+). The server runs it, so every kit installs it.",
+      "license": "MIT",
+      "files": [
+        {
+          "file": "shulkerboxtooltip-fabric-5.4.2+26.3.jar",
+          "dest": "mods",
+          "match": "shulkerboxtooltip-*.jar",
+          "url": "https://cdn.modrinth.com/data/2M01OLQq/versions/Cj9VEeGt/shulkerboxtooltip-fabric-5.4.2%2B26.3.jar",
+          "sha512": "737218bda3c35fe0753595e849850bb036eefd95181a542bdbdc8ab7c47795308be10b9aec45ca7880776c1711184536d0bf468fe76e94c674daac9ed73d8826",
+          "size": 422719,
+          "sha1": "2280c8ca8d77b4dcd5617daab3428b8115bef8d6"
+        }
+      ]
+    },
+    {
+      "id": "axiom",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "requiredInAllKits": true,
+      "name": "Axiom",
+      "version": "6.1.5",
+      "description": "Building editor (staff only on the server). Needed to join the Arnold server (Better Adventures+). The server runs it, so every kit installs it.",
+      "license": "LicenseRef-All-Rights-Reserved",
+      "files": [
+        {
+          "file": "Axiom-6.1.5-for-MC26.3.jar",
+          "dest": "mods",
+          "match": "Axiom-*.jar",
+          "url": "https://cdn.modrinth.com/data/N6n5dqoA/versions/Gm9DhTF6/Axiom-6.1.5-for-MC26.3.jar",
+          "sha512": "b37108eaf452b1426786a2bb2f97ca948d76083c733823f2271d1a8fcde83d728ed00ac18b706bce48a755b504d0523b67fea3a458f7e89fb547ca382960ffbd",
+          "size": 46796174,
+          "sha1": "02d17d2f1cd78adadd7077a18aa51342524e8a25"
+        }
+      ]
+    },
+    {
+      "id": "terrainslabs",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base",
+        "architectury",
+        "midnightlib"
+      ],
+      "requiredInAllKits": true,
+      "name": "Terrain Slabs",
+      "version": "3.4.2",
+      "description": "Smoother terrain with natural slabs. Needed to join the Arnold server (Better Adventures+). The server runs it, so every kit installs it.",
+      "license": "MIT",
+      "files": [
+        {
+          "file": "TerrainSlabs-v3.4.2-26.3.jar",
+          "dest": "mods",
+          "match": "Terrain*.jar",
+          "url": "https://cdn.modrinth.com/data/SJu6sklj/versions/pHOdyV6c/Terrain%20Slabs%20v3.4.2-26.3.jar",
+          "sha512": "4f32846bd06f89724161907c20280f5b3dce290a91760770d28badd2b8147a9431f6376f48f15085c6cb93a86bd549e0b83b3cb74cab8e487c4f280bf98f62d7",
+          "size": 336637,
+          "sha1": "8e0f97d1e10bb5484f51b98098f4863213cc020e"
+        }
+      ]
+    },
+    {
+      "id": "bettertrees",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "requiredInAllKits": true,
+      "name": "Better Trees",
+      "version": "2.0.0",
+      "description": "Nicer tree shapes in new terrain. Needed to join the Arnold server (Better Adventures+). The server runs it, so every kit installs it.",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "file": "better-trees-2.0.0.jar",
+          "dest": "mods",
+          "match": "better-trees-*.jar",
+          "url": "https://cdn.modrinth.com/data/cfXIpi12/versions/xoBqxOVe/better-trees-2.0.0.jar",
+          "sha512": "857770176846aaf101390ad47f1ceea58ea27b692fab88f40513e3fcd45439a92bb0cad145fdf9c7362ec1a0eb6950178a167bd2abb9bb3e7c6982142d9818e9",
+          "size": 716294,
+          "sha1": "8209ebf8746b38b151395f75f3f09bc7cfda8d98"
+        }
+      ]
+    },
+    {
+      "id": "jamlib",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "requiredInAllKits": true,
+      "name": "JamLib",
+      "version": "2.3.1",
+      "description": "Library used by RightClickHarvest. Needed to join the Arnold server (Better Adventures+). The server runs it, so every kit installs it.",
+      "license": "MIT",
+      "files": [
+        {
+          "file": "jamlib-fabric-2.3.1+26.3.x.jar",
+          "dest": "mods",
+          "match": "jamlib-*.jar",
+          "url": "https://cdn.modrinth.com/data/IYY9Siz8/versions/EbhilCj8/jamlib-fabric-2.3.1%2B26.3.x.jar",
+          "sha512": "4b739c16dd771ceae4a8a2dbf24ebba47955d69cde994f9b1b2f075c41757c5bad4f90324fd9aa417d6b6490f6f9f0e39225a9d305c7ef49fb72824479ec2e24",
+          "size": 265050,
+          "sha1": "e618db246e40fb685b237a613b58c68481f138f3"
+        }
+      ]
+    },
+    {
+      "id": "slabbed",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "requiredInAllKits": true,
+      "name": "Slabbed",
+      "version": "0.6.4-alpha",
+      "description": "Place blocks on top of slabs. Needed to join the Arnold server (Better Adventures+). The server runs it, so every kit installs it.",
+      "license": "GPL-3.0-only",
+      "files": [
+        {
+          "file": "slabbed-0.6.4-alpha+26.2-26.3.jar",
+          "dest": "mods",
+          "match": "slabbed-*.jar",
+          "url": "https://cdn.modrinth.com/data/5nraCxl9/versions/76kHws4h/slabbed-0.6.4-alpha%2B26.2-26.3.jar",
+          "sha512": "b73bf18d21c420b2d520c5828a7541cc9abf6d95622c1aac4d93af3a02816a4e56c6f1966ce6261ef657f62e982f8b76eacb17db06ebbe6dbf7a62e4b6a2b566",
+          "size": 515368,
+          "sha1": "e166573d47d1be85b32ef45ceb2477db81668288"
+        }
+      ]
+    },
+    {
+      "id": "nullscape",
+      "group": "arnold",
+      "kind": "download",
+      "requiredInAllKits": true,
+      "name": "Nullscape",
+      "version": "2.0.1",
+      "description": "New End terrain. Needed to join the Arnold server (Better Adventures+). The server runs it, so every kit installs it.",
+      "license": "LicenseRef-Stardust-Labs-License",
+      "files": [
+        {
+          "file": "Nullscape_26.3_v2.0.1+26.3.jar",
+          "dest": "mods",
+          "match": "Nullscape_*.jar",
+          "url": "https://cdn.modrinth.com/data/LPjGiSO4/versions/79OyFQtd/Nullscape_26.3_v2.0.1%2B26.3.jar",
+          "sha512": "ae84946fd6a62ea0863cbc9fd2766ad08635a856d2e15af861af7d00807c98e606d1a2a06eb176ea6275031b66b6a186b245c7a4097797d3c12244ca9a4fe968",
+          "size": 259205,
+          "sha1": "51d81f5d986d81ea824c9fc94cc1509a5394beab"
+        }
+      ]
+    },
+    {
+      "id": "midnightlib",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "requiredInAllKits": true,
+      "name": "MidnightLib",
+      "version": "1.9.3",
+      "description": "Library Terrain Slabs needs. Better Adventures+ only ships it inside Cool Rain, so it is installed on its own here. Needed to join the Arnold server (Better Adventures+). The server runs it, so every kit installs it.",
+      "license": "MIT",
+      "files": [
+        {
+          "file": "midnightlib-fabric-1.9.3+26.3-rc-2.jar",
+          "dest": "mods",
+          "match": "midnightlib-*.jar",
+          "url": "https://cdn.modrinth.com/data/codAaoxh/versions/wJeXgIoa/midnightlib-fabric-1.9.3%2B26.3-rc-2.jar",
+          "sha512": "2b5c5ed195d44d97dd6fafdb8583d1d883f10303c0cde331da72c6004f88cf27207167aaf77f0c692113399db42f616d1174144671898a25dfa69e9525135b8b",
+          "size": 60602,
+          "sha1": "2c0e2ba8a9a2b66729b6074325b40a901740238b"
+        }
+      ]
+    },
+    {
+      "id": "freecam",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "name": "Freecam",
+      "version": "2.0",
+      "description": "Client only. Detach the camera and look around.",
+      "license": "MIT",
+      "files": [
+        {
+          "file": "Easy-freecam-2.0+26.3.jar",
+          "dest": "mods",
+          "match": "Easy-freecam-*.jar",
+          "url": "https://cdn.modrinth.com/data/CHn2cb7p/versions/sc7peL0n/Easy-freecam-2.0%2B26.3.jar",
+          "sha512": "2055e37c23e033b87008c1e513539ff2bb3dcf78f4c0e5d7bb835b56a0f53f4dc53488756b892e342bbac805798e6c6884dcbeb2c1902c3c1262a05c7493eec3",
+          "size": 77694,
+          "sha1": "528b74daa16c83f0364776207c6d09a7b970c703"
+        }
+      ]
+    },
+    {
+      "id": "modmenu",
+      "group": "shaders",
+      "kind": "download",
+      "name": "Mod Menu",
+      "version": "21.0.0",
+      "description": "Client only. Lists your mods and opens their settings.",
+      "license": "MIT",
+      "files": [
+        {
+          "file": "modmenu-21.0.0.jar",
+          "dest": "mods",
+          "match": "modmenu-*.jar",
+          "url": "https://cdn.modrinth.com/data/mOgUt4GM/versions/kyy7dbrZ/modmenu-21.0.0.jar",
+          "sha512": "588c0c557963f4778572ee81bfafc190b332c26d5926c5fe7e3e1614dcf8e14f58e3bc80a97694521dd05907e9753a7c8575048ea769e4dbf40a3db74a4e2606",
+          "size": 856779,
+          "sha1": "66ec40f1cd0c037ddca2b5fc6b4b976d479c18e8"
+        }
+      ]
+    },
+    {
+      "id": "sounds",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "base",
+        "mru",
+        "yacl"
+      ],
+      "name": "Sounds",
+      "version": "2.6.0",
+      "description": "Client only. New and better sound effects.",
+      "license": "LicenseRef-All-Rights-Reserved",
+      "files": [
+        {
+          "file": "sounds-2.6.0+26.3-fabric.jar",
+          "dest": "mods",
+          "match": "sounds-*.jar",
+          "url": "https://cdn.modrinth.com/data/ZouiUX7t/versions/QCFPBvDa/sounds-2.6.0%2B26.3-fabric.jar",
+          "sha512": "3d258e40e4166d96fdcdcc8f0246bd6e2ab961c27aba5fccbfdd52dde521f4b5127d49a3ff4eb3a7b92a55c335ec6b144a84f9fcc4a11d9652944bfb32cba515",
+          "size": 8143246,
+          "sha1": "77a7f6a76045979687f60cdf3766767ff0d1a977"
+        }
+      ]
+    },
+    {
+      "id": "bettersnowcoverage",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "base",
+        "sodium",
+        "yacl"
+      ],
+      "name": "Better Snow Coverage",
+      "version": "0.4.2",
+      "description": "Client only. Snow covers plants and grass more naturally.",
+      "license": "MIT",
+      "files": [
+        {
+          "file": "better-snow-coverage-0.4.2+mc26.2.jar",
+          "dest": "mods",
+          "match": "better-snow-coverage-*.jar",
+          "url": "https://cdn.modrinth.com/data/hnruzXAw/versions/jUUjr5rX/better-snow-coverage-0.4.2%2Bmc26.2.jar",
+          "sha512": "81a41e01e64394babf36113460e3e686c88aac20f8060bd486a7ffcec7d563abd6d68dc311a8cd8e67d723992904f1154d12bd66b396cebef54b4d049043810e",
+          "size": 104650,
+          "sha1": "7c978d79ee6f16dcdaf3c12663df3461a0886b56"
+        }
+      ]
+    },
+    {
+      "id": "flyspeed",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "name": "Flyspeed",
+      "version": "2.0.1",
+      "description": "Client only. Scroll to change creative flight speed.",
+      "license": "MIT",
+      "files": [
+        {
+          "file": "flyspeed-2.0.1.jar",
+          "dest": "mods",
+          "match": "flyspeed-*.jar",
+          "url": "https://cdn.modrinth.com/data/E86423bk/versions/X6soBJlK/flyspeed-2.0.1.jar",
+          "sha512": "43a72ed10600d689201d438277d13b740ca733d8f187ae43328134b6f8965b82f435eb9c7cd9e21bf796ae62e23f3c3d7933ef41801d33aaf8851c4fe361adbc",
+          "size": 16290,
+          "sha1": "9d724e17fc90ba899e3432bc75722a6a4c23fa1b"
+        }
+      ]
+    },
+    {
+      "id": "betterclouds",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "base",
+        "yacl"
+      ],
+      "name": "Better Clouds",
+      "version": "1.15.0-beta.8",
+      "description": "Client only. Softer, nicer clouds.",
+      "license": "MPL-2.0",
+      "files": [
+        {
+          "file": "better-clouds-1.15.0-beta.8+26.3-fabric.jar",
+          "dest": "mods",
+          "match": "better-clouds-*.jar",
+          "url": "https://cdn.modrinth.com/data/5srFLIaK/versions/gd9idieP/better-clouds-1.15.0-beta.8%2B26.3-fabric.jar",
+          "sha512": "9d4b9b589e6eb66012da3d93ce4c3a9bbd4095ad502a73a08de75712136097ec22f16b7ec915a5c7ea3d3f976abecde203d33f384e8b9ad71ffa99f930f88af7",
+          "size": 1447557,
+          "sha1": "29b6d7e8801986c093ffca5b279ad8e854608833"
+        }
+      ]
+    },
+    {
+      "id": "smoothsteps",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "base",
+        "architectury",
+        "midnightlib"
+      ],
+      "name": "Smooth Steps",
+      "version": "1.2.1",
+      "description": "Client only. Smooth camera when you step up blocks.",
+      "license": "MIT",
+      "files": [
+        {
+          "file": "smooth_steps-fabric-1.2.1.jar",
+          "dest": "mods",
+          "match": "smooth_steps-*.jar",
+          "url": "https://cdn.modrinth.com/data/5VSZqDK0/versions/wd2zZZdX/smooth_steps-fabric-1.2.1.jar",
+          "sha512": "875c9ee4d59a21844fb632ffcb57431c7fc9702f73021af113b7b4d412d5e82eab3f26ec42e6eeed78bc6dbe99e9059fae5cc5a8c75a2e52d99f8586c0146cc0",
+          "size": 30216,
+          "sha1": "2af8d1134c2b2ddde3150dec038cc203a96ee6f0"
+        }
+      ]
+    },
+    {
+      "id": "denseflowers",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "base",
+        "sodium"
+      ],
+      "name": "Dense Flowers",
+      "version": "0.3.1",
+      "description": "Client only. Fuller flower patches.",
+      "license": "MIT",
+      "files": [
+        {
+          "file": "dense-flowers-0.3.1+mc26.2.jar",
+          "dest": "mods",
+          "match": "dense-flowers-*.jar",
+          "url": "https://cdn.modrinth.com/data/Ud3A1Fat/versions/hAZimeFe/dense-flowers-0.3.1%2Bmc26.2.jar",
+          "sha512": "2ef01811569e16ee9a0dd995203be8780403e23eca37d6d2b89df463ab9b033b620a3983779ac01186cdf01bf741d202abed47a2dd76e9f89c416afa1c39d23b",
+          "size": 358349,
+          "sha1": "9e10356fee73ae6b76a33b7d1fc633d642124bc5"
+        }
+      ]
+    },
+    {
+      "id": "bridgingmod",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "base",
+        "yacl"
+      ],
+      "name": "Bridging Mod",
+      "version": "2.7.0",
+      "description": "Client only. Easier bridging and block placement.",
+      "license": "MIT",
+      "files": [
+        {
+          "file": "BridgingMod-2.7.0+26.3.fabric-release.jar",
+          "dest": "mods",
+          "match": "BridgingMod-*.jar",
+          "url": "https://cdn.modrinth.com/data/lO3s8hjs/versions/qRuZJe5U/BridgingMod-2.7.0%2B26.3.fabric-release.jar",
+          "sha512": "a8241b5df1402f7447e43a65a99880ff75170ba683453c400a1e2888ff647474645a3ecadcc823c16aca2b009006ab4cc6c7ef5299e24408ddcf550b2321ded7",
+          "size": 5944084,
+          "sha1": "2a0833c87725752eb4e8a3cb3df126eeb50877c4"
+        }
+      ]
+    },
+    {
+      "id": "atmosfera",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "base",
+        "clothconfig"
+      ],
+      "name": "Atmosfera",
+      "version": "2.7.3",
+      "description": "Client only. Ambient biome sounds.",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "file": "atmosfera-2.7.3+mc26.3.jar",
+          "dest": "mods",
+          "match": "atmosfera-*.jar",
+          "url": "https://cdn.modrinth.com/data/28G1xpgF/versions/Vr3B8x98/atmosfera-2.7.3%2Bmc26.3.jar",
+          "sha512": "b4d82a4980df5604d1f1a8c67bd348e5629e0662b80dc4005e14dec9097a9ab25eb3ce1ace4902773a7ca4326ece7a1d006e808f5400f880aa12414d2ab98441",
+          "size": 64187333,
+          "sha1": "72b29be275845e76d1ccea92b17166002d730b18"
+        }
+      ]
+    },
+    {
+      "id": "windy",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "base",
+        "yacl"
+      ],
+      "name": "Windy",
+      "version": "1.1.1",
+      "description": "Client only. Wind effects.",
+      "license": "LGPL-3.0-only",
+      "files": [
+        {
+          "file": "Windy-1.1.1+26.1.jar",
+          "dest": "mods",
+          "match": "Windy-*.jar",
+          "url": "https://cdn.modrinth.com/data/EwYg6C78/versions/qKwLQacO/Windy-1.1.1%2B26.1.jar",
+          "sha512": "953d568f15c5d82dbb12d6dee12dd4947fa977f560dab155b1fd2201ad559c259ce4d93ca589fc30f80aa9332231483d2116742639eab9a9df01c962938fbcf6",
+          "size": 38879,
+          "sha1": "776d59ad1c22f9b2dd04c15c726d2f964b79b216"
+        }
+      ]
+    },
+    {
+      "id": "betterclimbing",
+      "group": "shaders",
+      "kind": "download",
+      "name": "Better Climbing",
+      "version": "6",
+      "description": "Client only. Smoother ladder and vine climbing.",
+      "license": "CC0-1.0",
+      "files": [
+        {
+          "file": "better_climbing-fabric-6.jar",
+          "dest": "mods",
+          "match": "better_climbing-*.jar",
+          "url": "https://cdn.modrinth.com/data/ZucWZEBV/versions/dUxGZmcn/better_climbing-fabric-6.jar",
+          "sha512": "00a472345f6fedfab5b256b3694c629edf250062473fd0a14a27a693a732930d1462db30b61b887a9e7029917be204b94a7e13429a026df61848d2133f8720b9",
+          "size": 7419,
+          "sha1": "c8dedd82b1303cca947ddd52e97a8d2cab397374"
+        }
+      ]
+    },
+    {
+      "id": "continuity",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "name": "Continuity",
+      "version": "3.0.1",
+      "description": "Client only. Connected textures.",
+      "license": "LGPL-3.0-only",
+      "files": [
+        {
+          "file": "continuity-3.0.1+26.3.jar",
+          "dest": "mods",
+          "match": "continuity-*.jar",
+          "url": "https://cdn.modrinth.com/data/1IjD5062/versions/Jt2sCWTQ/continuity-3.0.1%2B26.3.jar",
+          "sha512": "1ec1e3b2f73c26b19445d664822a8936e9076f4d8855a2ed5fac19786daa8da42da8fdc9526c4a53c227a82819a87ad8e73d5b4fc003f6519c50454c33014f04",
+          "size": 1002033,
+          "sha1": "63d51781b2c87e3b4b4ca98a133db8c98d3f2afb"
+        }
+      ]
+    },
+    {
+      "id": "overflowingbars",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "base",
+        "forgeconfigapiport",
+        "puzzleslib"
+      ],
+      "name": "Overflowing Bars",
+      "version": "26.3.0",
+      "description": "Client only. Tidier health and armour bars.",
+      "license": "MPL-2.0",
+      "files": [
+        {
+          "file": "overflowingbars-v26.3.0-mc26.3.x+fabric.jar",
+          "dest": "mods",
+          "match": "overflowingbars-*.jar",
+          "url": "https://cdn.modrinth.com/data/XD7XOrAF/versions/ZHqDQjLH/overflowingbars-v26.3.0-mc26.3.x%2Bfabric.jar",
+          "sha512": "afb3597a47618c7b7395418322271c0500f2c438f7fe97e4b107c745f9e035a18701309ddbf61244f072dbc83b41c90fbb7eadf68d921a356cd84e96560ff48d",
+          "size": 88306,
+          "sha1": "bc0d0499e9ccc871317343a03b825cce3de4ddcb"
+        }
+      ]
+    },
+    {
+      "id": "visuality",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "base",
+        "clothconfig"
+      ],
+      "name": "Visuality",
+      "version": "0.7.15",
+      "description": "Client only. Extra particles.",
+      "license": "MIT",
+      "files": [
+        {
+          "file": "visuality-0.7.15+26.3.jar",
+          "dest": "mods",
+          "match": "visuality-*.jar",
+          "url": "https://cdn.modrinth.com/data/rI0hvYcd/versions/BNe9kpJ7/visuality-0.7.15%2B26.3.jar",
+          "sha512": "90145cad547d329d5134eabbf45c7f35b1d0ce3ff2bcef8a1b187dc33723121b1a235c0cc259043588835b0cb7b31cba4aa84d738be810f0ea073308bec2eb4a",
+          "size": 81970,
+          "sha1": "9c6c1554114150464716b8a82da8a8872ea3db8e"
+        }
+      ]
+    },
+    {
+      "id": "musiccontrol",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "base",
+        "fzzyconfig"
+      ],
+      "name": "Simple Music Control",
+      "version": "1.5.6",
+      "description": "Client only. Control in-game music.",
+      "license": "MIT",
+      "files": [
+        {
+          "file": "simple_music_control-fabric-1.5.6+26.3.jar",
+          "dest": "mods",
+          "match": "simple_music_control-*.jar",
+          "url": "https://cdn.modrinth.com/data/8AX2hHnX/versions/3sI4gTvx/simple_music_control-fabric-1.5.6%2B26.3.jar",
+          "sha512": "f5ff3921b6eac7eab92435537933a26cf138a23b65853d942319cc2745fbb2d3e3f08ffca2ed6999cd8fbb06e3f9002b7938362e22fe212e166982c3528d7971",
+          "size": 252106,
+          "sha1": "ee0e2631cdf173bcdbd2e40f7fad6b7cce3b05cd"
+        }
+      ]
+    },
+    {
+      "id": "invmove",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "clothconfig"
+      ],
+      "name": "InvMove",
+      "version": "0.9.6",
+      "description": "Client only. Walk while a menu is open.",
+      "license": "LGPL-3.0-only",
+      "files": [
+        {
+          "file": "InvMove-0.9.6+26.3-Fabric.jar",
+          "dest": "mods",
+          "match": "InvMove-*.jar",
+          "url": "https://cdn.modrinth.com/data/REfW2AEX/versions/wjZzQM0p/InvMove-0.9.6%2B26.3-Fabric.jar",
+          "sha512": "992428998c7e05e287b0c36a094bd1404c984989c6cb08dc2101be125338ad4d513cfc39de6c254dd9a6cacd937e9ec986fb10d81f9a8d8157ab088f476b8774",
+          "size": 84265,
+          "sha1": "c0a354ebdd86dfd920e7ffda22215e0a3a007be6"
+        }
+      ]
+    },
+    {
+      "id": "bettersmoke",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "name": "Better Smoke",
+      "version": "0.1.2",
+      "description": "Client only. Nicer smoke.",
+      "license": "MIT",
+      "files": [
+        {
+          "file": "bettersmoke-0.1.2+26.3.jar",
+          "dest": "mods",
+          "match": "bettersmoke-*.jar",
+          "url": "https://cdn.modrinth.com/data/Effrh3ze/versions/DSzD6WsI/bettersmoke-0.1.2%2B26.3.jar",
+          "sha512": "20591e38c0b2d930b46f2f78e23620bf04289c988c3504f5c8f387131b256567772812a453b651c4c7fa690a8a50fb9403ea8e8cb559b3d7450b01aa8cae25cc",
+          "size": 236634,
+          "sha1": "e63765d142db2779ea55a1cdd28c1d6e92fe9d87"
+        }
+      ]
+    },
+    {
+      "id": "emfcompat",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "base",
+        "emf"
+      ],
+      "name": "EMF Compat: Core",
+      "version": "2.3.2",
+      "description": "Client only. Entity Model Features compatibility.",
+      "license": "GPL-3.0-only",
+      "files": [
+        {
+          "file": "emf_compat_core_fabric_26.3_2.3.2.jar",
+          "dest": "mods",
+          "match": "emf_compat_core_*.jar",
+          "url": "https://cdn.modrinth.com/data/hbGct5uU/versions/oOuwcnpx/emf_compat_core_fabric_26.3_2.3.2.jar",
+          "sha512": "7cf5dea1372e9db532e7ceb3330bbc602f9336b4e5ab4fb344471cbed41b36353072aa40b7d4001cb1be5b2e11a896b9072e2832ea8cdcab1ce447e36fe63e46",
+          "size": 175112,
+          "sha1": "73a1ca31addbe24823f0494f0f26ab74d4102664"
+        }
+      ]
+    },
+    {
+      "id": "emf",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "etf"
+      ],
+      "name": "Entity Model Features",
+      "version": "3.3.11",
+      "description": "Client only. Custom entity models.",
+      "license": "LGPL-3.0-only",
+      "files": [
+        {
+          "file": "entity_model_features-3.3.11-26.3-fabric.jar",
+          "dest": "mods",
+          "match": "entity_model_features-*.jar",
+          "url": "https://cdn.modrinth.com/data/4I1XuqiY/versions/N7d5LddE/entity_model_features-3.3.11-26.3-fabric.jar",
+          "sha512": "0c9a074518d01e4947adf7b5a9547c35f806bf936a51c721c4dd4c53517f61a7f4d3a8b66340521cd2aa564eb322826fe0c8003197635500f777a7ae9c6673f7",
+          "size": 664472,
+          "sha1": "9c11805cc34153fd89cb9fecf78be2b5a803b373"
+        }
+      ]
+    },
+    {
+      "id": "etf",
+      "group": "shaders",
+      "kind": "download",
+      "name": "Entity Texture Features",
+      "version": "7.2.5",
+      "description": "Client only. Custom entity textures.",
+      "license": "LGPL-3.0-only",
+      "files": [
+        {
+          "file": "entity_texture_features-7.2.5-26.3-fabric.jar",
+          "dest": "mods",
+          "match": "entity_texture_features-*.jar",
+          "url": "https://cdn.modrinth.com/data/BVzZfTc1/versions/O8J3sxxp/entity_texture_features-7.2.5-26.3-fabric.jar",
+          "sha512": "6b03e523f27f0f001de48eaf771f81fba18cd072f60c0f9530023a7fdbd22aafa0953f3d3f9704930a625c982831e28c228798b82579e79938bb22fb46e59761",
+          "size": 792734,
+          "sha1": "c4d8d0f47a2ab15091f47a1d74336a119ab5f1b1"
+        }
+      ]
+    },
+    {
+      "id": "advancementsfullscreen",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "kotlin"
+      ],
+      "name": "Advancements Fullscreen",
+      "version": "2.0.1",
+      "description": "Client only. Full-screen advancements.",
+      "license": "MIT",
+      "files": [
+        {
+          "file": "advancements_fullscreen-2.0.1+fabric-mc26.3.jar",
+          "dest": "mods",
+          "match": "advancements_fullscreen-*.jar",
+          "url": "https://cdn.modrinth.com/data/7BgsROit/versions/c9u0nVfv/advancements_fullscreen-2.0.1%2Bfabric-mc26.3.jar",
+          "sha512": "d2edec04f16a0bbe4f84e7addf047b8cc80f076a53f8f3321ea3df7b42db35626e805f934997b10679283010e6ab3280be079aa34866bb949547764caa389749",
+          "size": 34727,
+          "sha1": "3b18554c01a559844fdb5b4c3584ecb5322049fc"
+        }
+      ]
+    },
+    {
+      "id": "punchy",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "name": "Punchy!",
+      "version": "2.8g",
+      "description": "Client only. Punchier first-person animations.",
+      "license": "LicenseRef-All-Rights-Reserved",
+      "files": [
+        {
+          "file": "punchy-2.8g-fabric-26.3.jar",
+          "dest": "mods",
+          "match": "punchy-*.jar",
+          "url": "https://cdn.modrinth.com/data/8aoMKplv/versions/Fi951GUL/punchy-2.8g-fabric-26.3.jar",
+          "sha512": "08789a002e4f43b03f1c84f0ec1f046b9c5a077a337fb4e66b33b39a6c9a1110005da0bbcb3dfd37ed6f2218de5f86e1401befdcc9f04a3d6f30929f3d371de7",
+          "size": 2657033,
+          "sha1": "70a910465e4b36f55f6193991fc0c47545f6cebf"
+        }
+      ]
+    },
+    {
+      "id": "coolrain",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "name": "Cool Rain",
+      "version": "1.4.0",
+      "description": "Client only. Better rain visuals and sound.",
+      "license": "LicenseRef-All-Rights-Reserved",
+      "files": [
+        {
+          "file": "coolrain-1.4.0-26.3.jar",
+          "dest": "mods",
+          "match": "coolrain-*.jar",
+          "url": "https://cdn.modrinth.com/data/iDyqnQLT/versions/K9R06E1l/coolrain-1.4.0-26.3.jar",
+          "sha512": "0bdf7b98afe37f4bb1fe6fe89889d55e26f82eba9a60dfe26241b7cba0d3ec14c3793d79a7847b6968a149d0bc3b935b17c68fb195e80285b873c3707da208cb",
+          "size": 4140002,
+          "sha1": "07f9724c04e0e8050cff2d07e4503462b983184a"
+        }
+      ]
+    },
+    {
+      "id": "stacktonearbychests",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "name": "Stack to Nearby Chests",
+      "version": "0.5.20",
+      "description": "Client only. Quick-stack items into nearby chests.",
+      "license": "LGPL-3.0-only",
+      "files": [
+        {
+          "file": "stack-to-nearby-chests-mc26.3-0.5.20.jar",
+          "dest": "mods",
+          "match": "stack-to-nearby-chests-*.jar",
+          "url": "https://cdn.modrinth.com/data/HtGckJVc/versions/FtdXsRg5/stack-to-nearby-chests-mc26.3-0.5.20.jar",
+          "sha512": "d2ee053822aedc4515052f38cae526c49bf52b11f81d11212679d5da5c1df2c19d2f96d0a9599d05e7f421b72eac4d561b4f2ea796e73501758c5e282f79d7d5",
+          "size": 586801,
+          "sha1": "0db62973d2b6ca2d684dba85b67cbd4829b3c405"
+        }
+      ]
+    },
+    {
+      "id": "presencefootsteps",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "name": "Presence Footsteps",
+      "version": "1.14.0",
+      "description": "Client only. Better footstep sounds.",
+      "license": "LicenseRef-Polyform-Shield-1.0",
+      "files": [
+        {
+          "file": "PresenceFootsteps-1.14.0+26.3.jar",
+          "dest": "mods",
+          "match": "PresenceFootsteps-*.jar",
+          "url": "https://cdn.modrinth.com/data/rcTfTZr3/versions/UUNiN7Tm/PresenceFootsteps-1.14.0%2B26.3.jar",
+          "sha512": "70525da0c631f50608b67ecdfe62fd9410fdec7bc95510946716a6465cc109fe6b93be7c75022c47a0036f9954ff5912567a393e1356a75940e9b1da5580698b",
+          "size": 5760504,
+          "sha1": "2747a6c39d42ef4024a26bb43fc17be5f1eb86b5"
+        }
+      ]
+    },
+    {
+      "id": "irissearch",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "shaders"
+      ],
+      "name": "Iris Search",
+      "version": "1.8.3",
+      "description": "Client only. Search box in the Iris shader settings.",
+      "license": "LGPL-3.0-only",
+      "files": [
+        {
+          "file": "IrisSearch-1.8.3-fabric.jar",
+          "dest": "mods",
+          "match": "IrisSearch-*.jar",
+          "url": "https://cdn.modrinth.com/data/bkAgg84v/versions/L6FMDRmf/IrisSearch-1.8.3-fabric.jar",
+          "sha512": "2d6c7a8848e8bac51b21eeff15cffb31ac4efc8717193711ec877c0467edbf56d04a471fa4be65318c6fde10bb7ded6a37249c0a2261bcfa60e4870157511aec",
+          "size": 244786,
+          "sha1": "38c1ffffc6247d3de6d56ae1bc533ff3d6f6e5d1"
+        }
+      ]
+    },
+    {
+      "id": "mousetweaks",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "name": "Mouse Tweaks",
+      "version": "2.31",
+      "description": "Client only. Better mouse handling in inventories.",
+      "license": "BSD-3-Clause",
+      "files": [
+        {
+          "file": "MouseTweaks-fabric-mc26.3-2.31.jar",
+          "dest": "mods",
+          "match": "MouseTweaks-*.jar",
+          "url": "https://cdn.modrinth.com/data/aC3cM3Vq/versions/LeMuMhLv/MouseTweaks-fabric-mc26.3-2.31.jar",
+          "sha512": "61c011308b5d1d0b2163473cbbc1ad0f1b3ac873b77e3e9ff67ccb437a946fbe5f34077281ebd2b91647324969d319f6499ac4b319cfcb9ea027bac47a52c081",
+          "size": 74569,
+          "sha1": "65c0f5588900e7ade476164ec4915bfab52c129a"
+        }
+      ]
+    },
+    {
+      "id": "smoothswapping",
+      "group": "shaders",
+      "kind": "download",
+      "name": "Smooth Swapping",
+      "version": "0.9.11",
+      "description": "Client only. Animated item moves in inventories.",
+      "license": "LGPL-3.0-only",
+      "files": [
+        {
+          "file": "smoothswapping-0.9.11-26.3-fabric.jar",
+          "dest": "mods",
+          "match": "smoothswapping-*.jar",
+          "url": "https://cdn.modrinth.com/data/ydZic5r4/versions/TYYQn5Mn/smoothswapping-0.9.11-26.3-fabric.jar",
+          "sha512": "bbff9cd78c1c566907b4ffa97d37d43d56eb96c6d58dc566a3954998a91a0cf708e014bd635eeda14e3956e9c3feb9ce34bbca1643a46aa1d7fbe4c88e3e80ee",
+          "size": 67614,
+          "sha1": "2c58662fe1873bb084cfd949e69ce66e232998cb"
+        }
+      ]
+    },
+    {
+      "id": "polytone",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "name": "Polytone",
+      "version": "6.8.6",
+      "description": "Client only. Resource-pack colour and visual tweaks.",
+      "license": "GPL-3.0-or-later",
+      "files": [
+        {
+          "file": "polytone-26.3-6.8.6-fabric.jar",
+          "dest": "mods",
+          "match": "polytone-*.jar",
+          "url": "https://cdn.modrinth.com/data/3qAYkBMB/versions/qM0zPlR5/polytone-26.3-6.8.6-fabric.jar",
+          "sha512": "f50370557e24f5404f17b6c055d35a3e4540f6d0dc9b9b406afc4d0f1f8a14a33b7993b747bb9e7d92f7c83d818493b1082858cf2f85b06d476107577af9a087",
+          "size": 1681327,
+          "sha1": "8762bac6ce639a519884d8dd686ac78642329cca"
+        }
+      ]
+    },
+    {
+      "id": "flashback",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "name": "Flashback",
+      "version": "0.43.6",
+      "description": "Client only. Replay recording. Large download (about 200 MB).",
+      "license": "LicenseRef-All-Rights-Reserved",
+      "files": [
+        {
+          "file": "Flashback-0.43.6-for-MC26.3.jar",
+          "dest": "mods",
+          "match": "Flashback-*.jar",
+          "url": "https://cdn.modrinth.com/data/4das1Fjq/versions/cV1pa0YV/Flashback-0.43.6-for-MC26.3.jar",
+          "sha512": "80d194d117352942ebf2bc96914e5f0f550ab857204cda5b362459110ea22a38332825ecebf5ee3fc54d4f01c72279c0a06e45f26e26b62c49015e208167242e",
+          "size": 201008177,
+          "sha1": "4fd7d2d677332f58b00107b27615379eadc6cfcb"
+        }
+      ]
+    },
+    {
+      "id": "disablefrontcamera",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "name": "Disable Front Camera",
+      "version": "1.2.22",
+      "description": "Client only. Skips the front-facing third-person view.",
+      "license": "MIT",
+      "files": [
+        {
+          "file": "disable_front_camera-fabric-1.2.22.jar",
+          "dest": "mods",
+          "match": "disable_front_camera-*.jar",
+          "url": "https://cdn.modrinth.com/data/WklfOz03/versions/MxAXEbUP/disable_front_camera-fabric-1.2.22.jar",
+          "sha512": "9d96c7929ec6b5c77084a998f82fc7b9f6d425db7ee6a08796c25d648579a59cd080a020d43e19001ceeb1d935f21875597da9d8e0d2604e14c61fe394ecc26d",
+          "size": 2616,
+          "sha1": "1412f6b7dd43aef81c2df61f96b25a5eb436070c"
+        }
+      ]
+    },
+    {
+      "id": "mossylib",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "name": "MossyLib",
+      "version": "1.6.0",
+      "description": "Client only. Library for Better Adventures+ client mods.",
+      "license": "CC-BY-ND-4.0",
+      "files": [
+        {
+          "file": "MossyLib-1.6.0+26.3+fabric.jar",
+          "dest": "mods",
+          "match": "MossyLib-*.jar",
+          "url": "https://cdn.modrinth.com/data/ffLDUGbm/versions/yMuPxSiE/MossyLib-1.6.0%2B26.3%2Bfabric.jar",
+          "sha512": "a142325e7db427741c056a1e7486b0384b3b8dce533269eea4becea961fe0db401b0f785b2299c636f1570ccadd6633641159159aca7e681c52c173e6e3069ec",
+          "size": 183643,
+          "sha1": "48facdb59d1a9b924c88123885671bc7d64388ba"
+        }
+      ]
+    },
+    {
+      "id": "bobby",
+      "group": "shaders",
+      "kind": "download",
+      "name": "Bobby",
+      "version": "5.2.16",
+      "description": "Client only. Keeps far chunks so you can see further.",
+      "license": "LGPL-3.0-only",
+      "files": [
+        {
+          "file": "bobby-5.2.16+mc26.3.jar",
+          "dest": "mods",
+          "match": "bobby-*.jar",
+          "url": "https://cdn.modrinth.com/data/M08ruV16/versions/J7YnfCss/bobby-5.2.16%2Bmc26.3.jar",
+          "sha512": "f9ed86c48eb095b0e35f6f16abd376ad8dd3d2a5cd336fe8907d0562c9ecd1e0c7af35fc5afed121e1385fc14e41cc5f915ca986c3e19434f5c278cc0664b444",
+          "size": 867268,
+          "sha1": "0f4243dcc8298a109b5af511f959660b1a1a97db"
+        }
+      ]
+    },
+    {
+      "id": "lambdynlights",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "name": "LambDynamicLights",
+      "version": "4.13.0",
+      "description": "Client only. Held torches light up the area.",
+      "license": "LicenseRef-Lambda-License",
+      "files": [
+        {
+          "file": "lambdynamiclights-4.13.0+26.3.jar",
+          "dest": "mods",
+          "match": "lambdynamiclights-*.jar",
+          "url": "https://cdn.modrinth.com/data/yBW8D80W/versions/rylKnJ4M/lambdynamiclights-4.13.0%2B26.3.jar",
+          "sha512": "67c37ca7d619bd7f2b0dc02217070c20e34fb3bb3363d4e23f5ef9ca90b1b58adb223fab73639a3499d366497316f1eb297d2759f3ffb976467b4759f784619d",
+          "size": 1345715,
+          "sha1": "18c8ab40f03219bfcf809a83db6e3958ed8bb866"
+        }
+      ]
+    },
+    {
+      "id": "clickthrough",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "name": "ClickThrough Plus",
+      "version": "3.6.5",
+      "description": "Client only. Click through signs and item frames to open chests.",
+      "license": "MIT",
+      "files": [
+        {
+          "file": "clickthrough-plus-3.6.5+26.3-pre-3-fabric.jar",
+          "dest": "mods",
+          "match": "clickthrough-plus-*.jar",
+          "url": "https://cdn.modrinth.com/data/fJi8nm80/versions/CikLy3hd/clickthrough-plus-3.6.5%2B26.3-pre-3-fabric.jar",
+          "sha512": "154218540aafe28618b2a6d87f0043f99c21334e11832162ade39260d085fa154a8cd19d659abb8cf73b887997bf10f2bb2641739c587f4cf5a04c47e50e56f4",
+          "size": 329463,
+          "sha1": "4ff1ed224b65e06a5c4f7f86c3e493f519c42a4b"
+        }
+      ]
+    },
+    {
+      "id": "betterf3",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "base",
+        "clothconfig"
+      ],
+      "name": "BetterF3",
+      "version": "20.0.0",
+      "description": "Client only. Cleaner F3 debug screen.",
+      "license": "MIT",
+      "files": [
+        {
+          "file": "BetterF3-20.0.0-Fabric-26.3.jar",
+          "dest": "mods",
+          "match": "BetterF3-*.jar",
+          "url": "https://cdn.modrinth.com/data/8shC1gFX/versions/XB7u4eSf/BetterF3-20.0.0-Fabric-26.3.jar",
+          "sha512": "1e78531358f690404efe98b26de1024284078596785420a92ff5dba052003064e87537936c006c3c58470ccdc2ed6ae69a65f26ca534366e90d97470f2973118",
+          "size": 719577,
+          "sha1": "418b70684cf0e5a48c861216c86ae97949bc39f7"
+        }
+      ]
+    },
+    {
+      "id": "unboundthirdperson",
+      "group": "shaders",
+      "kind": "download",
+      "name": "Unbound Third Person",
+      "version": "1.0.6",
+      "description": "Client only. Free third-person camera. Not needed to join.",
+      "license": "MIT",
+      "files": [
+        {
+          "file": "UnboundThirdPerson-mc26.3-v1.0.6-fabric.jar",
+          "dest": "mods",
+          "match": "UnboundThirdPerson-*.jar",
+          "url": "https://cdn.modrinth.com/data/PdTZt0rA/versions/kfgiQpXv/UnboundThirdPerson-mc26.3-v1.0.6-fabric.jar",
+          "sha512": "43d4c15445b26decb24a350881545c6c578efaf402828c745bc5e0c179d775f14ae68498a1cda083e8b630a456f8922205a116bc5131bb3291e23509d2987a03",
+          "size": 423139,
+          "sha1": "603a64e8884a1cd53a406a46cc0d5621ad7e590a"
+        }
+      ]
+    },
+    {
+      "id": "planeadvancements",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "name": "Plane Advancements",
+      "version": "1.6",
+      "description": "Client only. Advancements laid out on a flat plane. Not needed to join.",
+      "license": "LGPL-3.0-only",
+      "files": [
+        {
+          "file": "plane_advancements-1.6-mc26.3.jar",
+          "dest": "mods",
+          "match": "plane_advancements-*.jar",
+          "url": "https://cdn.modrinth.com/data/V1smGrYI/versions/yAejuECi/plane_advancements-1.6-mc26.3.jar",
+          "sha512": "d6ab8cc78d1b3ada3c4fd647823026ce5b435964c5bcbcc67ac857d85b57e7cf124255d82edefee62161f854b3ca3761076bd55ccacc34c537c255e2cbdad966",
+          "size": 405738,
+          "sha1": "1955e4636ca9a774aca1fb041a62ac8890eb0e2d"
+        }
+      ]
+    },
+    {
+      "id": "audiohotkeys",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "vanillaconfig"
+      ],
+      "name": "Audio Hotkeys",
+      "version": "1.0.14",
+      "description": "Client only. Hotkeys for sound volume. Not needed to join.",
+      "license": "GPL-3.0-only",
+      "files": [
+        {
+          "file": "audio_hotkeys-1.0.14+26.3.jar",
+          "dest": "mods",
+          "match": "audio_hotkeys-*.jar",
+          "url": "https://cdn.modrinth.com/data/oAKswYFJ/versions/L9l8zP9q/audio_hotkeys-1.0.14%2B26.3.jar",
+          "sha512": "d68aa7ce486fa50db761336fed5882a0ebbb7a79017ed131cfb62275eecc5f5f054a8ff3080a9218c07f7ad299005588805f699287b1fe6c8d14af1049a858a6",
+          "size": 52487,
+          "sha1": "3aa93bf17b3f0564be4c1e7cafa095542a175b3c"
+        }
+      ]
+    },
+    {
+      "id": "miniature",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "shaders"
+      ],
+      "name": "Miniature shader",
+      "version": "2.19",
+      "description": "Client only. Light Better Adventures+ shader pack for Iris.",
+      "license": "MIT",
+      "files": [
+        {
+          "file": "miniature-shader-2.19.zip",
+          "dest": "shaderpacks",
+          "match": "miniature-shader-*.zip",
+          "url": "https://cdn.modrinth.com/data/UaS8ROxa/versions/LWmZ94RG/miniature-shader-2.19.zip",
+          "sha512": "bc2d9f3d135e8608f4735e5372b893e17cdc630b7536ec1e0b9a4d2734167d1a2102e60de60731d21d8a9741cec1a82530d03bf634b7e7cf9a0f107077c0e7fa",
+          "size": 43913,
+          "sha1": "f66501ebcc5197f72ef19065eb0fa851707d7f9f"
+        }
+      ]
+    },
+    {
+      "id": "miniaturexl",
+      "group": "shaders",
+      "kind": "download",
+      "requires": [
+        "shaders"
+      ],
+      "name": "MiniatureXL shader",
+      "version": "1.0",
+      "description": "Client only. Better Adventures+ shader pack for Iris.",
+      "license": "MIT",
+      "files": [
+        {
+          "file": "MiniatureXL-1.0.zip",
+          "dest": "shaderpacks",
+          "match": "MiniatureXL*.zip",
+          "url": "https://cdn.modrinth.com/data/nshTeIRo/versions/KECWGfU0/MiniatureXL%201.0.zip",
+          "sha512": "1cbf8efb0a9f71d1c3aa723c4170ffc6f0c08fbb640526fdd91f2c98f4b9bab2e33e3903b7062785ece6b8587c4c434d4f59d98f5775247252c1b168ad7ded7d",
+          "size": 87046,
+          "sha1": "c4aa861f91393d663fc831e3266608b273690e59"
+        }
+      ]
     }
   ],
   "kits": {
@@ -706,6 +2666,7 @@
         "deck",
         "ships",
         "snow",
+        "dietplus",
         "badoptimizations",
         "modernfix",
         "lithium",
@@ -716,10 +2677,50 @@
         "asynclogger",
         "jasione",
         "asyncparticles",
-        "obe"
+        "obe",
+        "fallingtree",
+        "c2me",
+        "soundphysics",
+        "inventorysorter",
+        "universalbonemeal",
+        "geckolib",
+        "voicechat",
+        "lootr",
+        "fzzyconfig",
+        "vanillaconfig",
+        "puzzleslib",
+        "hidearmor",
+        "scholar",
+        "forgeconfigapiport",
+        "clothconfig",
+        "rightclickharvest",
+        "zoomify",
+        "diagonalfences",
+        "amplifiednether",
+        "matcha",
+        "cristellib",
+        "architectury",
+        "mru",
+        "connectiblechains",
+        "jakesbuildtools",
+        "easyshulkerboxes",
+        "tradecycling",
+        "modonomicon",
+        "yacl",
+        "diagonalwalls",
+        "streamsreflowing",
+        "kotlin",
+        "shulkerboxtooltip",
+        "axiom",
+        "terrainslabs",
+        "bettertrees",
+        "jamlib",
+        "slabbed",
+        "nullscape",
+        "midnightlib"
       ],
       "snowLite": true,
-      "description": "Ships, smooth decks, lighter snow, Sodium, and client performance mods. Runs on almost any PC."
+      "description": "Better Adventures+ server mods, ships, smooth decks, lighter snow, Sodium and client performance mods. Runs on almost any PC."
     },
     "full": {
       "name": "Full",
@@ -730,6 +2731,8 @@
         "deck",
         "ships",
         "snow",
+        "dietplus",
+        "appleskin",
         "badoptimizations",
         "modernfix",
         "lithium",
@@ -740,10 +2743,92 @@
         "asynclogger",
         "jasione",
         "asyncparticles",
-        "obe"
+        "obe",
+        "fallingtree",
+        "c2me",
+        "soundphysics",
+        "inventorysorter",
+        "universalbonemeal",
+        "geckolib",
+        "voicechat",
+        "lootr",
+        "fzzyconfig",
+        "vanillaconfig",
+        "puzzleslib",
+        "hidearmor",
+        "scholar",
+        "forgeconfigapiport",
+        "clothconfig",
+        "rightclickharvest",
+        "zoomify",
+        "diagonalfences",
+        "amplifiednether",
+        "matcha",
+        "cristellib",
+        "architectury",
+        "mru",
+        "connectiblechains",
+        "jakesbuildtools",
+        "easyshulkerboxes",
+        "tradecycling",
+        "modonomicon",
+        "yacl",
+        "diagonalwalls",
+        "streamsreflowing",
+        "kotlin",
+        "shulkerboxtooltip",
+        "axiom",
+        "terrainslabs",
+        "bettertrees",
+        "jamlib",
+        "slabbed",
+        "nullscape",
+        "midnightlib",
+        "freecam",
+        "modmenu",
+        "sounds",
+        "bettersnowcoverage",
+        "flyspeed",
+        "betterclouds",
+        "smoothsteps",
+        "denseflowers",
+        "bridgingmod",
+        "atmosfera",
+        "windy",
+        "betterclimbing",
+        "continuity",
+        "overflowingbars",
+        "visuality",
+        "musiccontrol",
+        "invmove",
+        "bettersmoke",
+        "emfcompat",
+        "emf",
+        "etf",
+        "advancementsfullscreen",
+        "punchy",
+        "coolrain",
+        "stacktonearbychests",
+        "presencefootsteps",
+        "irissearch",
+        "mousetweaks",
+        "smoothswapping",
+        "polytone",
+        "flashback",
+        "disablefrontcamera",
+        "mossylib",
+        "bobby",
+        "lambdynlights",
+        "clickthrough",
+        "betterf3",
+        "unboundthirdperson",
+        "planeadvancements",
+        "audiohotkeys",
+        "miniature",
+        "miniaturexl"
       ],
       "snowLite": false,
-      "description": "Everything: Iris + Complementary shaders, client performance mods, full snow, ships."
+      "description": "Everything in Basic plus the Better Adventures+ client mods, Iris with Complementary and Miniature shaders, full snow and ships."
     },
     "recommended": {
       "name": "Recommended",
@@ -754,6 +2839,8 @@
         "deck",
         "ships",
         "snow",
+        "dietplus",
+        "appleskin",
         "badoptimizations",
         "modernfix",
         "lithium",
@@ -764,7 +2851,89 @@
         "asynclogger",
         "jasione",
         "asyncparticles",
-        "obe"
+        "obe",
+        "fallingtree",
+        "c2me",
+        "soundphysics",
+        "inventorysorter",
+        "universalbonemeal",
+        "geckolib",
+        "voicechat",
+        "lootr",
+        "fzzyconfig",
+        "vanillaconfig",
+        "puzzleslib",
+        "hidearmor",
+        "scholar",
+        "forgeconfigapiport",
+        "clothconfig",
+        "rightclickharvest",
+        "zoomify",
+        "diagonalfences",
+        "amplifiednether",
+        "matcha",
+        "cristellib",
+        "architectury",
+        "mru",
+        "connectiblechains",
+        "jakesbuildtools",
+        "easyshulkerboxes",
+        "tradecycling",
+        "modonomicon",
+        "yacl",
+        "diagonalwalls",
+        "streamsreflowing",
+        "kotlin",
+        "shulkerboxtooltip",
+        "axiom",
+        "terrainslabs",
+        "bettertrees",
+        "jamlib",
+        "slabbed",
+        "nullscape",
+        "midnightlib",
+        "freecam",
+        "modmenu",
+        "sounds",
+        "bettersnowcoverage",
+        "flyspeed",
+        "betterclouds",
+        "smoothsteps",
+        "denseflowers",
+        "bridgingmod",
+        "atmosfera",
+        "windy",
+        "betterclimbing",
+        "continuity",
+        "overflowingbars",
+        "visuality",
+        "musiccontrol",
+        "invmove",
+        "bettersmoke",
+        "emfcompat",
+        "emf",
+        "etf",
+        "advancementsfullscreen",
+        "punchy",
+        "coolrain",
+        "stacktonearbychests",
+        "presencefootsteps",
+        "irissearch",
+        "mousetweaks",
+        "smoothswapping",
+        "polytone",
+        "flashback",
+        "disablefrontcamera",
+        "mossylib",
+        "bobby",
+        "lambdynlights",
+        "clickthrough",
+        "betterf3",
+        "unboundthirdperson",
+        "planeadvancements",
+        "audiohotkeys",
+        "miniature",
+        "miniaturexl"
       ],
       "snowLite": false,
       "description": "Full kit when this PC can take it; otherwise Basic."

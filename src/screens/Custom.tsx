@@ -63,7 +63,9 @@ export function Custom({
                         <span className="block text-sm text-muted">{component.description}</span>
                         {locked ? (
                           <span className="block text-sm text-gold">
-                            Needed for smooth ship decks on the Arnold server
+                            {component.id === "deck"
+                              ? "Needed for smooth ship decks on the Arnold server"
+                              : "Needed to join the Arnold server"}
                           </span>
                         ) : null}
                       </span>

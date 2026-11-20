@@ -13,15 +13,15 @@
 
 The Arnold Client Mod Installer sets up everything a player needs to see the Avalon realm the way it was built: Arnold's ships with their sails and rigging, decks you can walk on smoothly, and snowfall with drifts and footprints. Pick a kit, press install, and play.
 
-These client mods are **optional**. Players without them can still join the server; they just miss the extra visuals.
+The Arnold server runs Better Adventures+ 1.64, so every kit installs the Better Adventures+ mods the server needs to let you join. Everything else (shaders, client-only Better Adventures+ extras, the Ocean pack) is optional.
 
 ## 🛡️ Kits
 
 | Kit | For | What's inside |
 |---|---|---|
-| **Basic** | Almost any PC | Sodium for smooth FPS, the client performance mods, Arnold Decks, Ships and *lighter* Snowfall, Wakes and Particle Rain |
-| **Full** | Gaming PCs | Everything in Basic with full Snowfall, plus shaders (Iris + Complementary Reimagined) and the Ocean mods |
-| **Custom** | Tinkerers | Pick mods one by one. Arnold Decks always stays on |
+| **Basic** | Almost any PC | The Better Adventures+ mods needed to join, Sodium and the client performance mods, Arnold Decks, Ships and *lighter* Snowfall, Diet+ food groups, Wakes and Particle Rain |
+| **Full** | Gaming PCs | Everything in Basic with full Snowfall, plus the Better Adventures+ client mods, shaders (Iris + Complementary Reimagined, Miniature), AppleSkin food info and the Ocean mods |
+| **Custom** | Tinkerers | Pick mods one by one. Arnold Decks and the mods needed to join always stay on |
 
 Not sure? The installer scans your PC and recommends a kit.
 

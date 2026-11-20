@@ -200,7 +200,7 @@ export function missingMinecraftError(gameDir: string): ErrorPayload {
     code: "E-MC-MISSING",
     title: "Minecraft 26.3 isn't installed yet",
     hint: "Open the Minecraft Launcher, press Play once on Latest release (26.3), close the game, then press Try again.",
-    detail: `detected: versions/26.3/26.3.jar not found in ${gameDir}\nmanifest 2026.11.6 (signature ok) · app 3.0.0 · Windows 11 23H2`,
+    detail: `detected: versions/26.3/26.3.jar not found in ${gameDir}\nmanifest 2026.11.7 (signature ok) · app 3.0.0 · Windows 11 23H2`,
   };
 }
 
@@ -209,9 +209,9 @@ export function kitBlurb(kit: string, rec: Recommendation): string {
     case "recommended":
       return `Full kit: ${rec.hardware.gpu} · ${rec.hardware.vramGb} GB VRAM · ${rec.hardware.ramGb} GB RAM · ${rec.hardware.cores} cores`;
     case "basic":
-      return "Ships, smooth decks, lighter snow, Sodium, and client performance mods. Runs on almost any PC.";
+      return "Better Adventures+ server mods, ships, smooth decks, lighter snow, Sodium and client performance mods. Runs on almost any PC.";
     case "full":
-      return "Everything: Iris + Complementary shaders, client performance mods, full snow, ships.";
+      return "Everything in Basic plus the Better Adventures+ client mods, Iris + Complementary and Miniature shaders, full snow, ships.";
     case "custom":
       return "Pick each mod yourself. Requirements are added for you.";
     default:
@@ -243,12 +243,12 @@ export async function playMockInstall(
 ): Promise<"done" | "cancelled"> {
   const rows = [
     { message: "Backup saved (restore point 2026-11-01 20:41)", ms: 400 },
-    { message: "Fabric loader 0.20.1 + Fabric API 0.165.0 kept", ms: 350 },
+    { message: "Fabric loader 0.20.1 + Fabric API 0.166.2 kept", ms: 350 },
     { message: "Sodium 0.9.2 SHA-512 verified", ms: 400 },
     { message: "Arnold Ships client 0.10.3 SHA-512 verified · replaced 0.10.2", ms: 450 },
     { message: "Iris 1.11.7 — verifying SHA-512…", ms: 700 },
     { message: "Complementary Reimagined r5.9.3 — 41%", ms: 800 },
-    { message: "Wakes 0.7.3 · Particle Rain 4.0.2 · Snow config", ms: 500 },
+    { message: "Wakes 0.7.3 · Particle Rain 4.0.3 · Snow config", ms: 500 },
   ];
   for (let i = 0; i < rows.length; i += 1) {
     if (signal.cancelled) return "cancelled";
