@@ -104,7 +104,7 @@ fn pending_local_load() -> Result<ManifestLoad, AppError> {
     let manifest = load_bundled_manifest()?;
     Ok(ManifestLoad {
         manifest,
-        source: "local".into(),
+        source: "bundled".into(),
         offline: false,
         message: Some(format!(
             "{LOCAL_SOURCE_BANNER}. Choose the folder that has manifest.json."
@@ -693,4 +693,18 @@ pub fn snapshot_now(label: String, state: State<AppState>) -> Result<SnapshotMet
         .map_err(|e| e.to_payload())?
         .unwrap_or_else(|| InstalledState::new("installer", "unknown"));
     create_snapshot(&game, &installed, &label).map_err(|e| e.to_payload())
+}
+
+#[cfg(all(test, feature = "local-source"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pending_local_load_uses_bundled_ba_plus_list() {
+        let loaded = pending_local_load().unwrap();
+        assert_eq!(loaded.source, "bundled");
+        assert_eq!(loaded.manifest.manifest_version, "2026.11.7");
+        assert!(loaded.local_source);
+        assert!(loaded.local_source_dir.is_none());
+    }
 }

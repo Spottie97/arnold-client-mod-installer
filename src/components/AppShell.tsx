@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { headerTagline } from "../lib/version";
 import type { Screen } from "../types";
 import { ShieldLogo } from "./ShieldLogo";
 import { StepPills } from "./StepPills";
@@ -23,9 +24,7 @@ export function AppShell({
           <ShieldLogo size={40} />
           <div>
             <div className="font-heading text-xl text-text">Arnold Client Mods</div>
-            <div className="text-sm text-muted">
-              Optional looks &amp; effects for the Arnold server · Minecraft 26.3 · v3.0.0
-            </div>
+            <div className="text-sm text-muted">{headerTagline()}</div>
           </div>
         </div>
         <StepPills screen={screen} />
