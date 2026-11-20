@@ -1125,6 +1125,68 @@ mod tests {
     }
 
     #[test]
+    fn serene_seasons_and_glitchcore_come_from_modrinth_in_every_kit() {
+        let manifest = load_fixture_manifest().unwrap();
+        let by_id = |id: &str| {
+            manifest
+                .components
+                .iter()
+                .find(|c| c.id == id)
+                .unwrap_or_else(|| panic!("missing {id}"))
+        };
+
+        // Both are All Rights Reserved: download from Modrinth, never rehost.
+        let pins = [
+            (
+                "glitchcore",
+                "26.3.0.0.5",
+                "GlitchCore-fabric-26.3-26.3.0.0.5.jar",
+                "https://cdn.modrinth.com/data/s3dmwKy5/versions/kfFeDnrp/GlitchCore-fabric-26.3-26.3.0.0.5.jar",
+                "f975535e561285898163e7512008fe61ffaac66b6fc60a4e4763d0f2279617f75900d7a2ab2708d8dc348337119df61d2783aa101a9f1a24020f99888aa0d457",
+                339_788,
+            ),
+            (
+                "sereneseasons",
+                "26.1.2.0.7",
+                "SereneSeasons-fabric-26.3-26.1.2.0.7.jar",
+                "https://cdn.modrinth.com/data/e0bNACJD/versions/V9PxJPuw/SereneSeasons-fabric-26.3-26.1.2.0.7.jar",
+                "f0ef802ab4a7d95df76855100656f3c0f65c7954b52330d7e3c224a0900359d8e8db8953dde3aca52231a5a90428e9925cac99ca01b22485d4af37640620069c",
+                410_505,
+            ),
+        ];
+        for (id, version, name, url, sha512, size) in pins {
+            let component = by_id(id);
+            assert_eq!(component.version, version, "{id}");
+            assert_eq!(component.group, ComponentGroup::Arnold, "{id}");
+            assert!(component.required_in_all_kits, "{id} must be locked");
+            assert_eq!(
+                component.license.as_deref(),
+                Some("LicenseRef-All-Rights-Reserved"),
+                "{id}"
+            );
+            assert_eq!(component.files.len(), 1, "{id}");
+            let file = file_of(&manifest, id, name);
+            assert_eq!(file.url, url, "{id}");
+            assert!(
+                !file.url.starts_with("https://github.com/"),
+                "{id} must not be rehosted"
+            );
+            assert_eq!(file.sha512, sha512, "{id}");
+            assert_eq!(file.size, size, "{id}");
+            for kit in ["basic", "full", "recommended"] {
+                assert!(
+                    manifest.kits[kit].components.iter().any(|item| item == id),
+                    "{kit} missing {id}"
+                );
+            }
+        }
+        assert_eq!(
+            by_id("sereneseasons").requires,
+            vec!["base".to_string(), "glitchcore".to_string()]
+        );
+    }
+
+    #[test]
     fn keo_performance_mods_are_client_addons_and_keep_the_pinned_renderer() {
         let manifest = load_fixture_manifest().unwrap();
         let by_id = |id: &str| {

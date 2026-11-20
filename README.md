@@ -19,7 +19,7 @@ These client mods are **optional**. Players without them can still join the serv
 
 | Kit | For | What's inside |
 |---|---|---|
-| **Basic** | Almost any PC | Sodium for smooth FPS, the client performance mods, Arnold Decks, Ships and *lighter* Snowfall, Diet+ food groups, Wakes and Particle Rain |
+| **Basic** | Almost any PC | Sodium for smooth FPS, the client performance mods, Arnold Decks, Ships and *lighter* Snowfall, Diet+ food groups, Serene Seasons, Wakes and Particle Rain |
 | **Full** | Gaming PCs | Everything in Basic with full Snowfall, plus shaders (Iris + Complementary Reimagined), AppleSkin food info and the Ocean mods |
 | **Custom** | Tinkerers | Pick mods one by one. Arnold Decks always stays on |
 
