@@ -411,7 +411,7 @@ mod tests {
         assert!(plan.components.contains(&"base".into()));
         assert!(plan.components.contains(&"sodium".into()));
         assert!(plan.components.contains(&"shaders".into()));
-        for id in ["dietplus", "glitchcore", "sereneseasons"] {
+        for id in ["dietplus", "glitchcore", "sereneseasons", "drinkbeer"] {
             assert!(
                 plan.components.iter().any(|item| item == id),
                 "custom must lock {id}"
@@ -692,6 +692,7 @@ mod tests {
             "dietplus",
             "glitchcore",
             "sereneseasons",
+            "drinkbeer",
             "base",
         ] {
             assert!(

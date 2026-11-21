@@ -418,6 +418,30 @@
       ]
     },
     {
+      "id": "drinkbeer",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "requiredInAllKits": true,
+      "name": "Drink Beer Refill",
+      "version": "1.4.2",
+      "description": "Brewing and bartending for the Arnold server. The server runs it too, so every kit installs it.",
+      "license": "LicenseRef-All-Rights-Reserved",
+      "files": [
+        {
+          "file": "drinkbeer-refill-26.3-fabric-1.4.2+fabric.jar",
+          "dest": "mods",
+          "match": "drinkbeer-refill-*.jar",
+          "url": "https://cdn.modrinth.com/data/RZwVw5iA/versions/tRYmjF1L/drinkbeer-refill-26.3-fabric-1.4.2%2Bfabric.jar",
+          "sha512": "79ecd4aca42bd1a7f3fd109b21dd178f2c18f5690590152c0f51cc014218db796f254aaa5e84f6fbaee6ad4f7bdc9693b0dc9d14142eca867a2aed240b4b0c8e",
+          "size": 1693588,
+          "sha1": "4cbc42aa098adb7bf9d0828368a65f5829044d90"
+        }
+      ]
+    },
+    {
       "id": "appleskin",
       "group": "arnold",
       "kind": "download",
@@ -2880,6 +2904,7 @@
         "dietplus",
         "glitchcore",
         "sereneseasons",
+        "drinkbeer",
         "badoptimizations",
         "modernfix",
         "lithium",
@@ -2947,6 +2972,7 @@
         "dietplus",
         "glitchcore",
         "sereneseasons",
+        "drinkbeer",
         "appleskin",
         "badoptimizations",
         "modernfix",
@@ -3064,6 +3090,7 @@
         "dietplus",
         "glitchcore",
         "sereneseasons",
+        "drinkbeer",
         "appleskin",
         "badoptimizations",
         "modernfix",

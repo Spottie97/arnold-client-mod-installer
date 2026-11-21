@@ -1285,6 +1285,71 @@ mod tests {
     }
 
     #[test]
+    fn drink_beer_refill_comes_from_modrinth_in_every_kit() {
+        let manifest = load_fixture_manifest().unwrap();
+        let beer = manifest
+            .components
+            .iter()
+            .find(|component| component.id == "drinkbeer")
+            .expect("missing drinkbeer");
+        assert_eq!(beer.version, "1.4.2");
+        assert_eq!(beer.name, "Drink Beer Refill");
+        assert_eq!(beer.group, ComponentGroup::Arnold);
+        assert!(beer.required_in_all_kits, "drinkbeer must be locked");
+        assert_eq!(beer.requires, vec!["base".to_string()]);
+        assert_eq!(
+            beer.license.as_deref(),
+            Some("LicenseRef-All-Rights-Reserved")
+        );
+        let description = beer.description.to_ascii_lowercase();
+        assert!(
+            description.contains("brewing") && description.contains("bartending"),
+            "{}",
+            beer.description
+        );
+        assert!(
+            beer.description
+                .contains("The server runs it too, so every kit installs it."),
+            "{}",
+            beer.description
+        );
+        assert_eq!(beer.files.len(), 1);
+        let file = file_of(
+            &manifest,
+            "drinkbeer",
+            "drinkbeer-refill-26.3-fabric-1.4.2+fabric.jar",
+        );
+        assert_eq!(file.match_glob, "drinkbeer-refill-*.jar");
+        assert_eq!(
+            file.url,
+            "https://cdn.modrinth.com/data/RZwVw5iA/versions/tRYmjF1L/drinkbeer-refill-26.3-fabric-1.4.2%2Bfabric.jar"
+        );
+        assert!(file.url.starts_with("https://cdn.modrinth.com/"));
+        assert!(
+            !file.url.starts_with("https://github.com/"),
+            "drinkbeer must not be rehosted"
+        );
+        assert_eq!(
+            file.sha512,
+            "79ecd4aca42bd1a7f3fd109b21dd178f2c18f5690590152c0f51cc014218db796f254aaa5e84f6fbaee6ad4f7bdc9693b0dc9d14142eca867a2aed240b4b0c8e"
+        );
+        assert_eq!(
+            file.sha1.as_deref(),
+            Some("4cbc42aa098adb7bf9d0828368a65f5829044d90")
+        );
+        assert_eq!(file.size, 1_693_588);
+        for kit in ["basic", "full", "recommended"] {
+            assert!(
+                manifest.kits[kit]
+                    .components
+                    .iter()
+                    .any(|id| id == "drinkbeer"),
+                "{kit} missing drinkbeer"
+            );
+        }
+    }
+
+    #[test]
     fn keo_performance_mods_are_client_addons_and_keep_the_pinned_renderer() {
         let manifest = load_fixture_manifest().unwrap();
         let by_id = |id: &str| {
@@ -1888,8 +1953,9 @@ mod tests {
         expected.insert("dietplus".to_string());
         expected.insert("glitchcore".to_string());
         expected.insert("sereneseasons".to_string());
+        expected.insert("drinkbeer".to_string());
         expected.insert("deck".to_string());
-        assert_eq!(locked.len(), 47);
+        assert_eq!(locked.len(), 48);
         assert_eq!(locked, expected);
     }
 
@@ -2335,6 +2401,7 @@ mod tests {
             "grassrise",
             "glitchcore",
             "sereneseasons",
+            "drinkbeer",
         ] {
             let component = by_id(id);
             assert_eq!(
