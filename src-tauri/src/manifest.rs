@@ -1437,10 +1437,10 @@ mod tests {
             by_id("hardcorerevival").requires,
             vec!["base".to_string(), "balm".to_string()]
         );
-        assert_eq!(manifest.components.len(), 127);
-        assert_eq!(manifest.kits["basic"].components.len(), 70);
-        assert_eq!(manifest.kits["full"].components.len(), 121);
-        assert_eq!(manifest.kits["recommended"].components.len(), 121);
+        assert_eq!(manifest.components.len(), 129);
+        assert_eq!(manifest.kits["basic"].components.len(), 72);
+        assert_eq!(manifest.kits["full"].components.len(), 123);
+        assert_eq!(manifest.kits["recommended"].components.len(), 123);
     }
 
     #[test]
@@ -1644,7 +1644,12 @@ mod tests {
             Some("57e9afc6553eb00933dbe00ebb51b733ddb827df")
         );
         assert_eq!(file.size, 2_608_709);
-        for id in ["ingeniumapi", "shippyships"] {
+        for id in [
+            "ingeniumapi",
+            "shippyships",
+            "travelersbackpack",
+            "animalfeedingtrough",
+        ] {
             for kit in ["basic", "full", "recommended"] {
                 assert!(
                     manifest.kits[kit].components.iter().any(|item| item == id),
@@ -1652,6 +1657,53 @@ mod tests {
                 );
             }
         }
+        let pack = by_id("travelersbackpack");
+        assert_eq!(pack.name, "Traveler's Backpack");
+        assert_eq!(pack.version, "26.3-11.4.6");
+        assert_eq!(pack.license.as_deref(), Some("LGPL-3.0-only"));
+        assert!(pack.required_in_all_kits);
+        assert_eq!(
+            pack.requires,
+            vec!["base".to_string(), "forgeconfigapiport".to_string()]
+        );
+        let pack_file = file_of(
+            &manifest,
+            "travelersbackpack",
+            "travelersbackpack-fabric-26.3-11.4.6.jar",
+        );
+        assert_eq!(pack_file.match_glob, "travelersbackpack-*.jar");
+        assert_eq!(
+            pack_file.url,
+            "https://cdn.modrinth.com/data/rlloIFEV/versions/RSmOmcy4/travelersbackpack-fabric-26.3-11.4.6.jar"
+        );
+        assert!(!pack_file.url.starts_with("https://github.com/"));
+        assert_eq!(
+            pack_file.sha512,
+            "ca4fa3611d61d30109dfa3c3612ef2950257cb1ecfdd3b04acc07d2cf70f2f2d972a0640af0bf37519e83b9fc6a5c9e5fda6a08ad21bf52350f658290c856066"
+        );
+        assert_eq!(pack_file.size, 1_576_052);
+        let trough = by_id("animalfeedingtrough");
+        assert_eq!(trough.name, "Animal Feeding Trough");
+        assert_eq!(trough.version, "1.2.1+26.3");
+        assert_eq!(trough.license.as_deref(), Some("MIT"));
+        assert!(trough.required_in_all_kits);
+        assert_eq!(trough.requires, vec!["base".to_string()]);
+        let trough_file = file_of(
+            &manifest,
+            "animalfeedingtrough",
+            "animal_feeding_trough-1.2.1+26.3.jar",
+        );
+        assert_eq!(trough_file.match_glob, "animal_feeding_trough-*.jar");
+        assert_eq!(
+            trough_file.url,
+            "https://cdn.modrinth.com/data/bRFWnJ87/versions/pTYiM3Eb/animal_feeding_trough-1.2.1%2B26.3.jar"
+        );
+        assert!(!trough_file.url.starts_with("https://github.com/"));
+        assert_eq!(
+            trough_file.sha512,
+            "022351f8ab792530352c2761d628308c64b01844497881b37c10e9b9dfd657b9428cab2dba1de946b61ccd25811037a4d8e19e7c61abfc3e8f85793dd5a93566"
+        );
+        assert_eq!(trough_file.size, 274_338);
         for skipped in ["distanthorizons", "fastipping"] {
             assert!(
                 manifest
@@ -2278,8 +2330,10 @@ mod tests {
         expected.insert("xaeroworldmap".to_string());
         expected.insert("ingeniumapi".to_string());
         expected.insert("shippyships".to_string());
+        expected.insert("travelersbackpack".to_string());
+        expected.insert("animalfeedingtrough".to_string());
         expected.insert("deck".to_string());
-        assert_eq!(locked.len(), 58);
+        assert_eq!(locked.len(), 60);
         assert_eq!(locked, expected);
     }
 

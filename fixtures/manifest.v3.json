@@ -687,6 +687,55 @@
       ]
     },
     {
+      "id": "travelersbackpack",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base",
+        "forgeconfigapiport"
+      ],
+      "requiredInAllKits": true,
+      "name": "Traveler's Backpack",
+      "version": "26.3-11.4.6",
+      "description": "Wearable backpacks with tanks and upgrades. The server runs it too, so every kit installs it.",
+      "license": "LGPL-3.0-only",
+      "files": [
+        {
+          "file": "travelersbackpack-fabric-26.3-11.4.6.jar",
+          "dest": "mods",
+          "match": "travelersbackpack-*.jar",
+          "url": "https://cdn.modrinth.com/data/rlloIFEV/versions/RSmOmcy4/travelersbackpack-fabric-26.3-11.4.6.jar",
+          "sha512": "ca4fa3611d61d30109dfa3c3612ef2950257cb1ecfdd3b04acc07d2cf70f2f2d972a0640af0bf37519e83b9fc6a5c9e5fda6a08ad21bf52350f658290c856066",
+          "size": 1576052,
+          "sha1": "02ad5297d333cf7fd8b773392e46a3568c4c2514"
+        }
+      ]
+    },
+    {
+      "id": "animalfeedingtrough",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "requiredInAllKits": true,
+      "name": "Animal Feeding Trough",
+      "version": "1.2.1+26.3",
+      "description": "Trough block that feeds nearby animals. The server runs it too, so every kit installs it.",
+      "license": "MIT",
+      "files": [
+        {
+          "file": "animal_feeding_trough-1.2.1+26.3.jar",
+          "dest": "mods",
+          "match": "animal_feeding_trough-*.jar",
+          "url": "https://cdn.modrinth.com/data/bRFWnJ87/versions/pTYiM3Eb/animal_feeding_trough-1.2.1%2B26.3.jar",
+          "sha512": "022351f8ab792530352c2761d628308c64b01844497881b37c10e9b9dfd657b9428cab2dba1de946b61ccd25811037a4d8e19e7c61abfc3e8f85793dd5a93566",
+          "size": 274338,
+          "sha1": "00cc20592a4d092c65bd45fce3232785920d1fc1"
+        }
+      ]
+    },
+    {
       "id": "appleskin",
       "group": "arnold",
       "kind": "download",
@@ -3160,6 +3209,8 @@
         "xaeroworldmap",
         "ingeniumapi",
         "shippyships",
+        "travelersbackpack",
+        "animalfeedingtrough",
         "badoptimizations",
         "modernfix",
         "lithium",
@@ -3238,6 +3289,8 @@
         "xaeroworldmap",
         "ingeniumapi",
         "shippyships",
+        "travelersbackpack",
+        "animalfeedingtrough",
         "appleskin",
         "badoptimizations",
         "modernfix",
@@ -3366,6 +3419,8 @@
         "xaeroworldmap",
         "ingeniumapi",
         "shippyships",
+        "travelersbackpack",
+        "animalfeedingtrough",
         "appleskin",
         "badoptimizations",
         "modernfix",
