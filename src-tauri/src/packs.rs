@@ -470,21 +470,25 @@ pub fn load_pack_manifest<F: Fetcher>(
             }
             if entry.id == BA_PLUS_PACK_ID {
                 if let Ok(manifest) = load_cached_manifest_with_key(cache_dir, key) {
-                    if manifest_matches(entry, &manifest, None) {
-                        return ManifestLoad {
-                            manifest,
-                            source: "cache".into(),
-                            offline: true,
-                            message: Some(format!(
-                                "Using the last good mod list (offline). {remote_err}"
-                            )),
-                            local_source: false,
-                            local_source_dir: None,
-                        };
+                    let (json_path, _) = manifest::cache_paths(cache_dir);
+                    if let Ok(bytes) = fs::read(json_path) {
+                        if manifest_matches(entry, &manifest, &bytes) {
+                            return ManifestLoad {
+                                manifest,
+                                source: "cache".into(),
+                                offline: true,
+                                message: Some(format!(
+                                    "Using the last good mod list (offline). {remote_err}"
+                                )),
+                                local_source: false,
+                                local_source_dir: None,
+                            };
+                        }
                     }
                 }
                 if let Ok(manifest) = load_bundled_manifest_with_key(key) {
-                    if manifest_matches(entry, &manifest, None) {
+                    let bytes = manifest::BUNDLED_MANIFEST_JSON.as_bytes();
+                    if manifest_matches(entry, &manifest, bytes) {
                         return ManifestLoad {
                             manifest,
                             source: "bundled".into(),
@@ -534,14 +538,14 @@ fn accept_pack_bytes<F: Fetcher>(
     Ok((manifest, signature))
 }
 
-fn manifest_matches(entry: &PackEntry, manifest: &Manifest, bytes: Option<&[u8]>) -> bool {
+fn manifest_matches(entry: &PackEntry, manifest: &Manifest, bytes: &[u8]) -> bool {
     if manifest.minecraft != entry.minecraft {
         return false;
     }
-    if let (Some(expected), Some(bytes)) = (&entry.manifest_sha512, bytes) {
-        return sha512_hex(bytes) == *expected;
+    match &entry.manifest_sha512 {
+        Some(expected) => sha512_hex(bytes) == *expected,
+        None => true,
     }
-    true
 }
 
 fn cached_pack_manifest(
@@ -550,8 +554,10 @@ fn cached_pack_manifest(
     key: &str,
     remote_err: &AppError,
 ) -> Option<ManifestLoad> {
+    let (json_path, _) = manifest::cache_paths(pack_cache);
+    let bytes = fs::read(json_path).ok()?;
     let manifest = load_cached_manifest_with_key(pack_cache, key).ok()?;
-    if !manifest_matches(entry, &manifest, None) {
+    if !manifest_matches(entry, &manifest, &bytes) {
         return None;
     }
     Some(ManifestLoad {
@@ -800,5 +806,58 @@ mod tests {
             .components
             .iter()
             .any(|id| id == "flashback"));
+    }
+
+    #[test]
+    fn pinned_offline_fallback_checks_the_cached_and_bundled_bytes() {
+        let bytes = crate::manifest::BUNDLED_MANIFEST_JSON.as_bytes();
+        let signature = hex::decode(crate::manifest::BUNDLED_MANIFEST_SIG_HEX.trim()).unwrap();
+        let mut entry = builtin_index().packs.remove(0);
+        entry.manifest_sha512 = Some("ab".repeat(64));
+
+        let wrong_cache = tempdir().unwrap();
+        let pack_cache = wrong_cache.path().join("packs").join(&entry.id);
+        crate::manifest::write_manifest_cache(&pack_cache, bytes, &signature).unwrap();
+        let loaded = load_pack_manifest(
+            &MapFetcher::default(),
+            &entry,
+            wrong_cache.path(),
+            TEST_MANIFEST_PUBLIC_KEY_HEX,
+        );
+        assert_eq!(loaded.source, "error");
+        assert_eq!(loaded.manifest.manifest_version, "unavailable");
+
+        let legacy = tempdir().unwrap();
+        crate::manifest::write_manifest_cache(legacy.path(), bytes, &signature).unwrap();
+        let loaded = load_pack_manifest(
+            &MapFetcher::default(),
+            &entry,
+            legacy.path(),
+            TEST_MANIFEST_PUBLIC_KEY_HEX,
+        );
+        assert_eq!(loaded.source, "error");
+
+        entry.manifest_sha512 = Some(crate::download::sha512_hex(bytes));
+        let matched = tempdir().unwrap();
+        let pack_cache = matched.path().join("packs").join(&entry.id);
+        crate::manifest::write_manifest_cache(&pack_cache, bytes, &signature).unwrap();
+        let loaded = load_pack_manifest(
+            &MapFetcher::default(),
+            &entry,
+            matched.path(),
+            TEST_MANIFEST_PUBLIC_KEY_HEX,
+        );
+        assert_eq!(loaded.source, "cache");
+        assert!(loaded.offline);
+
+        entry.manifest_sha512 = None;
+        let bundled = tempdir().unwrap();
+        let loaded = load_pack_manifest(
+            &MapFetcher::default(),
+            &entry,
+            bundled.path(),
+            TEST_MANIFEST_PUBLIC_KEY_HEX,
+        );
+        assert_eq!(loaded.source, "bundled");
     }
 }

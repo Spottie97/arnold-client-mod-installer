@@ -15,7 +15,9 @@ use crate::config::{
     apply_properties, format_setting_value, update_property_keys, ConfigSwitch, LITE_MARKER,
     MANAGED_HEADER,
 };
-use crate::detect::{default_candidates, detect_at, live_minecraft_processes, Detection};
+use crate::detect::{
+    apply_chosen_vanilla, default_candidates, detect_at, live_minecraft_processes, Detection,
+};
 use crate::errors::{AppError, ErrorPayload};
 use crate::fetch::UreqFetcher;
 use crate::import::{adopt_import, detect_import, ImportOffer};
@@ -31,7 +33,7 @@ use crate::manifest::{
 };
 use crate::pack_dirs::{self, CopyItem, ResolvedDir};
 use crate::packs::{self, BA_PLUS_PACK_ID};
-use crate::plan::{build_plan, InstallPlan, Selection};
+use crate::plan::{build_plan, ensure_plan_current, InstallPlan, Selection};
 use crate::prefs::{load_prefs, save_prefs, Prefs};
 use crate::progress::{ProgressThrottle, PROGRESS_MIN_GAP};
 use crate::quality::{apply_quality_change, QualityLevel};
@@ -312,11 +314,13 @@ pub fn detect(state: State<AppState>) -> Result<Detection, ErrorPayload> {
     };
     detection.needs_folder_choice = resolved.needs_choice;
     detection.launchers = report;
+    apply_chosen_vanilla(&mut detection, &dest.vanilla_roots, dest.require_vanilla);
     if !dest.vanilla_roots.is_empty() {
         detection.fabric.installed = dest
             .vanilla_roots
             .iter()
             .all(|root| crate::fabric::existing_fabric_for(root, &manifest.minecraft).is_some());
+        detection.fabric.will_install = !detection.fabric.installed;
     }
     Ok(detection)
 }
@@ -330,18 +334,19 @@ pub fn scan_hardware(state: State<AppState>) -> Result<Recommendation, ErrorPayl
 #[tauri::command]
 pub fn plan(sel: Selection, state: State<AppState>) -> Result<InstallPlan, ErrorPayload> {
     let manifest = manifest_of(&state).map_err(|e| e.to_payload())?;
-    let game = game_dir_of(&state).ok();
-    let installed = game
-        .as_deref()
-        .and_then(|dir| load_state(dir).ok().flatten());
-    let detection = detect(state).ok();
-    build_plan(
+    let game = game_dir_of(&state).unwrap_or_default();
+    let installed = load_state(&game).ok().flatten();
+    let detection = detect(state.clone()).ok();
+    let mut plan = build_plan(
         &manifest,
         &sel,
         installed.as_ref(),
         detection.as_ref().is_some_and(|d| d.fabric.installed),
     )
-    .map_err(|e| e.to_payload())
+    .map_err(|e| e.to_payload())?;
+    plan.pack_id = selected_pack_id(&state);
+    plan.pack_dir = game.to_string_lossy().into_owned();
+    Ok(plan)
 }
 
 fn fresh_cancel_flag(state: &AppState) -> Arc<AtomicBool> {
@@ -422,12 +427,28 @@ fn install_target_for(state: &AppState, pack_dir: &PathBuf, pack_name: &str) -> 
     }
 }
 
+fn record_active_pack_if_shared(state: &AppState) -> Result<(), AppError> {
+    let resolved = resolved_of(state)?;
+    if resolved.needs_choice.is_none() && resolved.mode == "default" {
+        pack_dirs::write_active_pack(&resolved.path, &selected_pack_id(state))?;
+    }
+    Ok(())
+}
+
 fn prepare_install(state: &AppState) -> Result<PreparedInstall<'_>, AppError> {
     // Take the running flag before replacing the cancel flag, so a second
     // install or repair cannot steal cancellation from the job in progress.
     let running = begin_install(state)?;
     let loaded = cached_or_load(state)?;
     let game = pack_dir_of(state)?;
+    let resolved = resolved_of(state)?;
+    if resolved.mode == "default" {
+        if let Some(active) = pack_dirs::shared_install_block(&game, &selected_pack_id(state)) {
+            return Err(AppError::State(format!(
+                "shared folder still has {active}; switch packs before installing"
+            )));
+        }
+    }
     let target = install_target_for(state, &game, &current_pack_name(state));
     let flag = fresh_cancel_flag(state);
     require_local_folder(state)?;
@@ -473,9 +494,18 @@ pub async fn install(
     spawn_install_worker("install", move || {
         let state = worker.state::<AppState>();
         let prepared = prepare_install(&state).map_err(|e| e.to_payload())?;
+        let installed = load_state(&prepared.target.pack_dir).ok().flatten();
+        ensure_plan_current(
+            &plan,
+            &selected_pack_id(&state),
+            &prepared.target.pack_dir,
+            &prepared.loaded.manifest,
+            installed.as_ref(),
+        )
+        .map_err(|e| e.to_payload())?;
         let ram = probe_hardware().ram_gb;
         let sink = progress_sink(worker.clone());
-        run_install(
+        let run_id = run_install(
             &prepared.target,
             &plan,
             &prepared.loaded.manifest,
@@ -485,7 +515,9 @@ pub async fn install(
             ram,
             &sink,
         )
-        .map_err(|e| e.to_payload())
+        .map_err(|e| e.to_payload())?;
+        record_active_pack_if_shared(&state).map_err(|e| e.to_payload())?;
+        Ok(run_id)
     })
     .await
 }
@@ -523,6 +555,47 @@ pub async fn repair(app: AppHandle) -> Result<String, ErrorPayload> {
 pub fn list_installed(state: State<AppState>) -> Result<Option<InstalledState>, ErrorPayload> {
     let game = game_dir_of(&state).map_err(|e| e.to_payload())?;
     load_state(&game).map_err(|e| e.to_payload())
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PackInstallState {
+    pub pack_id: String,
+    pub installed: Option<InstalledState>,
+}
+
+#[tauri::command]
+pub fn list_pack_states(state: State<AppState>) -> Result<Vec<PackInstallState>, ErrorPayload> {
+    let index = index_of(&state).map_err(|e| e.to_payload())?;
+    let mut rows = Vec::new();
+    for pack in &index.index.packs {
+        let installed = installed_for_pack(&state, &pack.id).map_err(|e| e.to_payload())?;
+        rows.push(PackInstallState {
+            pack_id: pack.id.clone(),
+            installed,
+        });
+    }
+    Ok(rows)
+}
+
+fn installed_for_pack(state: &AppState, pack_id: &str) -> Result<Option<InstalledState>, AppError> {
+    let prefs = load_prefs().unwrap_or_default();
+    let resolved = pack_dirs::resolve_pack_dir(
+        &prefs,
+        pack_id,
+        &launcher_root_of(state),
+        &default_candidates(),
+    );
+    if let Some(choice) = &resolved.needs_choice {
+        if pack_id == selected_pack_id(state) {
+            return load_state(&choice.root);
+        }
+        return Ok(None);
+    }
+    if resolved.mode == "default" {
+        return pack_dirs::load_shared_installed(&resolved.path, pack_id, &selected_pack_id(state));
+    }
+    load_state(&resolved.path)
 }
 
 #[tauri::command]
@@ -1004,6 +1077,63 @@ pub fn list_packs(state: State<AppState>) -> Result<packs::PackIndexLoad, ErrorP
     index_of(&state).map_err(|e| e.to_payload())
 }
 
+fn shared_root_for(
+    state: &AppState,
+    pack_id: &str,
+) -> Result<Option<std::path::PathBuf>, AppError> {
+    let prefs = load_prefs().unwrap_or_default();
+    let resolved = pack_dirs::resolve_pack_dir(
+        &prefs,
+        pack_id,
+        &launcher_root_of(state),
+        &default_candidates(),
+    );
+    if resolved.needs_choice.is_some() || resolved.mode != "default" {
+        return Ok(None);
+    }
+    Ok(Some(resolved.path))
+}
+
+fn transition_shared_pack(
+    state: &AppState,
+    root: &std::path::Path,
+    from_id: &str,
+    to_id: &str,
+) -> Result<pack_dirs::SwitchReport, AppError> {
+    let index = index_of(state)?;
+    let entry = pack_entry(&index, to_id)?.clone();
+    if packs::needs_newer_app(&entry) {
+        return Err(packs::pack_manifest_error(format!(
+            "{} needs a newer installer",
+            entry.name
+        )));
+    }
+    let key = active_manifest_public_key()?;
+    let loaded = packs::load_pack_manifest(&make_fetcher(state), &entry, &default_cache_dir(), key);
+    if loaded.source == "error" {
+        return Err(AppError::SignatureInvalid {
+            detail: loaded.message.unwrap_or_else(|| "pack list failed".into()),
+        });
+    }
+    let processes = live_minecraft_processes();
+    pack_dirs::switch_shared_pack(root, from_id, to_id, &loaded.manifest, &processes)
+}
+
+fn remember_selected_pack(state: &AppState, id: &str) -> Result<Prefs, AppError> {
+    {
+        let mut guard = state
+            .selected_pack
+            .lock()
+            .map_err(|_| AppError::State("pack lock".into()))?;
+        *guard = id.to_string();
+    }
+    clear_manifest_cache(state);
+    let mut prefs = load_prefs().unwrap_or_default();
+    prefs.selected_pack = Some(id.to_string());
+    save_prefs(&prefs)?;
+    Ok(prefs)
+}
+
 #[tauri::command]
 pub fn select_pack(id: String, state: State<AppState>) -> Result<Prefs, ErrorPayload> {
     let index = index_of(&state).map_err(|e| e.to_payload())?;
@@ -1014,18 +1144,14 @@ pub fn select_pack(id: String, state: State<AppState>) -> Result<Prefs, ErrorPay
                 .to_payload(),
         );
     }
-    {
-        let mut guard = state
-            .selected_pack
-            .lock()
-            .map_err(|_| AppError::State("pack lock".into()).to_payload())?;
-        *guard = id.clone();
+    if let Some(root) = shared_root_for(&state, &id).map_err(|e| e.to_payload())? {
+        let from_selected = selected_pack_id(&state);
+        if let Some(outgoing) = pack_dirs::outgoing_shared_pack(&root, &from_selected, &id) {
+            let _running = begin_install(&state).map_err(|e| e.to_payload())?;
+            transition_shared_pack(&state, &root, &outgoing, &id).map_err(|e| e.to_payload())?;
+        }
     }
-    clear_manifest_cache(&state);
-    let mut prefs = load_prefs().unwrap_or_default();
-    prefs.selected_pack = Some(id);
-    save_prefs(&prefs).map_err(|e| e.to_payload())?;
-    Ok(prefs)
+    remember_selected_pack(&state, &id).map_err(|e| e.to_payload())
 }
 
 #[tauri::command]
@@ -1108,40 +1234,21 @@ pub fn switch_shared_pack(
         )
         .to_payload());
     }
-    let index = index_of(&state).map_err(|e| e.to_payload())?;
-    let entry = pack_entry(&index, &to_id)
-        .map_err(|e| e.to_payload())?
-        .clone();
-    let key = active_manifest_public_key().map_err(|e| e.to_payload())?;
-    let loaded =
-        packs::load_pack_manifest(&make_fetcher(&state), &entry, &default_cache_dir(), key);
-    if loaded.source == "error" {
-        return Err(AppError::SignatureInvalid {
-            detail: loaded.message.unwrap_or_else(|| "pack list failed".into()),
-        }
-        .to_payload());
-    }
-    let from_id = selected_pack_id(&state);
-    let processes = live_minecraft_processes();
-    let report = pack_dirs::switch_shared_pack(
-        &resolved.path,
-        &from_id,
-        &to_id,
-        &loaded.manifest,
-        &processes,
-    )
-    .map_err(|e| e.to_payload())?;
+    let from_selected = selected_pack_id(&state);
+    let report = if let Some(outgoing) =
+        pack_dirs::outgoing_shared_pack(&resolved.path, &from_selected, &to_id)
     {
-        let mut guard = state
-            .selected_pack
-            .lock()
-            .map_err(|_| AppError::State("pack lock".into()).to_payload())?;
-        *guard = to_id.clone();
-    }
-    clear_manifest_cache(&state);
-    let mut prefs = load_prefs().unwrap_or_default();
-    prefs.selected_pack = Some(to_id);
-    let _ = save_prefs(&prefs);
+        transition_shared_pack(&state, &resolved.path, &outgoing, &to_id)
+            .map_err(|e| e.to_payload())?
+    } else {
+        pack_dirs::SwitchReport {
+            from: to_id.clone(),
+            to: to_id.clone(),
+            restored: false,
+            flagged: Vec::new(),
+        }
+    };
+    remember_selected_pack(&state, &to_id).map_err(|e| e.to_payload())?;
     Ok(report)
 }
 

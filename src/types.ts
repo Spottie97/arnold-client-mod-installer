@@ -131,6 +131,8 @@ export interface Detection {
   folderMode?: string;
   needsFolderChoice?: LegacyInstall | null;
   launchers?: LauncherReport;
+  /** False when no selected launcher needs a vanilla jar before install. */
+  requireVanilla?: boolean;
 }
 
 export interface LegacyInstall {
@@ -253,6 +255,13 @@ export interface InstallPlan {
   optionalComponents?: string[];
   warnings: string[];
   bytes: number;
+  packId?: string;
+  packDir?: string;
+}
+
+export interface PackInstallState {
+  packId: string;
+  installed: InstalledState | null;
 }
 
 export interface InstalledState {

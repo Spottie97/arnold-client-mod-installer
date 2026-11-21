@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
@@ -76,6 +77,11 @@ pub struct InstallPlan {
     pub optional_components: Vec<String>,
     pub warnings: Vec<String>,
     pub bytes: u64,
+    /// Pack and folder this file list was built against. Install rejects any other target.
+    #[serde(default)]
+    pub pack_id: String,
+    #[serde(default)]
+    pub pack_dir: String,
 }
 
 fn push_addon_components(
@@ -132,6 +138,95 @@ pub fn version_less(a: &str, b: &str) -> bool {
         }
     }
     false
+}
+
+pub fn diff_component_files(
+    manifest: &Manifest,
+    resolved: &[String],
+    state: Option<&InstalledState>,
+) -> (Vec<PlanFile>, Vec<PlanFile>, Vec<PlanFile>, u64) {
+    let mut add = Vec::new();
+    let mut update = Vec::new();
+    let mut bytes = 0u64;
+    for id in resolved {
+        let component = component_by_id(manifest, id).expect("resolved id");
+        for file in &component.files {
+            let item = PlanFile {
+                component_id: component.id.clone(),
+                name: component.name.clone(),
+                version: component.version.clone(),
+                file: file.file.clone(),
+                dest: file.dest,
+                url: file.url.clone(),
+                sha512: file.sha512.clone(),
+                size: file.size,
+                match_glob: file.match_glob.clone(),
+                legacy_match: component.legacy_match.clone(),
+                known_sha512: component.known_sha512.clone(),
+            };
+            bytes += file.size;
+            let dest_rel = format!("{}/{}", file.dest.folder(), file.file);
+            match state.and_then(|installed| installed.file_by_path(&dest_rel)) {
+                Some(existing) if existing.sha512 == file.sha512 => {}
+                Some(_) => update.push(item),
+                None => add.push(item),
+            }
+        }
+    }
+
+    let mut remove = Vec::new();
+    if let Some(installed) = state {
+        for tracked in &installed.files {
+            if !resolved.iter().any(|id| id == &tracked.component_id) {
+                remove.push(PlanFile {
+                    component_id: tracked.component_id.clone(),
+                    name: tracked.component_id.clone(),
+                    version: String::new(),
+                    file: tracked.path.clone(),
+                    dest: FileDest::from_rel_path(&tracked.path).unwrap_or(FileDest::Mods),
+                    url: String::new(),
+                    sha512: tracked.sha512.clone(),
+                    size: 0,
+                    match_glob: String::new(),
+                    legacy_match: Vec::new(),
+                    known_sha512: Vec::new(),
+                });
+            }
+        }
+    }
+    (add, update, remove, bytes)
+}
+
+/// Reject a plan that was built for a different pack, a different folder, or a
+/// different installed file set than the folder about to be written.
+pub fn ensure_plan_current(
+    plan: &InstallPlan,
+    pack_id: &str,
+    dest: &Path,
+    manifest: &Manifest,
+    installed: Option<&InstalledState>,
+) -> Result<(), AppError> {
+    if plan.pack_id.is_empty() || plan.pack_id != pack_id {
+        return Err(AppError::State(format!(
+            "install plan is for pack '{}', but '{pack_id}' is selected",
+            plan.pack_id
+        )));
+    }
+    let dest_key = dest.to_string_lossy();
+    if plan.pack_dir.is_empty() || plan.pack_dir != dest_key {
+        return Err(AppError::State(format!(
+            "install plan is for '{}', but the selected folder is {dest_key}",
+            plan.pack_dir
+        )));
+    }
+    let (add, update, remove, _) = diff_component_files(manifest, &plan.components, installed);
+    if plan.add != add || plan.update != update || plan.remove != remove {
+        return Err(AppError::State(
+            "install plan does not match the selected pack folder; open the pack again before installing"
+                .into(),
+        ));
+    }
+    Ok(())
 }
 
 pub fn build_plan(
@@ -207,11 +302,8 @@ pub fn build_plan(
         .cloned()
         .collect();
 
-    let mut add = Vec::new();
-    let mut update = Vec::new();
     let mut configs = Vec::new();
     let mut warnings = Vec::new();
-    let mut bytes = 0u64;
 
     for id in &resolved {
         let component = component_by_id(manifest, id).expect("resolved id");
@@ -233,50 +325,9 @@ pub fn build_plan(
                 snow_lite: component.id == "snow" && snow_lite,
             });
         }
-        for file in &component.files {
-            let item = PlanFile {
-                component_id: component.id.clone(),
-                name: component.name.clone(),
-                version: component.version.clone(),
-                file: file.file.clone(),
-                dest: file.dest,
-                url: file.url.clone(),
-                sha512: file.sha512.clone(),
-                size: file.size,
-                match_glob: file.match_glob.clone(),
-                legacy_match: component.legacy_match.clone(),
-                known_sha512: component.known_sha512.clone(),
-            };
-            bytes += file.size;
-            let dest_rel = format!("{}/{}", file.dest.folder(), file.file);
-            match state.and_then(|s| s.file_by_path(&dest_rel)) {
-                Some(existing) if existing.sha512 == file.sha512 => {}
-                Some(_) => update.push(item),
-                None => add.push(item),
-            }
-        }
     }
 
-    let mut remove = Vec::new();
-    if let Some(state) = state {
-        for tracked in &state.files {
-            if !resolved.iter().any(|id| id == &tracked.component_id) {
-                remove.push(PlanFile {
-                    component_id: tracked.component_id.clone(),
-                    name: tracked.component_id.clone(),
-                    version: String::new(),
-                    file: tracked.path.clone(),
-                    dest: FileDest::from_rel_path(&tracked.path).unwrap_or(FileDest::Mods),
-                    url: String::new(),
-                    sha512: tracked.sha512.clone(),
-                    size: 0,
-                    match_glob: String::new(),
-                    legacy_match: Vec::new(),
-                    known_sha512: Vec::new(),
-                });
-            }
-        }
-    }
+    let (add, update, remove, bytes) = diff_component_files(manifest, &resolved, state);
 
     let loader = if fabric_installed {
         None
@@ -301,6 +352,8 @@ pub fn build_plan(
         optional_components,
         warnings,
         bytes,
+        pack_id: String::new(),
+        pack_dir: String::new(),
     })
 }
 
@@ -888,5 +941,71 @@ mod tests {
         );
         assert!(!plan.components.iter().any(|id| id == "waves"));
         assert!(!plan.optional_components.iter().any(|id| id == "waves"));
+    }
+
+    #[test]
+    fn plan_for_an_existing_install_does_not_apply_to_an_empty_folder() {
+        let manifest = load_fixture_manifest().unwrap();
+        let selection = Selection {
+            kit: "basic".into(),
+            custom_components: vec![],
+            ocean: false,
+            addons: BTreeMap::new(),
+            snow_lite: Some(true),
+            quality: None,
+        };
+        let fresh = build_plan(&manifest, &selection, None, true).unwrap();
+        let mut installed = InstalledState::new("installer", &manifest.manifest_version);
+        for file in &fresh.add {
+            record_file(
+                &mut installed,
+                format!("{}/{}", file.dest.folder(), file.file),
+                &file.sha512,
+                &file.component_id,
+            );
+        }
+        let mut stale = build_plan(&manifest, &selection, Some(&installed), true).unwrap();
+        assert!(stale.add.is_empty());
+        stale.pack_id = "better-adventures-plus".into();
+        stale.pack_dir = "/old/install".into();
+        let wrong_folder = ensure_plan_current(
+            &stale,
+            "better-adventures-plus",
+            Path::new("/new/empty"),
+            &manifest,
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(wrong_folder.code(), "E-STATE");
+
+        let mut current = fresh;
+        current.pack_id = "better-adventures-plus".into();
+        current.pack_dir = "/new/empty".into();
+        ensure_plan_current(
+            &current,
+            "better-adventures-plus",
+            Path::new("/new/empty"),
+            &manifest,
+            None,
+        )
+        .unwrap();
+
+        stale.pack_dir = "/new/empty".into();
+        assert!(ensure_plan_current(
+            &stale,
+            "better-adventures-plus",
+            Path::new("/new/empty"),
+            &manifest,
+            None,
+        )
+        .is_err());
+        assert!(ensure_plan_current(
+            &current,
+            "other-pack",
+            Path::new("/new/empty"),
+            &manifest,
+            None,
+        )
+        .is_err());
     }
 }

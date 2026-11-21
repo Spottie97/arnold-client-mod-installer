@@ -562,6 +562,12 @@ fn kind_openable(kind: LauncherKind, report: &LauncherReport) -> bool {
     }
 }
 
+fn push_root(roots: &mut Vec<PathBuf>, path: &Path) {
+    if !roots.iter().any(|have| have == path) {
+        roots.push(path.to_path_buf());
+    }
+}
+
 pub fn profile_destinations(
     report: &LauncherReport,
     prefs: &LauncherPrefs,
@@ -570,55 +576,53 @@ pub fn profile_destinations(
     let write_official = prefs.write_official.unwrap_or(true);
     let write_tl = prefs.write_tlauncher.unwrap_or(true);
     let official_found = report.official.is_some();
-    if official_found {
-        if let Some(tl) = &report.tlauncher {
-            let mut roots = vec![report.official_root.clone()];
-            if tl.game_dir != report.official_root {
-                roots.push(tl.game_dir.clone());
-            }
-            return ProfileDestinations {
-                vanilla_roots: roots,
-                official: write_official.then(|| report.official_root.clone()),
-                tlauncher: write_tl.then(|| tl.game_dir.clone()),
-                also_pack_dir: false,
-                require_vanilla: true,
-            };
-        }
-        return ProfileDestinations {
-            vanilla_roots: vec![report.official_root.clone()],
-            official: write_official.then(|| report.official_root.clone()),
-            tlauncher: None,
-            also_pack_dir: false,
-            require_vanilla: true,
-        };
+
+    let mut official = None;
+    let mut tlauncher = None;
+    if official_found && write_official {
+        official = Some(report.official_root.clone());
     }
-    if let Some(tl) = &report.tlauncher {
-        let same_folder = tl.game_dir == report.official_root;
-        let official = if same_folder
+    if let Some(found) = &report.tlauncher {
+        if write_tl {
+            tlauncher = Some(found.game_dir.clone());
+        }
+        let same_folder = found.game_dir == report.official_root;
+        if !official_found
+            && write_official
+            && same_folder
             && report
                 .official_root
                 .join("launcher_profiles.json")
                 .is_file()
-            && write_official
         {
-            Some(report.official_root.clone())
-        } else {
-            None
-        };
+            official = Some(report.official_root.clone());
+        }
+    }
+
+    if !official_found && report.tlauncher.is_none() {
         return ProfileDestinations {
-            vanilla_roots: vec![tl.game_dir.clone()],
-            official,
-            tlauncher: write_tl.then(|| tl.game_dir.clone()),
-            also_pack_dir: false,
-            require_vanilla: true,
+            vanilla_roots: Vec::new(),
+            official: Some(report.official_root.clone()),
+            tlauncher: None,
+            also_pack_dir: pack_dir != report.official_root,
+            require_vanilla: false,
         };
     }
+
+    let mut vanilla_roots = Vec::new();
+    if let Some(root) = &official {
+        push_root(&mut vanilla_roots, root);
+    }
+    if let Some(root) = &tlauncher {
+        push_root(&mut vanilla_roots, root);
+    }
+    let require_vanilla = official.is_some() || tlauncher.is_some();
     ProfileDestinations {
-        vanilla_roots: Vec::new(),
-        official: Some(report.official_root.clone()),
-        tlauncher: None,
-        also_pack_dir: pack_dir != report.official_root,
-        require_vanilla: false,
+        vanilla_roots,
+        official,
+        tlauncher,
+        also_pack_dir: false,
+        require_vanilla,
     }
 }
 
@@ -1003,5 +1007,36 @@ mod tests {
                 start = index + "tlauncher".len();
             }
         }
+    }
+
+    #[test]
+    fn vanilla_roots_follow_the_enabled_launcher() {
+        let mut both = report_from_world(&world(HostOs::Windows, true, true, true));
+        both.official_root = PathBuf::from("/games/official");
+        both.tlauncher.as_mut().unwrap().game_dir = PathBuf::from("/games/custom");
+        let mut prefs = LauncherPrefs::default();
+        prefs.write_official = Some(false);
+        prefs.write_tlauncher = Some(true);
+        let dest = profile_destinations(&both, &prefs, Path::new("/packs/ba"));
+        assert!(dest.official.is_none());
+        assert_eq!(dest.vanilla_roots, vec![PathBuf::from("/games/custom")]);
+        assert_eq!(dest.tlauncher.as_deref(), Some(Path::new("/games/custom")));
+        assert!(dest.require_vanilla);
+
+        prefs.write_tlauncher = Some(false);
+        let disabled = profile_destinations(&both, &prefs, Path::new("/packs/ba"));
+        assert!(disabled.official.is_none());
+        assert!(disabled.tlauncher.is_none());
+        assert!(disabled.vanilla_roots.is_empty());
+        assert!(!disabled.require_vanilla);
+
+        let mut tl_only = report_from_world(&world(HostOs::Macos, false, true, true));
+        tl_only.official_root = PathBuf::from("/games/official");
+        tl_only.tlauncher.as_mut().unwrap().game_dir = PathBuf::from("/games/custom");
+        let only =
+            profile_destinations(&tl_only, &LauncherPrefs::default(), Path::new("/packs/ba"));
+        assert!(only.official.is_none());
+        assert_eq!(only.vanilla_roots, vec![PathBuf::from("/games/custom")]);
+        assert!(only.require_vanilla);
     }
 }

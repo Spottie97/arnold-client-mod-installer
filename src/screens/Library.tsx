@@ -1,37 +1,13 @@
 import { LauncherChips } from "../components/LauncherChips";
 import { PackCard } from "../components/PackCard";
 import type { LocalSourceInfo } from "../lib/localSource";
-import { APP_VERSION } from "../lib/version";
-import type { Detection, InstalledState, PackEntry, PackIndexLoad } from "../types";
-
-function versionGreater(left: string, right: string): boolean {
-  const parts = (value: string) => value.split(".").map((part) => Number.parseInt(part, 10) || 0);
-  const a = parts(left);
-  const b = parts(right);
-  const length = Math.max(a.length, b.length);
-  for (let index = 0; index < length; index += 1) {
-    const diff = (a[index] ?? 0) - (b[index] ?? 0);
-    if (diff > 0) return true;
-    if (diff < 0) return false;
-  }
-  return false;
-}
-
-export function packStatus(pack: PackEntry, installed: InstalledState | null): string {
-  if (pack.minAppVersion && versionGreater(pack.minAppVersion, APP_VERSION)) {
-    return "NEEDS A NEWER INSTALLER";
-  }
-  if (!installed) return "NOT INSTALLED";
-  if (pack.displayVersion && installed.manifestVersion !== pack.displayVersion) {
-    return "UPDATE AVAILABLE";
-  }
-  return "INSTALLED";
-}
+import { statusForPack } from "../lib/libraryStatus";
+import type { Detection, InstalledState, PackIndexLoad } from "../types";
 
 export function Library({
   library,
   detection,
-  installed,
+  installedByPack,
   localSource,
   onOpen,
   onInstall,
@@ -41,11 +17,11 @@ export function Library({
 }: {
   library: PackIndexLoad | null;
   detection: Detection;
-  installed: InstalledState | null;
+  installedByPack: Record<string, InstalledState | null>;
   localSource?: LocalSourceInfo | null;
   onOpen: (id: string) => void;
   onInstall: (id: string) => void;
-  onPlay: () => void;
+  onPlay: (id: string) => void;
   onHelp: () => void;
   onPickLocalSource?: () => void;
 }) {
@@ -83,7 +59,7 @@ export function Library({
       <div className="mt-6 grid gap-4 lg:grid-cols-[1.35fr_1fr]">
         <div className="space-y-4">
           {packs.map((pack) => {
-            const status = packStatus(pack, installed);
+            const status = statusForPack(pack, installedByPack);
             const installedHere = status === "INSTALLED" || status === "UPDATE AVAILABLE";
             return (
               <PackCard
@@ -93,7 +69,7 @@ export function Library({
                 blurb="The official client pack for the Arnold server: looks, performance, quality of life and resource packs."
                 onDetails={() => onOpen(pack.id)}
                 onInstall={() => onInstall(pack.id)}
-                onPlay={installedHere ? onPlay : undefined}
+                onPlay={installedHere ? () => onPlay(pack.id) : undefined}
               />
             );
           })}

@@ -6,6 +6,7 @@ import type {
   ImportOffer,
   InstallPlan,
   InstalledState,
+  PackInstallState,
   LauncherPrefs,
   LauncherReport,
   Manifest,
@@ -103,6 +104,20 @@ export async function listInstalled(): Promise<InstalledState | null> {
     return await invoke<InstalledState | null>("list_installed");
   } catch {
     return null;
+  }
+}
+
+export async function listPackStates(): Promise<PackInstallState[]> {
+  if (!isTauri()) {
+    return mockPackIndex().index.packs.map((pack) => ({
+      packId: pack.id,
+      installed: pack.id === "better-adventures-plus" ? mockInstalled() : null,
+    }));
+  }
+  try {
+    return await invoke<PackInstallState[]>("list_pack_states");
+  } catch {
+    return [];
   }
 }
 

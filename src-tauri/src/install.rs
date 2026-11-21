@@ -486,6 +486,58 @@ fn running_download(
     }
 }
 
+fn push_unique_root(roots: &mut Vec<PathBuf>, path: &Path) {
+    if !roots.iter().any(|have| have == path) {
+        roots.push(path.to_path_buf());
+    }
+}
+
+fn profile_version_roots(target: &InstallTarget) -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+    for root in &target.launcher_roots {
+        push_unique_root(&mut roots, root);
+    }
+    if let Some(root) = &target.profiles.official {
+        push_unique_root(&mut roots, root);
+    }
+    if let Some(root) = &target.profiles.tlauncher {
+        push_unique_root(&mut roots, root);
+    }
+    if target.profiles.also_pack_dir {
+        push_unique_root(&mut roots, &target.pack_dir);
+    }
+    roots
+}
+
+fn verified_loader_bytes<F: Fetcher>(
+    url: &str,
+    sha512: &str,
+    fetcher: &F,
+    staging: &Path,
+) -> Result<Vec<u8>, AppError> {
+    let staged = staging.join("loader.json");
+    let bytes = if staged.is_file() {
+        fs::read(&staged)?
+    } else {
+        fetcher.fetch_loader(url)?
+    };
+    verify_sha512(&bytes, sha512)?;
+    Ok(bytes)
+}
+
+fn version_for<'a>(assigned: &'a [(PathBuf, String)], root: &Path) -> Result<&'a str, AppError> {
+    assigned
+        .iter()
+        .find(|(path, _)| path == root)
+        .map(|(_, id)| id.as_str())
+        .ok_or_else(|| {
+            AppError::State(format!(
+                "no Fabric version is available in {}",
+                root.display()
+            ))
+        })
+}
+
 fn install_loader_and_profiles<F, L>(
     target: &InstallTarget,
     plan: &InstallPlan,
@@ -499,32 +551,50 @@ where
     F: Fetcher,
     L: Fn(&str, &str, u8, &str, Option<String>),
 {
-    let version_id = if let Some(loader) = &plan.loader {
-        let staged = staging.join("loader.json");
-        let bytes = if staged.is_file() {
-            fs::read(&staged)?
-        } else {
-            let fetched = fetcher.fetch_loader(&manifest.loader.url)?;
-            verify_sha512(&fetched, &manifest.loader.sha512)?;
-            fetched
-        };
-        for root in &target.launcher_roots {
-            if crate::fabric::existing_fabric_for(root, &manifest.minecraft).is_none() {
-                crate::fabric::write_version_profile(root, &loader.id, &bytes)?;
+    let roots = profile_version_roots(target);
+    let mut assigned: Vec<(PathBuf, String)> = Vec::new();
+    if let Some(loader) = &plan.loader {
+        let missing = roots
+            .iter()
+            .any(|root| !crate::fabric::version_json_present(root, &loader.id));
+        if missing {
+            let bytes = verified_loader_bytes(&loader.url, &loader.sha512, fetcher, staging)?;
+            for root in &roots {
+                if !crate::fabric::version_json_present(root, &loader.id) {
+                    crate::fabric::write_version_profile(root, &loader.id, &bytes)?;
+                }
             }
         }
-        loader.id.clone()
+        for root in &roots {
+            assigned.push((root.clone(), loader.id.clone()));
+        }
     } else {
-        target
-            .launcher_roots
-            .iter()
-            .find_map(|root| crate::fabric::existing_fabric_for(root, &manifest.minecraft))
-            .unwrap_or_else(|| manifest.loader.id.clone())
-    };
-    let mut spec = target.spec.clone();
-    if spec.version_id.is_empty() {
-        spec.version_id = version_id.clone();
+        let mut missing = Vec::new();
+        for root in &roots {
+            if crate::fabric::version_json_present(root, &manifest.loader.id) {
+                assigned.push((root.clone(), manifest.loader.id.clone()));
+            } else if let Some(existing) =
+                crate::fabric::existing_fabric_for(root, &manifest.minecraft)
+            {
+                assigned.push((root.clone(), existing));
+            } else {
+                missing.push(root.clone());
+            }
+        }
+        if !missing.is_empty() {
+            let bytes = verified_loader_bytes(
+                &manifest.loader.url,
+                &manifest.loader.sha512,
+                fetcher,
+                staging,
+            )?;
+            for root in missing {
+                crate::fabric::write_version_profile(&root, &manifest.loader.id, &bytes)?;
+                assigned.push((root, manifest.loader.id.clone()));
+            }
+        }
     }
+    let mut spec = target.spec.clone();
     if spec.java_args.is_empty() {
         spec.java_args = crate::fabric::java_args_for_ram(system_ram_gb);
     }
@@ -537,24 +607,31 @@ where
             "running",
             None,
         );
-        crate::profiles::upsert_official(root, &spec, &backup)?;
+        let mut profile = spec.clone();
+        profile.version_id = version_for(&assigned, root)?.to_string();
+        crate::profiles::upsert_official(root, &profile, &backup)?;
     }
     if target.profiles.also_pack_dir {
-        crate::profiles::upsert_official(&target.pack_dir, &spec, &backup)?;
+        let mut profile = spec.clone();
+        profile.version_id = version_for(&assigned, &target.pack_dir)?.to_string();
+        crate::profiles::upsert_official(&target.pack_dir, &profile, &backup)?;
     }
     if let Some(root) = &target.profiles.tlauncher {
+        let mut profile = spec.clone();
+        profile.version_id = version_for(&assigned, root)?.to_string();
         if let TlWrite::SkippedUnknownShape =
-            crate::profiles::upsert_tlauncher(root, &spec, &backup)?
+            crate::profiles::upsert_tlauncher(root, &profile, &backup)?
         {
             emit_log(
                 "profile",
                 &format!(
-                    "Choose version {version_id} and folder {} in TLauncher yourself",
+                    "Choose version {} and folder {} in TLauncher yourself",
+                    profile.version_id,
                     target.pack_dir.display()
                 ),
                 94,
                 "skipped",
-                Some(version_id),
+                Some(profile.version_id),
             );
         }
     }
@@ -606,16 +683,18 @@ pub fn run_install<F: Fetcher>(
             return Err(AppError::GameRunning);
         }
         if target.require_vanilla {
-            let root = target
-                .launcher_roots
-                .first()
-                .map(PathBuf::as_path)
-                .unwrap_or(game_dir);
-            if !vanilla_jar_exists(root, &manifest.minecraft) {
-                return Err(AppError::McMissing {
-                    version: manifest.minecraft.clone(),
-                    path: root.display().to_string(),
-                });
+            let mut roots: Vec<&Path> =
+                target.launcher_roots.iter().map(PathBuf::as_path).collect();
+            if roots.is_empty() {
+                roots.push(game_dir);
+            }
+            for root in roots {
+                if !vanilla_jar_exists(root, &manifest.minecraft) {
+                    return Err(AppError::McMissing {
+                        version: manifest.minecraft.clone(),
+                        path: root.display().to_string(),
+                    });
+                }
             }
         }
 
@@ -1062,6 +1141,8 @@ pub fn repair_tracked<F: Fetcher>(
         optional_components: Vec::new(),
         warnings: Vec::new(),
         bytes: 0,
+        pack_id: String::new(),
+        pack_dir: String::new(),
     };
     run_install(
         target,
@@ -2150,5 +2231,189 @@ mod tests {
                 && event.message.contains("TLauncher")
         });
         assert!(skipped);
+    }
+
+    fn write_fabric(root: &Path, id: &str) {
+        let dir = root.join("versions").join(id);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join(format!("{id}.json")), b"{}").unwrap();
+    }
+
+    fn profile_version(root: &Path, file: &str) -> String {
+        let text = fs::read_to_string(root.join(file)).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&text).unwrap();
+        value["profiles"]["arnold-pack-better-adventures-plus"]["lastVersionId"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    }
+
+    fn loader_plan(manifest: &crate::manifest::Manifest) -> InstallPlan {
+        build_plan(
+            manifest,
+            &Selection {
+                kit: "basic".into(),
+                custom_components: vec![],
+                ocean: false,
+                addons: Default::default(),
+                snow_lite: Some(true),
+                quality: None,
+            },
+            None,
+            false,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn vanilla_check_uses_every_selected_root() {
+        let tmp = tempdir().unwrap();
+        let pack = tmp.path().join("pack");
+        let official = tmp.path().join("official");
+        let custom = tmp.path().join("custom");
+        fs::create_dir_all(&pack).unwrap();
+        fs::create_dir_all(&official).unwrap();
+        prepare_game(&custom);
+        let (manifest, fetcher, _) = test_manifest_and_fetcher();
+        let mut target = split_target(&pack, &custom, true);
+        target.launcher_roots = vec![custom.clone(), official.clone()];
+        target.profiles.official = None;
+        target.profiles.tlauncher = Some(custom.clone());
+        fs::write(custom.join("TlauncherProfiles.json"), br#"{"profiles":{}}"#).unwrap();
+        let err = run_install(
+            &target,
+            &basic_plan(&manifest),
+            &manifest,
+            &fetcher,
+            &AtomicBool::new(false),
+            false,
+            16.0,
+            &|_| {},
+        )
+        .unwrap_err();
+        assert_eq!(err.code(), "E-MC-MISSING");
+        match err {
+            AppError::McMissing { path, .. } => assert!(path.contains("official"), "{path}"),
+            other => panic!("expected a missing jar, got {other:?}"),
+        }
+
+        target.launcher_roots = vec![custom.clone()];
+        run_install(
+            &target,
+            &basic_plan(&manifest),
+            &manifest,
+            &fetcher,
+            &AtomicBool::new(false),
+            false,
+            16.0,
+            &|_| {},
+        )
+        .unwrap();
+        assert!(!official.join("launcher_profiles.json").exists());
+        assert!(!official.join("versions").exists());
+        assert!(custom.join("TlauncherProfiles.json").is_file());
+    }
+
+    #[test]
+    fn requested_loader_is_installed_in_every_selected_root() {
+        let tmp = tempdir().unwrap();
+        let pack = tmp.path().join("pack");
+        let official = tmp.path().join("official");
+        let custom = tmp.path().join("custom");
+        fs::create_dir_all(&pack).unwrap();
+        prepare_game(&official);
+        prepare_game(&custom);
+        let older = "fabric-loader-0.16.0-26.3";
+        write_fabric(&official, older);
+        fs::write(custom.join("TlauncherProfiles.json"), br#"{"profiles":{}}"#).unwrap();
+        let (manifest, fetcher, _) = test_manifest_and_fetcher();
+        let mut target = split_target(&pack, &official, true);
+        target.launcher_roots = vec![official.clone(), custom.clone()];
+        target.profiles.official = Some(official.clone());
+        target.profiles.tlauncher = Some(custom.clone());
+        let plan = loader_plan(&manifest);
+        let loader_id = plan.loader.as_ref().unwrap().id.clone();
+        run_install(
+            &target,
+            &plan,
+            &manifest,
+            &fetcher,
+            &AtomicBool::new(false),
+            false,
+            16.0,
+            &|_| {},
+        )
+        .unwrap();
+        assert!(official
+            .join("versions")
+            .join(&loader_id)
+            .join(format!("{loader_id}.json"))
+            .is_file());
+        assert!(custom
+            .join("versions")
+            .join(&loader_id)
+            .join(format!("{loader_id}.json"))
+            .is_file());
+        assert_eq!(
+            profile_version(&official, "launcher_profiles.json"),
+            loader_id
+        );
+        assert_eq!(
+            profile_version(&custom, "TlauncherProfiles.json"),
+            loader_id
+        );
+        assert_ne!(loader_id, older);
+    }
+
+    #[test]
+    fn existing_loader_ids_stay_with_their_own_root() {
+        let tmp = tempdir().unwrap();
+        let pack = tmp.path().join("pack");
+        let official = tmp.path().join("official");
+        let custom = tmp.path().join("custom");
+        fs::create_dir_all(&pack).unwrap();
+        prepare_game(&official);
+        prepare_game(&custom);
+        let older = "fabric-loader-0.16.0-26.3";
+        let newer = "fabric-loader-0.18.0-26.3";
+        write_fabric(&official, older);
+        write_fabric(&custom, newer);
+        fs::write(custom.join("TlauncherProfiles.json"), br#"{"profiles":{}}"#).unwrap();
+        let (manifest, fetcher, _) = test_manifest_and_fetcher();
+        let mut target = split_target(&pack, &official, true);
+        target.launcher_roots = vec![official.clone(), custom.clone()];
+        target.profiles.official = Some(official.clone());
+        target.profiles.tlauncher = Some(custom.clone());
+        let mut plan = basic_plan(&manifest);
+        plan.loader = None;
+        run_install(
+            &target,
+            &plan,
+            &manifest,
+            &fetcher,
+            &AtomicBool::new(false),
+            false,
+            16.0,
+            &|_| {},
+        )
+        .unwrap();
+        assert_eq!(profile_version(&official, "launcher_profiles.json"), older);
+        assert_eq!(profile_version(&custom, "TlauncherProfiles.json"), newer);
+        assert!(!official
+            .join("versions")
+            .join(newer)
+            .join(format!("{newer}.json"))
+            .is_file());
+        assert!(!custom
+            .join("versions")
+            .join(older)
+            .join(format!("{older}.json"))
+            .is_file());
+        let manifest_id = &manifest.loader.id;
+        assert!(!official
+            .join("versions")
+            .join(manifest_id)
+            .join(format!("{manifest_id}.json"))
+            .is_file());
     }
 }

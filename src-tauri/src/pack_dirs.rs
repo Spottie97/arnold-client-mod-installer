@@ -453,7 +453,60 @@ fn restore_tree(stash_root: &Path, dir: &Path, game_root: &Path) -> Result<(), A
     Ok(())
 }
 
-fn write_active_pack(root: &Path, pack_id: &str) -> Result<(), AppError> {
+pub fn read_active_pack(root: &Path) -> Option<String> {
+    let path = state::installer_dir(root).join("active-pack.json");
+    let text = fs::read_to_string(path).ok()?;
+    let value: serde_json::Value = serde_json::from_str(&text).ok()?;
+    value
+        .get("packId")
+        .and_then(|item| item.as_str())
+        .map(str::to_string)
+}
+
+/// The pack currently occupying a shared folder, when it is not `to_id`.
+/// `active-pack.json` wins over the previously selected id.
+pub fn outgoing_shared_pack(root: &Path, selected_id: &str, to_id: &str) -> Option<String> {
+    let active = read_active_pack(root);
+    if active.as_deref() == Some(to_id) {
+        return None;
+    }
+    let outgoing = active.unwrap_or_else(|| selected_id.to_string());
+    if outgoing == to_id {
+        None
+    } else {
+        Some(outgoing)
+    }
+}
+
+/// Install must not run while a different pack still owns the shared folder.
+pub fn shared_install_block(root: &Path, selected_id: &str) -> Option<String> {
+    match read_active_pack(root) {
+        Some(active) if active != selected_id => Some(active),
+        _ => None,
+    }
+}
+
+pub fn load_shared_installed(
+    root: &Path,
+    pack_id: &str,
+    selected_id: &str,
+) -> Result<Option<InstalledState>, AppError> {
+    match read_active_pack(root).as_deref() {
+        Some(active) if active == pack_id => state::load_state(root),
+        Some(_) => {
+            let stash = stash_dir(root, pack_id);
+            if state::state_path(&stash).is_file() {
+                state::load_state(&stash)
+            } else {
+                Ok(None)
+            }
+        }
+        None if pack_id == selected_id => state::load_state(root),
+        None => Ok(None),
+    }
+}
+
+pub fn write_active_pack(root: &Path, pack_id: &str) -> Result<(), AppError> {
     let path = state::installer_dir(root).join("active-pack.json");
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
@@ -699,5 +752,48 @@ mod tests {
         )
         .unwrap();
         assert_eq!(active["packId"], "pack-a");
+    }
+
+    #[test]
+    fn shared_switch_preserves_the_outgoing_pack_and_blocks_until_transition() {
+        let tmp = tempdir().unwrap();
+        let root = tmp.path();
+        fs::create_dir_all(root.join("mods")).unwrap();
+        let body = b"managed-jar";
+        fs::write(root.join("mods/managed.jar"), body).unwrap();
+        let mut state = InstalledState::new("installer", "2026.11.6");
+        record_file(&mut state, "mods/managed.jar", sha512_hex(body), "managed");
+        save_state(root, &state).unwrap();
+        let manifest =
+            crate::manifest::load_bundled_manifest_with_key(TEST_MANIFEST_PUBLIC_KEY_HEX).unwrap();
+
+        assert_eq!(
+            outgoing_shared_pack(root, "pack-a", "pack-b").as_deref(),
+            Some("pack-a")
+        );
+        assert!(outgoing_shared_pack(root, "pack-a", "pack-a").is_none());
+        assert!(shared_install_block(root, "pack-a").is_none());
+
+        switch_shared_pack(root, "pack-a", "pack-b", &manifest, &[]).unwrap();
+        assert!(!root.join("mods/managed.jar").exists());
+        assert!(stash_dir(root, "pack-a").join("mods/managed.jar").is_file());
+        assert_eq!(read_active_pack(root).as_deref(), Some("pack-b"));
+        assert_eq!(
+            shared_install_block(root, "pack-a").as_deref(),
+            Some("pack-b")
+        );
+        assert!(shared_install_block(root, "pack-b").is_none());
+        assert!(outgoing_shared_pack(root, "pack-b", "pack-b").is_none());
+
+        let stashed = load_shared_installed(root, "pack-a", "pack-b")
+            .unwrap()
+            .unwrap();
+        assert_eq!(stashed.manifest_version, "2026.11.6");
+        assert!(load_shared_installed(root, "pack-b", "pack-b")
+            .unwrap()
+            .is_none());
+        assert!(load_shared_installed(root, "pack-c", "pack-b")
+            .unwrap()
+            .is_none());
     }
 }

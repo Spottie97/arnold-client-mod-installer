@@ -48,6 +48,26 @@ pub struct Detection {
     pub needs_folder_choice: Option<crate::pack_dirs::LegacyInstall>,
     #[serde(default)]
     pub launchers: crate::launcher::LauncherReport,
+    /// When false, a missing vanilla jar is not an install prerequisite.
+    #[serde(default)]
+    pub require_vanilla: bool,
+}
+
+pub fn apply_chosen_vanilla(detection: &mut Detection, roots: &[PathBuf], require_vanilla: bool) {
+    detection.require_vanilla = require_vanilla;
+    if roots.is_empty() {
+        return;
+    }
+    let version = detection.minecraft_version.clone();
+    if let Some(root) = roots
+        .iter()
+        .find(|root| !vanilla_jar_exists(root, &version))
+    {
+        detection.minecraft_version_installed = false;
+        detection.game_dir = Some(root.clone());
+    } else {
+        detection.minecraft_version_installed = true;
+    }
 }
 
 pub fn current_os() -> HostOs {
@@ -215,6 +235,7 @@ pub fn detect_at(
         folder_mode: "own".into(),
         needs_folder_choice: None,
         launchers: crate::launcher::LauncherReport::default(),
+        require_vanilla: false,
     }
 }
 
@@ -404,5 +425,35 @@ mod tests {
         assert!(candidates
             .iter()
             .all(|path| !path.to_string_lossy().contains("AppData")));
+    }
+
+    #[test]
+    fn chosen_roots_override_a_missing_official_default_folder() {
+        let tmp = tempdir().unwrap();
+        let official = tmp.path().join("official");
+        let custom = tmp.path().join("custom");
+        fs::create_dir_all(&official).unwrap();
+        fs::create_dir_all(custom.join("versions/26.3")).unwrap();
+        fs::write(custom.join("versions/26.3/26.3.jar"), b"jar").unwrap();
+        let mut detection = detect_at(
+            Some(&official),
+            "26.3",
+            "fabric-loader-0.20.1-26.3",
+            &[],
+            &[official.clone()],
+        );
+        assert!(!detection.minecraft_version_installed);
+        apply_chosen_vanilla(&mut detection, &[custom.clone()], true);
+        assert!(detection.require_vanilla);
+        assert!(detection.minecraft_version_installed);
+
+        apply_chosen_vanilla(&mut detection, &[official.clone(), custom], true);
+        assert!(!detection.minecraft_version_installed);
+        assert_eq!(detection.game_dir.as_deref(), Some(official.as_path()));
+
+        let mut optional = detect_at(Some(&official), "26.3", "fabric", &[], &[official.clone()]);
+        apply_chosen_vanilla(&mut optional, &[], false);
+        assert!(!optional.require_vanilla);
+        assert!(!optional.minecraft_version_installed);
     }
 }

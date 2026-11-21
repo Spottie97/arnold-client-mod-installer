@@ -43,6 +43,14 @@ pub fn java_args_for_ram(system_ram_gb: f64) -> String {
     )
 }
 
+pub fn version_json_present(game_dir: &Path, version_id: &str) -> bool {
+    game_dir
+        .join("versions")
+        .join(version_id)
+        .join(format!("{version_id}.json"))
+        .is_file()
+}
+
 pub fn existing_fabric_for(game_dir: &Path, minecraft: &str) -> Option<String> {
     let versions = game_dir.join("versions");
     let entries = fs::read_dir(versions).ok()?;

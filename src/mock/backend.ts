@@ -86,6 +86,7 @@ export function mockDetection(overrides: Partial<Detection> = {}): Detection {
     importedFromLegacy: true,
     packId: "better-adventures-plus",
     packDir: "C:\\Users\\Sam\\AppData\\Roaming\\arnold-packs\\better-adventures-plus",
+    requireVanilla: true,
     launcherRoot: "C:\\Users\\Sam\\AppData\\Roaming\\.minecraft",
     folderMode: "own",
     needsFolderChoice: null,
@@ -209,6 +210,8 @@ export function mockPlan(sel: Selection): InstallPlan {
     optionalComponents: [],
     warnings,
     bytes: kitBytes(ids),
+    packId: "better-adventures-plus",
+    packDir: "C:\\Users\\Sam\\AppData\\Roaming\\arnold-packs\\better-adventures-plus",
   };
 }
 

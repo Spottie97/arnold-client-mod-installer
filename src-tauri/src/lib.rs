@@ -63,6 +63,7 @@ pub fn run() {
             commands::cancel,
             commands::repair,
             commands::list_installed,
+            commands::list_pack_states,
             commands::uninstall,
             commands::list_snapshots,
             commands::rollback,
