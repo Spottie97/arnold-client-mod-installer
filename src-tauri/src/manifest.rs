@@ -1350,6 +1350,100 @@ mod tests {
     }
 
     #[test]
+    fn farming_and_revival_mods_come_from_modrinth_in_every_kit() {
+        let manifest = load_fixture_manifest().unwrap();
+        let by_id = |id: &str| {
+            manifest
+                .components
+                .iter()
+                .find(|component| component.id == id)
+                .unwrap_or_else(|| panic!("missing {id}"))
+        };
+        let pins = [
+            (
+                "farmersdelight",
+                "Farmer's Delight Refabricated",
+                "26.3-3.6.30",
+                "MIT",
+                "FarmersDelight-26.3-3.6.30+refabricated.jar",
+                "FarmersDelight-*.jar",
+                "https://cdn.modrinth.com/data/7vxePowz/versions/dRScyUeE/FarmersDelight-26.3-3.6.30%2Brefabricated.jar",
+                "099f724599022ac9232f265d62907fdde6ad48a73b246d45930d938a7f850be6a8b520244ffa218a59fdef96b0170fc0c04f00ff91f108b5a02bbc4cb2a013bc",
+                "691967a54ec63e012c7447ff3960eb595ca31d13",
+                3_482_244_u64,
+            ),
+            (
+                "balm",
+                "Balm",
+                "26.3.0.3",
+                "LicenseRef-All-Rights-Reserved",
+                "balm-fabric-26.3-26.3.0.3.jar",
+                "balm-fabric-*.jar",
+                "https://cdn.modrinth.com/data/MBAkmtvl/versions/MYj31XNG/balm-fabric-26.3-26.3.0.3.jar",
+                "aaf07f5b94f7015c87df7b242f3f45f0729fb3f72d887745ad5c5ceb31eb071e425254009158774101676d6480f31c832dd60860d79da5b661cc10b84241c319",
+                "1b44d97048c1c2e9cc7e0a03c00f5cb117463a60",
+                1_213_047,
+            ),
+            (
+                "hardcorerevival",
+                "Hardcore Revival",
+                "26.3.0.1",
+                "LicenseRef-All-Rights-Reserved",
+                "hardcorerevival-fabric-26.3-26.3.0.1.jar",
+                "hardcorerevival-fabric-*.jar",
+                "https://cdn.modrinth.com/data/HqKoXaXz/versions/9d4cslv4/hardcorerevival-fabric-26.3-26.3.0.1.jar",
+                "89df9da2716ef91234568123ab62bcc62f320956eb8355ea88e1eb5cbe317447b44e47c8a943a1735556b7e3a9a8a7b9989827d72f2b394c1cb9b776c1204638",
+                "b3b4bb2937f88502c0211a14eeea3216944b0728",
+                370_684,
+            ),
+        ];
+        for (id, name, version, license, filename, glob, url, sha512, sha1, size) in pins {
+            let component = by_id(id);
+            assert_eq!(component.name, name, "{id}");
+            assert_eq!(component.version, version, "{id}");
+            assert_eq!(component.group, ComponentGroup::Arnold, "{id}");
+            assert_eq!(component.kind, ComponentKind::Download, "{id}");
+            assert!(component.required_in_all_kits, "{id} must be locked");
+            assert_eq!(component.license.as_deref(), Some(license), "{id}");
+            assert!(
+                component
+                    .description
+                    .contains("The server runs it too, so every kit installs it."),
+                "{id}"
+            );
+            assert_eq!(component.files.len(), 1, "{id}");
+            let file = file_of(&manifest, id, filename);
+            assert_eq!(file.dest, FileDest::Mods, "{id}");
+            assert_eq!(file.match_glob, glob, "{id}");
+            assert_eq!(file.url, url, "{id}");
+            assert!(file.url.starts_with("https://cdn.modrinth.com/"), "{id}");
+            assert!(
+                !file.url.starts_with("https://github.com/"),
+                "{id} must not be rehosted"
+            );
+            assert_eq!(file.sha512, sha512, "{id}");
+            assert_eq!(file.sha1.as_deref(), Some(sha1), "{id}");
+            assert_eq!(file.size, size, "{id}");
+            for kit in ["basic", "full", "recommended"] {
+                assert!(
+                    manifest.kits[kit].components.iter().any(|item| item == id),
+                    "{kit} missing {id}"
+                );
+            }
+        }
+        assert_eq!(by_id("farmersdelight").requires, vec!["base".to_string()]);
+        assert_eq!(by_id("balm").requires, vec!["base".to_string()]);
+        assert_eq!(
+            by_id("hardcorerevival").requires,
+            vec!["base".to_string(), "balm".to_string()]
+        );
+        assert_eq!(manifest.components.len(), 120);
+        assert_eq!(manifest.kits["basic"].components.len(), 63);
+        assert_eq!(manifest.kits["full"].components.len(), 114);
+        assert_eq!(manifest.kits["recommended"].components.len(), 114);
+    }
+
+    #[test]
     fn keo_performance_mods_are_client_addons_and_keep_the_pinned_renderer() {
         let manifest = load_fixture_manifest().unwrap();
         let by_id = |id: &str| {
@@ -1954,8 +2048,11 @@ mod tests {
         expected.insert("glitchcore".to_string());
         expected.insert("sereneseasons".to_string());
         expected.insert("drinkbeer".to_string());
+        expected.insert("farmersdelight".to_string());
+        expected.insert("balm".to_string());
+        expected.insert("hardcorerevival".to_string());
         expected.insert("deck".to_string());
-        assert_eq!(locked.len(), 48);
+        assert_eq!(locked.len(), 51);
         assert_eq!(locked, expected);
     }
 
@@ -2402,6 +2499,8 @@ mod tests {
             "glitchcore",
             "sereneseasons",
             "drinkbeer",
+            "balm",
+            "hardcorerevival",
         ] {
             let component = by_id(id);
             assert_eq!(

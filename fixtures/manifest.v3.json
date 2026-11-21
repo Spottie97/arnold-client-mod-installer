@@ -442,6 +442,79 @@
       ]
     },
     {
+      "id": "farmersdelight",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "requiredInAllKits": true,
+      "name": "Farmer's Delight Refabricated",
+      "version": "26.3-3.6.30",
+      "description": "Cooking and farming for the Arnold server. The server runs it too, so every kit installs it.",
+      "license": "MIT",
+      "files": [
+        {
+          "file": "FarmersDelight-26.3-3.6.30+refabricated.jar",
+          "dest": "mods",
+          "match": "FarmersDelight-*.jar",
+          "url": "https://cdn.modrinth.com/data/7vxePowz/versions/dRScyUeE/FarmersDelight-26.3-3.6.30%2Brefabricated.jar",
+          "sha512": "099f724599022ac9232f265d62907fdde6ad48a73b246d45930d938a7f850be6a8b520244ffa218a59fdef96b0170fc0c04f00ff91f108b5a02bbc4cb2a013bc",
+          "size": 3482244,
+          "sha1": "691967a54ec63e012c7447ff3960eb595ca31d13"
+        }
+      ]
+    },
+    {
+      "id": "balm",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "requiredInAllKits": true,
+      "name": "Balm",
+      "version": "26.3.0.3",
+      "description": "Library needed by Hardcore Revival. The server runs it too, so every kit installs it.",
+      "license": "LicenseRef-All-Rights-Reserved",
+      "files": [
+        {
+          "file": "balm-fabric-26.3-26.3.0.3.jar",
+          "dest": "mods",
+          "match": "balm-fabric-*.jar",
+          "url": "https://cdn.modrinth.com/data/MBAkmtvl/versions/MYj31XNG/balm-fabric-26.3-26.3.0.3.jar",
+          "sha512": "aaf07f5b94f7015c87df7b242f3f45f0729fb3f72d887745ad5c5ceb31eb071e425254009158774101676d6480f31c832dd60860d79da5b661cc10b84241c319",
+          "size": 1213047,
+          "sha1": "1b44d97048c1c2e9cc7e0a03c00f5cb117463a60"
+        }
+      ]
+    },
+    {
+      "id": "hardcorerevival",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base",
+        "balm"
+      ],
+      "requiredInAllKits": true,
+      "name": "Hardcore Revival",
+      "version": "26.3.0.1",
+      "description": "Knockout and revival for the Arnold server. The server runs it too, so every kit installs it.",
+      "license": "LicenseRef-All-Rights-Reserved",
+      "files": [
+        {
+          "file": "hardcorerevival-fabric-26.3-26.3.0.1.jar",
+          "dest": "mods",
+          "match": "hardcorerevival-fabric-*.jar",
+          "url": "https://cdn.modrinth.com/data/HqKoXaXz/versions/9d4cslv4/hardcorerevival-fabric-26.3-26.3.0.1.jar",
+          "sha512": "89df9da2716ef91234568123ab62bcc62f320956eb8355ea88e1eb5cbe317447b44e47c8a943a1735556b7e3a9a8a7b9989827d72f2b394c1cb9b776c1204638",
+          "size": 370684,
+          "sha1": "b3b4bb2937f88502c0211a14eeea3216944b0728"
+        }
+      ]
+    },
+    {
       "id": "appleskin",
       "group": "arnold",
       "kind": "download",
@@ -2905,6 +2978,9 @@
         "glitchcore",
         "sereneseasons",
         "drinkbeer",
+        "farmersdelight",
+        "balm",
+        "hardcorerevival",
         "badoptimizations",
         "modernfix",
         "lithium",
@@ -2973,6 +3049,9 @@
         "glitchcore",
         "sereneseasons",
         "drinkbeer",
+        "farmersdelight",
+        "balm",
+        "hardcorerevival",
         "appleskin",
         "badoptimizations",
         "modernfix",
@@ -3091,6 +3170,9 @@
         "glitchcore",
         "sereneseasons",
         "drinkbeer",
+        "farmersdelight",
+        "balm",
+        "hardcorerevival",
         "appleskin",
         "badoptimizations",
         "modernfix",
