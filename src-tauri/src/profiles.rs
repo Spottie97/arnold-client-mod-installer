@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use serde_json::{json, Value};
 
 use crate::errors::AppError;
-use crate::fabric::{ARNOLD_PROFILE_KEY, ARNOLD_PROFILE_NAME};
+pub use crate::fabric::{ARNOLD_PROFILE_KEY, ARNOLD_PROFILE_NAME};
 
 /// VERIFY schema against a real TlauncherProfiles.json before shipping.
 /// The writer uses the official launcher field names when the file is missing

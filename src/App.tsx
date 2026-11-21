@@ -10,6 +10,7 @@ import {
   copyFromOldFolder,
   detect,
   detectLegacy,
+  onFolderSwitched,
   exportLog,
   finishApp,
   getLocalSource,
@@ -37,6 +38,8 @@ import {
 } from "./lib/api";
 import { addonRows, freshAddonFlags, savedAddonFlags } from "./lib/addons";
 import { pickBanner, type LocalSourceInfo } from "./lib/localSource";
+import { changeDestination } from "./lib/destination";
+import { folderSwitchNotice } from "./lib/folderSwitch";
 import { minecraftBlocksInstall, planMatchesDestination } from "./lib/installGate";
 import { indexPackStates } from "./lib/libraryStatus";
 import { playPack } from "./lib/playPack";
@@ -141,6 +144,7 @@ export default function App() {
   const [prefs, setPrefs] = useState<Prefs>({ tourDone: false, useDefaultFolder: false });
   const [logPath, setLogPath] = useState<string | null>(null);
   const [logError, setLogError] = useState<string | null>(null);
+  const [folderNotice, setFolderNotice] = useState<string | null>(null);
 
   const go = (next: Screen) => {
     setScreen(next);
@@ -306,6 +310,32 @@ export default function App() {
     })();
   }, [requestKey, installContext, selection, prefs.selectedPack, reloadToken]);
 
+  useEffect(() => {
+    let stop: (() => void) | undefined;
+    let alive = true;
+    void onFolderSwitched((entry) => {
+      if (!alive) return;
+      const notice = folderSwitchNotice(entry, (id) => {
+        if (id === "better-adventures-plus") return "Better Adventures+";
+        return library?.index.packs.find((pack) => pack.id === id)?.name ?? id;
+      });
+      if (notice) setFolderNotice(notice);
+      void listPackStates().then((states) => {
+        if (alive) setInstalledByPack(indexPackStates(states));
+      });
+    }).then((unlisten) => {
+      if (!alive) {
+        unlisten();
+        return;
+      }
+      stop = unlisten;
+    });
+    return () => {
+      alive = false;
+      stop?.();
+    };
+  }, [library]);
+
   const badges = useMemo(
     () => (manifest ? updateBadges(manifest, installed) : []),
     [manifest, installed],
@@ -318,6 +348,22 @@ export default function App() {
     setCurrentPlan(emptyPlan());
     setReloadToken((token) => token + 1);
   };
+
+  const runDestinationChange = <T,>(change: () => Promise<T>) =>
+    changeDestination(change, {
+      invalidate: invalidateInstall,
+      detect: async () => {
+        loadGeneration.current += 1;
+        setInstallReady(false);
+        setLoadedKey("");
+        return detect();
+      },
+      replan: async () => {
+        const next = await plan(selection);
+        setCurrentPlan(next);
+        return next;
+      },
+    });
 
   const startInstall = async (nextPlan = currentPlan, replace = replaceCollisions) => {
     if (detection?.needsFolderChoice) {
@@ -402,12 +448,16 @@ export default function App() {
   const chooseFolder = async () => {
     const path = window.prompt("Game folder", detection?.gameDir ?? "") ?? "";
     if (!path) return;
-    invalidateInstall();
-    const next = await setGameDir(path);
-    setDetection(next);
-    setPrefs(await getPrefs());
-    if (minecraftBlocksInstall(next)) {
-      setError(missingMinecraftError(next.gameDir ?? path));
+    try {
+      const { detection: next } = await runDestinationChange(() => setGameDir(path));
+      setDetection(next);
+      setPrefs(await getPrefs());
+      if (minecraftBlocksInstall(next)) {
+        setError(missingMinecraftError(next.gameDir ?? path));
+        go("error");
+      }
+    } catch (err) {
+      setError(asErrorPayload(err));
       go("error");
     }
   };
@@ -615,12 +665,15 @@ export default function App() {
           installed={installed}
           canCopy={Boolean(prefs.lastGameDir) && detection.folderMode === "own"}
           onChoose={(choice) => {
-            void (async () => {
-              invalidateInstall();
-              const next = await choosePackFolder(choice);
-              setPrefs(next);
-              setDetection(await detect());
-            })();
+            void runDestinationChange(() => choosePackFolder(choice))
+              .then(({ result, detection: next }) => {
+                setPrefs(result);
+                setDetection(next);
+              })
+              .catch((err: unknown) => {
+                setError(asErrorPayload(err));
+                go("error");
+              });
           }}
           onCopy={(item) => copyFromOldFolder(item)}
         />
@@ -772,18 +825,26 @@ export default function App() {
           prefs={prefs}
           snapshots={snapshots}
           onUseDefault={(enabled) => {
-            invalidateInstall();
-            void setUseDefaultFolder(enabled).then(async (next) => {
-              setPrefs(next);
-              setDetection(await detect());
-            });
+            void runDestinationChange(() => setUseDefaultFolder(enabled))
+              .then(({ result, detection: next }) => {
+                setPrefs(result);
+                setDetection(next);
+              })
+              .catch((err: unknown) => {
+                setError(asErrorPayload(err));
+                go("error");
+              });
           }}
           onChooseFolder={(choice) => {
-            invalidateInstall();
-            void choosePackFolder(choice).then(async (next) => {
-              setPrefs(next);
-              setDetection(await detect());
-            });
+            void runDestinationChange(() => choosePackFolder(choice))
+              .then(({ result, detection: next }) => {
+                setPrefs(result);
+                setDetection(next);
+              })
+              .catch((err: unknown) => {
+                setError(asErrorPayload(err));
+                go("error");
+              });
           }}
           onPickGameDir={() => void chooseFolder()}
           onLauncherWrite={(which, enabled) => {
@@ -846,10 +907,17 @@ export default function App() {
       <AppShell
         screen={screen}
         footer={footer}
-        banner={pickBanner(localSource, offlineBanner)}
+        banner={folderNotice ?? pickBanner(localSource, offlineBanner)}
         bannerDetail={localSource?.enabled && localSource.dir ? localSource.dir : null}
         subtitle={screenSubtitle(screen, quality, kit, manifest.manifestVersion)}
       >
+        {folderNotice ? (
+          <div className="mb-3 flex justify-end">
+            <button type="button" className="btn-secondary" onClick={() => setFolderNotice(null)}>
+              Dismiss
+            </button>
+          </div>
+        ) : null}
         {body}
       </AppShell>
     </>

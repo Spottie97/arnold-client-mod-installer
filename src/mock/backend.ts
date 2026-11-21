@@ -1,5 +1,6 @@
 import fixture from "@fixtures/manifest.v3.json";
 import type {
+  DestinationEntry,
   Detection,
   ErrorPayload,
   InstallPlan,
@@ -237,6 +238,27 @@ export function kitBlurb(kit: string, _rec: Recommendation): string {
     default:
       return "";
   }
+}
+
+export function mockFolderSwitch(from: string, to: string, legacy: boolean): DestinationEntry {
+  return {
+    packId: to,
+    path: "C:\\Users\\Sam\\AppData\\Roaming\\.minecraft",
+    mode: "default",
+    ownerBefore: legacy
+      ? { kind: "inferred", packId: from, source: "legacy-ba-plus" }
+      : { kind: "marked", packId: from },
+    switch: {
+      from,
+      to,
+      restored: false,
+      flagged: [],
+      legacy,
+      stashPath: `arnold-installer/packs/${from}`,
+      partialRestore: false,
+    },
+    adopted: false,
+  };
 }
 
 export function mockPackIndex() {

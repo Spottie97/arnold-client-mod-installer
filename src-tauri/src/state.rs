@@ -42,6 +42,9 @@ pub struct InstalledState {
     #[serde(default)]
     pub files: Vec<TrackedFile>,
     pub updated_at: String,
+    /// Pack this record belongs to. Missing on installs made before shared-folder markers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pack_id: Option<String>,
 }
 
 impl InstalledState {
@@ -55,6 +58,7 @@ impl InstalledState {
             components: Vec::new(),
             files: Vec::new(),
             updated_at: now_stamp(),
+            pack_id: None,
         }
     }
 

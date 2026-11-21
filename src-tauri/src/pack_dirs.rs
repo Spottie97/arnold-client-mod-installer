@@ -4,9 +4,10 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::detect::{looks_like_legacy_install, HostOs};
+use crate::detect::{looks_like_legacy_install, HostOs, ProcessInfo};
 use crate::errors::AppError;
 use crate::manifest::Manifest;
+use crate::packs::{self, BA_PLUS_PACK_ID};
 use crate::prefs::{PackLocation, Prefs};
 use crate::profiles::{self, TLAUNCHER_PROFILES_FILE};
 use crate::quality::quality_managed_paths;
@@ -68,6 +69,47 @@ pub struct SwitchReport {
     pub to: String,
     pub restored: bool,
     pub flagged: Vec<String>,
+    /// Outgoing owner was inferred because the folder had no active-pack.json.
+    pub legacy: bool,
+    /// Where the outgoing pack's files were saved.
+    pub stash_path: String,
+    pub partial_restore: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum OwnerSource {
+    Marker,
+    State,
+    LegacyBaPlus,
+    Empty,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase", tag = "kind")]
+pub enum FolderOwner {
+    Empty,
+    Marked {
+        pack_id: String,
+    },
+    Inferred {
+        pack_id: String,
+        source: OwnerSource,
+    },
+    Ambiguous {
+        reason: String,
+    },
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DestinationEntry {
+    pub pack_id: String,
+    pub path: PathBuf,
+    pub mode: String,
+    pub owner_before: Option<FolderOwner>,
+    pub switch: Option<SwitchReport>,
+    pub adopted: bool,
 }
 
 pub fn packs_root_for(home: &Path, os: HostOs) -> PathBuf {
@@ -256,7 +298,8 @@ pub fn switch_shared_pack(
     from_id: &str,
     to_id: &str,
     to_manifest: &Manifest,
-    processes: &[crate::detect::ProcessInfo],
+    processes: &[ProcessInfo],
+    legacy: bool,
 ) -> Result<SwitchReport, AppError> {
     if crate::detect::game_running_with(processes) {
         return Err(AppError::GameRunning);
@@ -264,10 +307,21 @@ pub fn switch_shared_pack(
     let state =
         state::load_state(root)?.unwrap_or_else(|| InstalledState::new("installer", "unknown"));
     let _snapshot = crate::backup::create_snapshot(root, &state, "before-pack-switch")?;
-    let (move_rels, flagged) = managed_set(root, &state, to_manifest, from_id);
+    let (move_rels, mut flagged) = managed_set(root, &state, to_manifest, from_id);
     let stash = stash_dir(root, from_id);
     if stash.exists() {
-        fs::remove_dir_all(&stash)?;
+        let stamp = state::now_stamp();
+        let replaced_name = format!("{from_id}.replaced-{stamp}");
+        let replaced = stash
+            .parent()
+            .map(|parent| parent.join(&replaced_name))
+            .ok_or_else(|| {
+                AppError::Io(format!("saved copy of {from_id} has no parent directory"))
+            })?;
+        fs::rename(&stash, &replaced)?;
+        flagged.push(format!(
+            "Older saved copy of {from_id} kept at arnold-installer/packs/{replaced_name}"
+        ));
     }
     fs::create_dir_all(&stash)?;
     for rel in &move_rels {
@@ -282,23 +336,35 @@ pub fn switch_shared_pack(
         &stash,
         "launcher_profiles.json",
         &profile_key(from_id),
+        "profile-official.json",
     )?;
-    stash_profile(root, &stash, TLAUNCHER_PROFILES_FILE, &profile_key(from_id))?;
+    stash_profile(
+        root,
+        &stash,
+        TLAUNCHER_PROFILES_FILE,
+        &profile_key(from_id),
+        "profile-tlauncher.json",
+    )?;
+    if legacy {
+        stash_profile(
+            root,
+            &stash,
+            "launcher_profiles.json",
+            profiles::ARNOLD_PROFILE_KEY,
+            "profile-official-legacy.json",
+        )?;
+    }
 
-    let to_stash = stash_dir(root, to_id);
-    let restored = if to_stash.is_dir() {
-        restore_stash(root, &to_stash, &profile_key(to_id))?;
-        fs::remove_dir_all(&to_stash)?;
-        true
-    } else {
-        false
-    };
-    write_active_pack(root, to_id)?;
+    let (restored, partial_restore) = restore_incoming(root, to_id, &mut flagged)?;
+    write_active_pack(root, to_id, Some(from_id), OwnerSource::Marker)?;
     Ok(SwitchReport {
         from: from_id.to_string(),
         to: to_id.to_string(),
         restored,
         flagged,
+        legacy,
+        stash_path: stash.display().to_string(),
+        partial_restore,
     })
 }
 
@@ -387,11 +453,9 @@ fn move_rel(root: &Path, stash: &Path, rel: &str) -> Result<(), AppError> {
         fs::create_dir_all(parent)?;
     }
     if dest.exists() {
-        if dest.is_dir() {
-            fs::remove_dir_all(&dest)?;
-        } else {
-            fs::remove_file(&dest)?;
-        }
+        return Err(AppError::Io(format!(
+            "saved copy already has {rel}; that copy was left as it is"
+        )));
     }
     if fs::rename(&src, &dest).is_err() {
         fs::copy(&src, &dest)?;
@@ -400,55 +464,145 @@ fn move_rel(root: &Path, stash: &Path, rel: &str) -> Result<(), AppError> {
     Ok(())
 }
 
-fn stash_profile(root: &Path, stash: &Path, file_name: &str, key: &str) -> Result<(), AppError> {
+fn stash_profile(
+    root: &Path,
+    stash: &Path,
+    file_name: &str,
+    key: &str,
+    dest_name: &str,
+) -> Result<(), AppError> {
     let live = root.join(file_name);
     if let Some(entry) = profiles::remove_profile(&live, key)? {
-        let name = if file_name == TLAUNCHER_PROFILES_FILE {
-            "profile-tlauncher.json"
-        } else {
-            "profile-official.json"
-        };
-        fs::write(stash.join(name), serde_json::to_vec_pretty(&entry)?)?;
+        fs::write(stash.join(dest_name), serde_json::to_vec_pretty(&entry)?)?;
     }
     Ok(())
 }
 
-fn restore_stash(root: &Path, stash: &Path, profile_key: &str) -> Result<(), AppError> {
-    restore_tree(stash, stash, root)?;
-    if let Some(text) = fs::read(stash.join("profile-official.json")).ok() {
-        if let Ok(entry) = serde_json::from_slice(&text) {
-            profiles::restore_profile(&root.join("launcher_profiles.json"), profile_key, entry)?;
-        }
+/// Restores `to_id`'s stash when one exists. Returns `(restored, partial)`.
+fn restore_incoming(
+    root: &Path,
+    to_id: &str,
+    flagged: &mut Vec<String>,
+) -> Result<(bool, bool), AppError> {
+    let to_stash = stash_dir(root, to_id);
+    if !to_stash.is_dir() {
+        return Ok((false, false));
     }
-    if let Some(text) = fs::read(stash.join("profile-tlauncher.json")).ok() {
-        if let Ok(entry) = serde_json::from_slice(&text) {
-            profiles::restore_profile(&root.join(TLAUNCHER_PROFILES_FILE), profile_key, entry)?;
-        }
+    let skipped = restore_stash(root, &to_stash, &profile_key(to_id))?;
+    let partial = !skipped.is_empty();
+    for rel in &skipped {
+        flagged.push(format!(
+            "Kept in saved copy of {to_id} (a different file is already in the folder): {rel}"
+        ));
     }
+    Ok((true, partial))
+}
+
+fn restore_stash(root: &Path, stash: &Path, profile_key: &str) -> Result<Vec<String>, AppError> {
+    let mut skipped = Vec::new();
+    let mut restored_files = Vec::new();
+    restore_tree(stash, stash, root, &mut skipped, &mut restored_files)?;
+    for path in &restored_files {
+        fs::remove_file(path)?;
+    }
+    take_profile(
+        stash,
+        "profile-official.json",
+        &root.join("launcher_profiles.json"),
+        profile_key,
+    )?;
+    take_profile(
+        stash,
+        "profile-tlauncher.json",
+        &root.join(TLAUNCHER_PROFILES_FILE),
+        profile_key,
+    )?;
+    take_profile(
+        stash,
+        "profile-official-legacy.json",
+        &root.join("launcher_profiles.json"),
+        profiles::ARNOLD_PROFILE_KEY,
+    )?;
+    if skipped.is_empty() {
+        remove_empty_dirs(stash)?;
+    }
+    Ok(skipped)
+}
+
+fn take_profile(stash: &Path, name: &str, live_file: &Path, key: &str) -> Result<(), AppError> {
+    let path = stash.join(name);
+    if !path.is_file() {
+        return Ok(());
+    }
+    let text = fs::read(&path)?;
+    let Ok(entry) = serde_json::from_slice(&text) else {
+        return Ok(());
+    };
+    profiles::restore_profile(live_file, key, entry)?;
+    fs::remove_file(&path)?;
     Ok(())
 }
 
-fn restore_tree(stash_root: &Path, dir: &Path, game_root: &Path) -> Result<(), AppError> {
+fn restore_tree(
+    stash_root: &Path,
+    dir: &Path,
+    game_root: &Path,
+    skipped: &mut Vec<String>,
+    restored: &mut Vec<PathBuf>,
+) -> Result<(), AppError> {
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
         if path.is_dir() {
-            restore_tree(stash_root, &path, game_root)?;
+            restore_tree(stash_root, &path, game_root, skipped, restored)?;
             continue;
         }
-        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-        if name == "profile-official.json" || name == "profile-tlauncher.json" {
+        let name = path
+            .file_name()
+            .and_then(|item| item.to_str())
+            .unwrap_or("");
+        if name == "profile-official.json"
+            || name == "profile-tlauncher.json"
+            || name == "profile-official-legacy.json"
+        {
             continue;
         }
         let rel = path.strip_prefix(stash_root).unwrap_or(&path);
+        let rel_str = rel_to_string(rel);
         let dest = game_root.join(rel);
         if dest.exists() {
+            skipped.push(rel_str);
             continue;
         }
         if let Some(parent) = dest.parent() {
             fs::create_dir_all(parent)?;
         }
         fs::copy(&path, &dest)?;
+        restored.push(path);
+    }
+    Ok(())
+}
+
+fn rel_to_string(rel: &Path) -> String {
+    rel.components()
+        .map(|component| component.as_os_str().to_string_lossy())
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+fn remove_empty_dirs(dir: &Path) -> Result<(), AppError> {
+    if !dir.is_dir() {
+        return Ok(());
+    }
+    let children: Vec<_> = fs::read_dir(dir)?.collect();
+    for entry in children {
+        let path = entry?.path();
+        if path.is_dir() {
+            remove_empty_dirs(&path)?;
+        }
+    }
+    if fs::read_dir(dir)?.next().is_none() {
+        fs::remove_dir(dir)?;
     }
     Ok(())
 }
@@ -463,37 +617,93 @@ pub fn read_active_pack(root: &Path) -> Option<String> {
         .map(str::to_string)
 }
 
-/// The pack currently occupying a shared folder, when it is not `to_id`.
-/// `active-pack.json` wins over the previously selected id.
-pub fn outgoing_shared_pack(root: &Path, selected_id: &str, to_id: &str) -> Option<String> {
-    let active = read_active_pack(root);
-    if active.as_deref() == Some(to_id) {
-        return None;
-    }
-    let outgoing = active.unwrap_or_else(|| selected_id.to_string());
-    if outgoing == to_id {
-        None
-    } else {
-        Some(outgoing)
-    }
-}
-
-/// Install must not run while a different pack still owns the shared folder.
-pub fn shared_install_block(root: &Path, selected_id: &str) -> Option<String> {
-    match read_active_pack(root) {
-        Some(active) if active != selected_id => Some(active),
-        _ => None,
-    }
-}
-
-pub fn load_shared_installed(
+pub fn write_active_pack(
     root: &Path,
     pack_id: &str,
-    selected_id: &str,
-) -> Result<Option<InstalledState>, AppError> {
-    match read_active_pack(root).as_deref() {
-        Some(active) if active == pack_id => state::load_state(root),
-        Some(_) => {
+    previous: Option<&str>,
+    source: OwnerSource,
+) -> Result<(), AppError> {
+    let path = state::installer_dir(root).join("active-pack.json");
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let body = json!({
+        "schema": 1,
+        "packId": pack_id,
+        "profileKey": profile_key(pack_id),
+        "previous": previous,
+        "ownerSource": source,
+        "claimedAt": state::now_stamp(),
+    });
+    fs::write(path, serde_json::to_vec_pretty(&body)?)?;
+    Ok(())
+}
+
+pub fn resolve_folder_owner(root: &Path) -> FolderOwner {
+    let marker_path = state::installer_dir(root).join("active-pack.json");
+    if marker_path.exists() {
+        let reason = format!("active-pack.json in {} can't be read", root.display());
+        let text = match fs::read_to_string(&marker_path) {
+            Ok(text) => text,
+            Err(_) => return FolderOwner::Ambiguous { reason },
+        };
+        let value: serde_json::Value = match serde_json::from_str(&text) {
+            Ok(value) => value,
+            Err(_) => return FolderOwner::Ambiguous { reason },
+        };
+        let Some(pack_id) = value
+            .get("packId")
+            .and_then(|item| item.as_str())
+            .filter(|id| !id.is_empty())
+        else {
+            return FolderOwner::Ambiguous { reason };
+        };
+        let pack_id = pack_id.to_string();
+        let state_id = state::state_path(root)
+            .is_file()
+            .then(|| state::load_state(root).ok().flatten())
+            .flatten()
+            .and_then(|installed| installed.pack_id)
+            .filter(|id| !id.is_empty() && id != &pack_id);
+        if let Some(state_id) = state_id {
+            return FolderOwner::Ambiguous {
+                reason: format!("active-pack.json says {pack_id} but state.json says {state_id}"),
+            };
+        }
+        return FolderOwner::Marked { pack_id };
+    }
+    if !state::state_path(root).is_file() {
+        return FolderOwner::Empty;
+    }
+    let reason = format!("state.json in {} can't be read", root.display());
+    match state::load_state(root) {
+        Ok(Some(installed)) => {
+            if let Some(pack_id) = installed.pack_id.filter(|id| !id.is_empty()) {
+                FolderOwner::Inferred {
+                    pack_id,
+                    source: OwnerSource::State,
+                }
+            } else {
+                FolderOwner::Inferred {
+                    pack_id: BA_PLUS_PACK_ID.to_string(),
+                    source: OwnerSource::LegacyBaPlus,
+                }
+            }
+        }
+        _ => FolderOwner::Ambiguous { reason },
+    }
+}
+
+/// State that belongs to `pack_id` in a shared folder. Never another pack's live state.
+pub fn shared_state_for(root: &Path, pack_id: &str) -> Result<Option<InstalledState>, AppError> {
+    match resolve_folder_owner(root) {
+        FolderOwner::Ambiguous { reason } => Err(packs::folder_owner_error(root, reason)),
+        FolderOwner::Marked { pack_id: owner } | FolderOwner::Inferred { pack_id: owner, .. }
+            if owner == pack_id =>
+        {
+            state::load_state(root)
+        }
+        _ => {
             let stash = stash_dir(root, pack_id);
             if state::state_path(&stash).is_file() {
                 state::load_state(&stash)
@@ -501,22 +711,165 @@ pub fn load_shared_installed(
                 Ok(None)
             }
         }
-        None if pack_id == selected_id => state::load_state(root),
-        None => Ok(None),
     }
 }
 
-pub fn write_active_pack(root: &Path, pack_id: &str) -> Result<(), AppError> {
-    let path = state::installer_dir(root).join("active-pack.json");
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
+pub fn require_owner(root: &Path, pack_id: &str) -> Result<(), AppError> {
+    match resolve_folder_owner(root) {
+        FolderOwner::Ambiguous { reason } => Err(packs::folder_owner_error(root, reason)),
+        FolderOwner::Empty => Ok(()),
+        FolderOwner::Marked { pack_id: owner } | FolderOwner::Inferred { pack_id: owner, .. }
+            if owner == pack_id =>
+        {
+            Ok(())
+        }
+        FolderOwner::Marked { pack_id: other } | FolderOwner::Inferred { pack_id: other, .. } => {
+            Err(AppError::State(format!(
+                "this Minecraft folder is still set up for {other}; open {pack_id} again to switch"
+            )))
+        }
     }
-    let body = json!({
-        "packId": pack_id,
-        "profileKey": profile_key(pack_id),
-    });
-    fs::write(path, serde_json::to_vec_pretty(&body)?)?;
-    Ok(())
+}
+
+/// The only function that may make a shared folder belong to `pack_id`.
+/// Preferences are not saved here.
+pub fn enter_destination(
+    prefs: &Prefs,
+    pack_id: &str,
+    launcher_root: &Path,
+    search_roots: &[PathBuf],
+    load_incoming_manifest: impl FnOnce() -> Result<Manifest, AppError>,
+    processes: &[ProcessInfo],
+) -> Result<DestinationEntry, AppError> {
+    let resolved = resolve_pack_dir(prefs, pack_id, launcher_root, search_roots);
+    if resolved.needs_choice.is_some() || resolved.mode != "default" {
+        return Ok(DestinationEntry {
+            pack_id: pack_id.to_string(),
+            path: resolved.path,
+            mode: resolved.mode,
+            owner_before: None,
+            switch: None,
+            adopted: false,
+        });
+    }
+    let path = resolved.path;
+    let mode = resolved.mode;
+    match resolve_folder_owner(&path) {
+        FolderOwner::Ambiguous { reason } => Err(packs::folder_owner_error(&path, reason)),
+        FolderOwner::Marked { pack_id: owner_id } if owner_id == pack_id => Ok(DestinationEntry {
+            pack_id: pack_id.to_string(),
+            path,
+            mode,
+            owner_before: Some(FolderOwner::Marked { pack_id: owner_id }),
+            switch: None,
+            adopted: false,
+        }),
+        FolderOwner::Inferred {
+            pack_id: owner_id,
+            source,
+        } if owner_id == pack_id => {
+            write_active_pack(&path, pack_id, None, source)?;
+            Ok(DestinationEntry {
+                pack_id: pack_id.to_string(),
+                path,
+                mode,
+                owner_before: Some(FolderOwner::Inferred {
+                    pack_id: owner_id,
+                    source,
+                }),
+                switch: None,
+                adopted: true,
+            })
+        }
+        FolderOwner::Marked { pack_id: other } => {
+            let owner_before = FolderOwner::Marked {
+                pack_id: other.clone(),
+            };
+            finish_switch(
+                &path,
+                mode,
+                pack_id,
+                &other,
+                false,
+                owner_before,
+                load_incoming_manifest,
+                processes,
+            )
+        }
+        FolderOwner::Inferred {
+            pack_id: other,
+            source,
+        } => {
+            let owner_before = FolderOwner::Inferred {
+                pack_id: other.clone(),
+                source,
+            };
+            finish_switch(
+                &path,
+                mode,
+                pack_id,
+                &other,
+                true,
+                owner_before,
+                load_incoming_manifest,
+                processes,
+            )
+        }
+        FolderOwner::Empty => {
+            let to_stash = stash_dir(&path, pack_id);
+            let mut switch = None;
+            if to_stash.is_dir() {
+                if crate::detect::game_running_with(processes) {
+                    return Err(AppError::GameRunning);
+                }
+                let mut flagged = Vec::new();
+                let (restored, partial_restore) = restore_incoming(&path, pack_id, &mut flagged)?;
+                switch = Some(SwitchReport {
+                    from: String::new(),
+                    to: pack_id.to_string(),
+                    restored,
+                    flagged,
+                    legacy: false,
+                    stash_path: to_stash.display().to_string(),
+                    partial_restore,
+                });
+            }
+            write_active_pack(&path, pack_id, None, OwnerSource::Empty)?;
+            Ok(DestinationEntry {
+                pack_id: pack_id.to_string(),
+                path,
+                mode,
+                owner_before: Some(FolderOwner::Empty),
+                switch,
+                adopted: false,
+            })
+        }
+    }
+}
+
+fn finish_switch(
+    path: &Path,
+    mode: String,
+    pack_id: &str,
+    other: &str,
+    legacy: bool,
+    owner_before: FolderOwner,
+    load_incoming_manifest: impl FnOnce() -> Result<Manifest, AppError>,
+    processes: &[ProcessInfo],
+) -> Result<DestinationEntry, AppError> {
+    if crate::detect::game_running_with(processes) {
+        return Err(AppError::GameRunning);
+    }
+    let manifest = load_incoming_manifest()?;
+    let report = switch_shared_pack(path, other, pack_id, &manifest, processes, legacy)?;
+    Ok(DestinationEntry {
+        pack_id: pack_id.to_string(),
+        path: path.to_path_buf(),
+        mode,
+        owner_before: Some(owner_before),
+        switch: Some(report),
+        adopted: false,
+    })
 }
 
 #[cfg(test)]
@@ -700,13 +1053,17 @@ mod tests {
                 name: "java".into(),
                 cmd: "net.minecraft.client.main.Main".into(),
             }],
+            false,
         );
         assert_eq!(running.unwrap_err().code(), "E-GAME-RUNNING");
         assert_eq!(fs::read(root.join("mods/managed.jar")).unwrap(), managed);
         assert!(!stash_dir(root, "pack-a").exists());
 
-        let away = switch_shared_pack(root, "pack-a", "pack-b", &manifest, &[]).unwrap();
+        let away = switch_shared_pack(root, "pack-a", "pack-b", &manifest, &[], false).unwrap();
         assert!(!away.restored);
+        assert!(!away.legacy);
+        assert!(!away.partial_restore);
+        assert!(away.stash_path.contains("pack-a"));
         assert!(away.flagged.iter().any(|row| row.contains("user.jar")));
         assert!(away.flagged.iter().any(|row| row.contains("edited.jar")));
         assert!(!root.join("mods/managed.jar").exists());
@@ -729,7 +1086,7 @@ mod tests {
         assert_eq!(profiles["profiles"]["vanilla"]["name"], "Latest");
         assert!(stash_dir(root, "pack-a").join("mods/managed.jar").is_file());
 
-        let back = switch_shared_pack(root, "pack-b", "pack-a", &manifest, &[]).unwrap();
+        let back = switch_shared_pack(root, "pack-b", "pack-a", &manifest, &[], false).unwrap();
         assert!(back.restored);
         assert_eq!(fs::read(root.join("mods/managed.jar")).unwrap(), managed);
         assert_eq!(fs::read(root.join("mods/user.jar")).unwrap(), user);
@@ -752,48 +1109,529 @@ mod tests {
         )
         .unwrap();
         assert_eq!(active["packId"], "pack-a");
+        assert_eq!(active["ownerSource"], "marker");
+        assert_eq!(active["previous"], "pack-b");
     }
 
     #[test]
-    fn shared_switch_preserves_the_outgoing_pack_and_blocks_until_transition() {
+    fn shared_state_never_reports_another_packs_state() {
         let tmp = tempdir().unwrap();
         let root = tmp.path();
+        let (ba, ba_state) = ba_plus_legacy_folder(root);
+        assert_eq!(
+            shared_state_for(root, BA_PLUS_PACK_ID)
+                .unwrap()
+                .unwrap()
+                .manifest_version,
+            ba_state.manifest_version
+        );
+        assert!(shared_state_for(root, "pack-x").unwrap().is_none());
+        require_owner(root, BA_PLUS_PACK_ID).unwrap();
+        assert!(require_owner(root, "pack-x").is_err());
+        assert_eq!(fs::read(root.join("mods/ba.jar")).unwrap(), ba);
+
         fs::create_dir_all(root.join("mods")).unwrap();
         let body = b"managed-jar";
         fs::write(root.join("mods/managed.jar"), body).unwrap();
         let mut state = InstalledState::new("installer", "2026.11.6");
+        state.pack_id = Some("pack-a".into());
         record_file(&mut state, "mods/managed.jar", sha512_hex(body), "managed");
         save_state(root, &state).unwrap();
-        let manifest =
-            crate::manifest::load_bundled_manifest_with_key(TEST_MANIFEST_PUBLIC_KEY_HEX).unwrap();
-
-        assert_eq!(
-            outgoing_shared_pack(root, "pack-a", "pack-b").as_deref(),
-            Some("pack-a")
-        );
-        assert!(outgoing_shared_pack(root, "pack-a", "pack-a").is_none());
-        assert!(shared_install_block(root, "pack-a").is_none());
-
-        switch_shared_pack(root, "pack-a", "pack-b", &manifest, &[]).unwrap();
+        let manifest = bundled_manifest();
+        let prefs = default_prefs("pack-b");
+        let entry = enter_at(root, &prefs, "pack-b", manifest, &[]).unwrap();
+        assert!(entry.switch.is_some());
         assert!(!root.join("mods/managed.jar").exists());
         assert!(stash_dir(root, "pack-a").join("mods/managed.jar").is_file());
-        assert_eq!(read_active_pack(root).as_deref(), Some("pack-b"));
-        assert_eq!(
-            shared_install_block(root, "pack-a").as_deref(),
-            Some("pack-b")
-        );
-        assert!(shared_install_block(root, "pack-b").is_none());
-        assert!(outgoing_shared_pack(root, "pack-b", "pack-b").is_none());
-
-        let stashed = load_shared_installed(root, "pack-a", "pack-b")
-            .unwrap()
-            .unwrap();
+        let stashed = shared_state_for(root, "pack-a").unwrap().unwrap();
         assert_eq!(stashed.manifest_version, "2026.11.6");
-        assert!(load_shared_installed(root, "pack-b", "pack-b")
-            .unwrap()
+        assert!(shared_state_for(root, "pack-b").unwrap().is_none());
+        assert!(shared_state_for(root, "pack-c").unwrap().is_none());
+        require_owner(root, "pack-b").unwrap();
+        let blocked = require_owner(root, "pack-a").unwrap_err();
+        assert!(blocked.to_string().contains("pack-a"));
+        assert_eq!(read_active_pack(root).as_deref(), Some("pack-b"));
+    }
+
+    fn bundled_manifest() -> crate::manifest::Manifest {
+        crate::manifest::load_bundled_manifest_with_key(TEST_MANIFEST_PUBLIC_KEY_HEX).unwrap()
+    }
+
+    fn default_prefs(pack_id: &str) -> Prefs {
+        Prefs {
+            selected_pack: Some(pack_id.to_string()),
+            use_default_folder: true,
+            ..Prefs::default()
+        }
+    }
+
+    fn keep_prefs(pack_id: &str) -> Prefs {
+        let mut prefs = default_prefs(pack_id);
+        prefs.use_default_folder = false;
+        prefs
+            .pack_locations
+            .insert(pack_id.to_string(), PackLocation::DefaultFolder);
+        prefs
+    }
+
+    fn own_prefs(pack_id: &str) -> Prefs {
+        Prefs {
+            selected_pack: Some(pack_id.to_string()),
+            use_default_folder: false,
+            ..Prefs::default()
+        }
+    }
+
+    fn enter_at(
+        root: &Path,
+        prefs: &Prefs,
+        pack_id: &str,
+        manifest: crate::manifest::Manifest,
+        processes: &[ProcessInfo],
+    ) -> Result<DestinationEntry, AppError> {
+        enter_destination(prefs, pack_id, root, &[], || Ok(manifest), processes)
+    }
+
+    fn enter_without_manifest(
+        root: &Path,
+        prefs: &Prefs,
+        pack_id: &str,
+        processes: &[ProcessInfo],
+    ) -> Result<DestinationEntry, AppError> {
+        enter_destination(
+            prefs,
+            pack_id,
+            root,
+            &[],
+            || panic!("manifest loader must not run"),
+            processes,
+        )
+    }
+
+    fn ba_plus_legacy_folder(root: &Path) -> (Vec<u8>, InstalledState) {
+        let ba = b"ba-jar-bytes".to_vec();
+        fs::create_dir_all(root.join("mods")).unwrap();
+        fs::create_dir_all(root.join("saves/world")).unwrap();
+        fs::create_dir_all(root.join("screenshots")).unwrap();
+        fs::write(root.join("mods/ba.jar"), &ba).unwrap();
+        fs::write(root.join("mods/user.jar"), b"user-jar").unwrap();
+        fs::write(root.join("saves/world/level.dat"), b"world").unwrap();
+        fs::write(root.join("screenshots/shot.png"), b"shot").unwrap();
+        fs::write(root.join("options.txt"), b"options").unwrap();
+        fs::write(root.join("servers.dat"), b"servers").unwrap();
+        let mut state = InstalledState::new("installer", "2026.11.6");
+        record_file(&mut state, "mods/ba.jar", sha512_hex(&ba), "ba");
+        save_state(root, &state).unwrap();
+        fs::write(
+            root.join("launcher_profiles.json"),
+            serde_json::json!({
+                "profiles": {
+                    "vanilla": {"name": "Latest"},
+                    profiles::ARNOLD_PROFILE_KEY: {"name": "Arnold", "type": "custom"}
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+        (ba, state)
+    }
+
+    fn marker_json(root: &Path) -> serde_json::Value {
+        serde_json::from_str(
+            &fs::read_to_string(state::installer_dir(root).join("active-pack.json")).unwrap(),
+        )
+        .unwrap()
+    }
+
+    fn tree_fingerprint(root: &Path) -> Vec<(String, String)> {
+        let mut out = Vec::new();
+        fn walk(root: &Path, dir: &Path, out: &mut Vec<(String, String)>) {
+            let mut entries: Vec<_> = fs::read_dir(dir).unwrap().flatten().collect();
+            entries.sort_by_key(|entry| entry.file_name());
+            for entry in entries {
+                let path = entry.path();
+                let rel = path
+                    .strip_prefix(root)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                if path.is_dir() {
+                    out.push((format!("{rel}/"), String::new()));
+                    walk(root, &path, out);
+                } else {
+                    out.push((rel, sha512_hex(&fs::read(&path).unwrap())));
+                }
+            }
+        }
+        if root.exists() {
+            walk(root, root, &mut out);
+        }
+        out
+    }
+
+    fn assert_ba_plus_stashed(root: &Path, ba: &[u8], version: &str) {
+        let stash = stash_dir(root, BA_PLUS_PACK_ID);
+        assert_eq!(fs::read(stash.join("mods/ba.jar")).unwrap(), ba);
+        let stashed = state::load_state(&stash).unwrap().unwrap();
+        assert_eq!(stashed.manifest_version, version);
+        assert!(!root.join("mods/ba.jar").exists());
+        assert!(!state::state_path(root).is_file());
+        assert_eq!(fs::read(root.join("mods/user.jar")).unwrap(), b"user-jar");
+        assert_eq!(
+            fs::read(root.join("saves/world/level.dat")).unwrap(),
+            b"world"
+        );
+        assert_eq!(
+            fs::read(root.join("screenshots/shot.png")).unwrap(),
+            b"shot"
+        );
+        assert_eq!(fs::read(root.join("options.txt")).unwrap(), b"options");
+        assert_eq!(fs::read(root.join("servers.dat")).unwrap(), b"servers");
+        assert_eq!(read_active_pack(root).as_deref(), Some("pack-x"));
+        let marker = marker_json(root);
+        assert_eq!(marker["previous"], BA_PLUS_PACK_ID);
+        let profiles: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(root.join("launcher_profiles.json")).unwrap())
+                .unwrap();
+        assert!(profiles["profiles"]
+            .get(profiles::ARNOLD_PROFILE_KEY)
             .is_none());
-        assert!(load_shared_installed(root, "pack-c", "pack-b")
+        assert_eq!(profiles["profiles"]["vanilla"]["name"], "Latest");
+        let legacy: serde_json::Value =
+            serde_json::from_slice(&fs::read(stash.join("profile-official-legacy.json")).unwrap())
+                .unwrap();
+        assert_eq!(legacy["name"], "Arnold");
+        assert!(shared_state_for(root, "pack-x").unwrap().is_none());
+        assert_eq!(
+            shared_state_for(root, BA_PLUS_PACK_ID)
+                .unwrap()
+                .unwrap()
+                .manifest_version,
+            version
+        );
+    }
+
+    #[test]
+    fn resolve_folder_owner_rules() {
+        let tmp = tempdir().unwrap();
+        let empty = tmp.path().join("empty");
+        fs::create_dir_all(&empty).unwrap();
+        assert_eq!(resolve_folder_owner(&empty), FolderOwner::Empty);
+
+        let legacy = tmp.path().join("legacy");
+        fs::create_dir_all(&legacy).unwrap();
+        ba_plus_legacy_folder(&legacy);
+        assert_eq!(
+            resolve_folder_owner(&legacy),
+            FolderOwner::Inferred {
+                pack_id: BA_PLUS_PACK_ID.into(),
+                source: OwnerSource::LegacyBaPlus,
+            }
+        );
+
+        let stated = tmp.path().join("stated");
+        fs::create_dir_all(&stated).unwrap();
+        let mut state = InstalledState::new("installer", "1");
+        state.pack_id = Some("pack-x".into());
+        save_state(&stated, &state).unwrap();
+        assert_eq!(
+            resolve_folder_owner(&stated),
+            FolderOwner::Inferred {
+                pack_id: "pack-x".into(),
+                source: OwnerSource::State,
+            }
+        );
+
+        let marked = tmp.path().join("marked");
+        fs::create_dir_all(state::installer_dir(&marked)).unwrap();
+        fs::write(
+            state::installer_dir(&marked).join("active-pack.json"),
+            br#"{"packId":"pack-a"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            resolve_folder_owner(&marked),
+            FolderOwner::Marked {
+                pack_id: "pack-a".into()
+            }
+        );
+
+        let garbage_marker = tmp.path().join("garbage-marker");
+        fs::create_dir_all(state::installer_dir(&garbage_marker)).unwrap();
+        fs::write(
+            state::installer_dir(&garbage_marker).join("active-pack.json"),
+            b"nope",
+        )
+        .unwrap();
+        assert!(matches!(
+            resolve_folder_owner(&garbage_marker),
+            FolderOwner::Ambiguous { .. }
+        ));
+
+        let garbage_state = tmp.path().join("garbage-state");
+        fs::create_dir_all(state::installer_dir(&garbage_state)).unwrap();
+        fs::write(state::state_path(&garbage_state), b"nope").unwrap();
+        assert!(matches!(
+            resolve_folder_owner(&garbage_state),
+            FolderOwner::Ambiguous { .. }
+        ));
+
+        let clash = tmp.path().join("clash");
+        fs::create_dir_all(&clash).unwrap();
+        let mut clash_state = InstalledState::new("installer", "1");
+        clash_state.pack_id = Some("b".into());
+        save_state(&clash, &clash_state).unwrap();
+        fs::write(
+            state::installer_dir(&clash).join("active-pack.json"),
+            br#"{"packId":"a"}"#,
+        )
+        .unwrap();
+        match resolve_folder_owner(&clash) {
+            FolderOwner::Ambiguous { reason } => {
+                assert!(reason.contains("says a"), "{reason}");
+                assert!(reason.contains("says b"), "{reason}");
+            }
+            other => panic!("expected ambiguous, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn legacy_folder_default_toggle_stashes_ba_plus_before_plan() {
+        let tmp = tempdir().unwrap();
+        let root = tmp.path();
+        let (ba, state) = ba_plus_legacy_folder(root);
+        let before = tree_fingerprint(root);
+        let mut prefs = own_prefs("pack-x");
+        let entry = enter_without_manifest(root, &prefs, "pack-x", &[]).unwrap();
+        assert_eq!(entry.mode, "own");
+        assert!(entry.switch.is_none());
+        assert!(resolve_pack_dir(&prefs, "pack-x", root, &[])
+            .needs_choice
+            .is_some());
+        assert_eq!(tree_fingerprint(root), before);
+
+        prefs.use_default_folder = true;
+        let entry = enter_at(root, &prefs, "pack-x", bundled_manifest(), &[]).unwrap();
+        let report = entry.switch.expect("legacy folder switches");
+        assert!(report.legacy);
+        assert_eq!(report.from, BA_PLUS_PACK_ID);
+        assert_ba_plus_stashed(root, &ba, &state.manifest_version);
+    }
+
+    #[test]
+    fn legacy_folder_keep_choice_stashes_ba_plus() {
+        let tmp = tempdir().unwrap();
+        let root = tmp.path();
+        let (ba, state) = ba_plus_legacy_folder(root);
+        let manifest = bundled_manifest();
+        let entry = enter_at(root, &keep_prefs("pack-x"), "pack-x", manifest.clone(), &[]).unwrap();
+        assert!(entry.switch.unwrap().legacy);
+        assert_ba_plus_stashed(root, &ba, &state.manifest_version);
+
+        let entry = enter_at(
+            root,
+            &keep_prefs(BA_PLUS_PACK_ID),
+            BA_PLUS_PACK_ID,
+            manifest,
+            &[],
+        )
+        .unwrap();
+        assert!(entry.switch.unwrap().restored);
+        assert_eq!(fs::read(root.join("mods/ba.jar")).unwrap(), ba);
+        let live = state::load_state(root).unwrap().unwrap();
+        assert_eq!(live.manifest_version, state.manifest_version);
+        let profiles: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(root.join("launcher_profiles.json")).unwrap())
+                .unwrap();
+        assert_eq!(
+            profiles["profiles"][profiles::ARNOLD_PROFILE_KEY]["name"],
+            "Arnold"
+        );
+        assert_eq!(profiles["profiles"]["vanilla"]["name"], "Latest");
+        assert_eq!(read_active_pack(root).as_deref(), Some(BA_PLUS_PACK_ID));
+        assert!(!stash_dir(root, BA_PLUS_PACK_ID).exists());
+    }
+
+    #[test]
+    fn marked_other_pack_completes_transition_instead_of_blocking() {
+        let tmp = tempdir().unwrap();
+        let root = tmp.path();
+        let a_bytes = b"pack-a-jar";
+        fs::create_dir_all(root.join("mods")).unwrap();
+        fs::write(root.join("mods/a.jar"), a_bytes).unwrap();
+        let mut a_state = InstalledState::new("installer", "a-1");
+        a_state.pack_id = Some("pack-a".into());
+        record_file(&mut a_state, "mods/a.jar", sha512_hex(a_bytes), "a");
+        save_state(root, &a_state).unwrap();
+        write_active_pack(root, "pack-a", None, OwnerSource::Marker).unwrap();
+
+        let stash = stash_dir(root, "pack-x");
+        let mut x_state = InstalledState::new("installer", "x-1");
+        x_state.pack_id = Some("pack-x".into());
+        save_state(&stash, &x_state).unwrap();
+        fs::create_dir_all(stash.join("mods")).unwrap();
+        fs::write(stash.join("mods/x.jar"), b"x-jar").unwrap();
+
+        let entry = enter_at(
+            root,
+            &default_prefs("pack-x"),
+            "pack-x",
+            bundled_manifest(),
+            &[],
+        )
+        .unwrap();
+        let report = entry.switch.unwrap();
+        assert!(report.restored);
+        assert!(!report.legacy);
+        assert_eq!(
+            fs::read(stash_dir(root, "pack-a").join("mods/a.jar")).unwrap(),
+            a_bytes
+        );
+        assert!(!root.join("mods/a.jar").exists());
+        assert_eq!(fs::read(root.join("mods/x.jar")).unwrap(), b"x-jar");
+        assert_eq!(read_active_pack(root).as_deref(), Some("pack-x"));
+        assert_eq!(
+            shared_state_for(root, "pack-x")
+                .unwrap()
+                .unwrap()
+                .manifest_version,
+            "x-1"
+        );
+        require_owner(root, "pack-x").unwrap();
+        assert!(require_owner(root, "pack-a").is_err());
+    }
+
+    #[test]
+    fn same_pack_legacy_folder_is_adopted_without_moving() {
+        let tmp = tempdir().unwrap();
+        let root = tmp.path();
+        ba_plus_legacy_folder(root);
+        let before = tree_fingerprint(root);
+        let entry =
+            enter_without_manifest(root, &default_prefs(BA_PLUS_PACK_ID), BA_PLUS_PACK_ID, &[])
+                .unwrap();
+        assert!(entry.adopted);
+        assert!(entry.switch.is_none());
+        let after: Vec<_> = tree_fingerprint(root)
+            .into_iter()
+            .filter(|(rel, _)| !rel.contains("active-pack.json"))
+            .collect();
+        assert_eq!(after, before);
+        let marker = marker_json(root);
+        assert_eq!(marker["packId"], BA_PLUS_PACK_ID);
+        assert_eq!(marker["ownerSource"], "legacy-ba-plus");
+    }
+
+    #[test]
+    fn ambiguous_folder_refuses_and_changes_nothing() {
+        let tmp = tempdir().unwrap();
+        let root = tmp.path();
+        fs::create_dir_all(state::installer_dir(root)).unwrap();
+        fs::write(state::state_path(root), b"not-json").unwrap();
+        fs::write(root.join("mods-note.txt"), b"keep").unwrap();
+        let before = tree_fingerprint(root);
+        let err =
+            enter_without_manifest(root, &default_prefs("pack-x"), "pack-x", &[]).unwrap_err();
+        assert_eq!(err.to_payload().code, "E-FOLDER-OWNER");
+        assert_eq!(tree_fingerprint(root), before);
+        assert!(shared_state_for(root, "pack-x").is_err());
+    }
+
+    #[test]
+    fn existing_outgoing_stash_is_kept_not_deleted() {
+        let tmp = tempdir().unwrap();
+        let root = tmp.path();
+        let body = b"pack-a-jar";
+        fs::create_dir_all(root.join("mods")).unwrap();
+        fs::write(root.join("mods/a.jar"), body).unwrap();
+        let mut state = InstalledState::new("installer", "a-1");
+        state.pack_id = Some("pack-a".into());
+        record_file(&mut state, "mods/a.jar", sha512_hex(body), "a");
+        save_state(root, &state).unwrap();
+        write_active_pack(root, "pack-a", None, OwnerSource::Marker).unwrap();
+        let old = stash_dir(root, "pack-a");
+        fs::create_dir_all(&old).unwrap();
+        fs::write(old.join("old.jar"), b"old").unwrap();
+
+        let entry = enter_at(
+            root,
+            &default_prefs("pack-x"),
+            "pack-x",
+            bundled_manifest(),
+            &[],
+        )
+        .unwrap();
+        let flagged = entry.switch.unwrap().flagged;
+        assert!(flagged.iter().any(|row| {
+            row.contains("Older saved copy of pack-a") && row.contains(".replaced-")
+        }));
+        let packs = state::installer_dir(root).join("packs");
+        let replaced = fs::read_dir(&packs)
             .unwrap()
-            .is_none());
+            .flatten()
+            .find(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("pack-a.replaced-")
+            })
+            .unwrap();
+        assert_eq!(fs::read(replaced.path().join("old.jar")).unwrap(), b"old");
+    }
+
+    #[test]
+    fn restore_conflict_keeps_file_in_stash() {
+        let tmp = tempdir().unwrap();
+        let root = tmp.path();
+        let a_bytes = b"pack-a-jar";
+        fs::create_dir_all(root.join("mods")).unwrap();
+        fs::write(root.join("mods/a.jar"), a_bytes).unwrap();
+        fs::write(root.join("mods/x.jar"), b"live").unwrap();
+        let mut state = InstalledState::new("installer", "a-1");
+        state.pack_id = Some("pack-a".into());
+        record_file(&mut state, "mods/a.jar", sha512_hex(a_bytes), "a");
+        save_state(root, &state).unwrap();
+        write_active_pack(root, "pack-a", None, OwnerSource::Marker).unwrap();
+        let stash = stash_dir(root, "pack-x");
+        fs::create_dir_all(stash.join("mods")).unwrap();
+        fs::write(stash.join("mods/x.jar"), b"stash").unwrap();
+
+        let entry = enter_at(
+            root,
+            &default_prefs("pack-x"),
+            "pack-x",
+            bundled_manifest(),
+            &[],
+        )
+        .unwrap();
+        let report = entry.switch.unwrap();
+        assert!(report.partial_restore);
+        assert!(report.flagged.iter().any(|row| row.contains("mods/x.jar")));
+        assert_eq!(fs::read(root.join("mods/x.jar")).unwrap(), b"live");
+        assert_eq!(
+            fs::read(stash_dir(root, "pack-x").join("mods/x.jar")).unwrap(),
+            b"stash"
+        );
+    }
+
+    #[test]
+    fn game_running_blocks_transition() {
+        let tmp = tempdir().unwrap();
+        let root = tmp.path();
+        ba_plus_legacy_folder(root);
+        let err = enter_without_manifest(
+            root,
+            &default_prefs("pack-x"),
+            "pack-x",
+            &[ProcessInfo {
+                name: "java".into(),
+                cmd: "net.minecraft.client.main.Main".into(),
+            }],
+        )
+        .unwrap_err();
+        assert_eq!(err.code(), "E-GAME-RUNNING");
+        assert!(!stash_dir(root, BA_PLUS_PACK_ID).exists());
+        assert!(root.join("mods/ba.jar").is_file());
+        assert!(state::state_path(root).is_file());
     }
 }

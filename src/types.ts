@@ -273,6 +273,34 @@ export interface InstalledState {
   components: { id: string; version: string; name: string }[];
   files: { path: string; sha512: string; componentId: string }[];
   updatedAt: string;
+  packId?: string | null;
+}
+
+export type OwnerSource = "marker" | "state" | "legacy-ba-plus" | "empty";
+
+export type FolderOwner =
+  | { kind: "empty" }
+  | { kind: "marked"; packId: string }
+  | { kind: "inferred"; packId: string; source: OwnerSource }
+  | { kind: "ambiguous"; reason: string };
+
+export interface SwitchReport {
+  from: string;
+  to: string;
+  restored: boolean;
+  flagged: string[];
+  legacy: boolean;
+  stashPath: string;
+  partialRestore: boolean;
+}
+
+export interface DestinationEntry {
+  packId: string;
+  path: string;
+  mode: string;
+  ownerBefore?: FolderOwner | null;
+  switch?: SwitchReport | null;
+  adopted: boolean;
 }
 
 export interface SnapshotMeta {

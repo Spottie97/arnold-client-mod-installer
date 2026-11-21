@@ -94,6 +94,15 @@ pub fn folder_choice_error(detail: impl Into<String>) -> AppError {
     }
 }
 
+pub fn folder_owner_error(root: &Path, reason: impl Into<String>) -> AppError {
+    AppError::Other {
+        code: "E-FOLDER-OWNER".into(),
+        title: "We can't tell which pack this Minecraft folder belongs to".into(),
+        hint: "Nothing was moved or changed. Give this pack its own folder in Settings, or pick a different Minecraft folder. If the folder came from an older installer, export the log and send it to us.".into(),
+        detail: format!("{} ({})", reason.into(), root.display()),
+    }
+}
+
 pub fn needs_newer_app(entry: &PackEntry) -> bool {
     entry
         .min_app_version

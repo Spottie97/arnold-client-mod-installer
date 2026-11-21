@@ -1,6 +1,7 @@
 import type { LocalSourceInfo } from "./localSource";
 import type {
   CopyReport,
+  DestinationEntry,
   Detection,
   ErrorPayload,
   ImportOffer,
@@ -163,6 +164,17 @@ export async function listenProgress(onEvent: (event: ProgressEvent) => void): P
   const { listen } = await import("@tauri-apps/api/event");
   const unlisten = await listen<ProgressEvent>("install://progress", (event) => {
     onEvent(event.payload);
+  });
+  return unlisten;
+}
+
+export async function onFolderSwitched(
+  cb: (entry: DestinationEntry) => void,
+): Promise<() => void> {
+  if (!isTauri()) return () => undefined;
+  const { listen } = await import("@tauri-apps/api/event");
+  const unlisten = await listen<DestinationEntry>("pack://folder-switched", (event) => {
+    cb(event.payload);
   });
   return unlisten;
 }
