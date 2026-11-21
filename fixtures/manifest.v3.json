@@ -638,6 +638,55 @@
       ]
     },
     {
+      "id": "ingeniumapi",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "requiredInAllKits": true,
+      "name": "Ingenium API",
+      "version": "1.1",
+      "description": "Library needed by Shippy Ships. The server runs it too, so every kit installs it.",
+      "license": "MIT",
+      "files": [
+        {
+          "file": "ingeniumapi-1.1-FABRIC-MC-26.X.jar",
+          "dest": "mods",
+          "match": "ingeniumapi-*.jar",
+          "url": "https://cdn.modrinth.com/data/bhnA6sV8/versions/bRhQB9Tl/ingeniumapi-1.1-FABRIC-MC-26.X.jar",
+          "sha512": "680ce9a30090466b8e475706d99a5bd733fc423abde58d6be668ee8afca0309ba990e497f5dbc1b63f3b30cc3f24a935f91c06fd4e9a2f93c9a5f89aa5b91445",
+          "size": 13267,
+          "sha1": "c932919958eaa7908a86b0074946f5b72d4ee846"
+        }
+      ]
+    },
+    {
+      "id": "shippyships",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base",
+        "ingeniumapi"
+      ],
+      "requiredInAllKits": true,
+      "name": "Shippy Ships",
+      "version": "1.0.28.3",
+      "description": "Buildable sailing ships by Caesius_Leo. The server runs it too, so every kit installs it. Fetched from Modrinth, never rehosted.",
+      "license": "LicenseRef-Custom-License---Limited-Rights-Granted",
+      "files": [
+        {
+          "file": "shippy-ships-1.0.28.2-FABRIC-MC-26.3.jar",
+          "dest": "mods",
+          "match": "shippy-ships-*.jar",
+          "url": "https://cdn.modrinth.com/data/oxBNHOmi/versions/dZcofTOJ/shippy-ships-1.0.28.2-FABRIC-MC-26.3.jar",
+          "sha512": "29941b69f1c5eb5f9c3d452afcb39c60b16ebcd1dc70b050bb6b0ef12b9110562059d00dadc9c2402f9d09567d39f6f2f70e7d20340f4bf21e699e3ca8730a23",
+          "size": 2608709,
+          "sha1": "57e9afc6553eb00933dbe00ebb51b733ddb827df"
+        }
+      ]
+    },
+    {
       "id": "appleskin",
       "group": "arnold",
       "kind": "download",
@@ -3109,6 +3158,8 @@
         "culturaldelights",
         "xaerominimap",
         "xaeroworldmap",
+        "ingeniumapi",
+        "shippyships",
         "badoptimizations",
         "modernfix",
         "lithium",
@@ -3185,6 +3236,8 @@
         "culturaldelights",
         "xaerominimap",
         "xaeroworldmap",
+        "ingeniumapi",
+        "shippyships",
         "appleskin",
         "badoptimizations",
         "modernfix",
@@ -3311,6 +3364,8 @@
         "culturaldelights",
         "xaerominimap",
         "xaeroworldmap",
+        "ingeniumapi",
+        "shippyships",
         "appleskin",
         "badoptimizations",
         "modernfix",

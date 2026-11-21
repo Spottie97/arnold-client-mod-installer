@@ -1437,10 +1437,10 @@ mod tests {
             by_id("hardcorerevival").requires,
             vec!["base".to_string(), "balm".to_string()]
         );
-        assert_eq!(manifest.components.len(), 125);
-        assert_eq!(manifest.kits["basic"].components.len(), 68);
-        assert_eq!(manifest.kits["full"].components.len(), 119);
-        assert_eq!(manifest.kits["recommended"].components.len(), 119);
+        assert_eq!(manifest.components.len(), 127);
+        assert_eq!(manifest.kits["basic"].components.len(), 70);
+        assert_eq!(manifest.kits["full"].components.len(), 121);
+        assert_eq!(manifest.kits["recommended"].components.len(), 121);
     }
 
     #[test]
@@ -1559,6 +1559,108 @@ mod tests {
         );
         assert_eq!(by_id("xaerominimap").requires, vec!["base".to_string()]);
         assert_eq!(by_id("xaeroworldmap").requires, vec!["base".to_string()]);
+    }
+
+    #[test]
+    fn shippy_ships_and_ingenium_come_from_modrinth_in_every_kit() {
+        let manifest = load_fixture_manifest().unwrap();
+        let by_id = |id: &str| {
+            manifest
+                .components
+                .iter()
+                .find(|component| component.id == id)
+                .unwrap_or_else(|| panic!("missing {id}"))
+        };
+        let api = by_id("ingeniumapi");
+        assert_eq!(api.name, "Ingenium API");
+        assert_eq!(api.version, "1.1");
+        assert_eq!(api.group, ComponentGroup::Arnold);
+        assert_eq!(api.kind, ComponentKind::Download);
+        assert!(api.required_in_all_kits);
+        assert_eq!(api.requires, vec!["base".to_string()]);
+        assert_eq!(api.license.as_deref(), Some("MIT"));
+        assert_eq!(
+            api.description,
+            "Library needed by Shippy Ships. The server runs it too, so every kit installs it."
+        );
+        let api_file = file_of(
+            &manifest,
+            "ingeniumapi",
+            "ingeniumapi-1.1-FABRIC-MC-26.X.jar",
+        );
+        assert_eq!(api_file.match_glob, "ingeniumapi-*.jar");
+        assert_eq!(
+            api_file.url,
+            "https://cdn.modrinth.com/data/bhnA6sV8/versions/bRhQB9Tl/ingeniumapi-1.1-FABRIC-MC-26.X.jar"
+        );
+        assert!(api_file.url.starts_with("https://cdn.modrinth.com/"));
+        assert!(!api_file.url.starts_with("https://github.com/"));
+        assert_eq!(
+            api_file.sha512,
+            "680ce9a30090466b8e475706d99a5bd733fc423abde58d6be668ee8afca0309ba990e497f5dbc1b63f3b30cc3f24a935f91c06fd4e9a2f93c9a5f89aa5b91445"
+        );
+        assert_eq!(
+            api_file.sha1.as_deref(),
+            Some("c932919958eaa7908a86b0074946f5b72d4ee846")
+        );
+        assert_eq!(api_file.size, 13_267);
+
+        let ships = by_id("shippyships");
+        assert_eq!(ships.name, "Shippy Ships");
+        // Modrinth labels this release 1.0.28.3. The jar filename still says 1.0.28.2.
+        assert_eq!(ships.version, "1.0.28.3");
+        assert_eq!(ships.group, ComponentGroup::Arnold);
+        assert!(ships.required_in_all_kits);
+        assert_eq!(
+            ships.requires,
+            vec!["base".to_string(), "ingeniumapi".to_string()]
+        );
+        assert_eq!(
+            ships.license.as_deref(),
+            Some("LicenseRef-Custom-License---Limited-Rights-Granted")
+        );
+        assert!(ships.description.contains("Caesius_Leo"));
+        assert!(ships.description.contains("never rehosted"));
+        let file = file_of(
+            &manifest,
+            "shippyships",
+            "shippy-ships-1.0.28.2-FABRIC-MC-26.3.jar",
+        );
+        assert!(file.file.contains("1.0.28.2"));
+        assert!(!file.file.contains("1.0.28.3"));
+        assert_eq!(file.match_glob, "shippy-ships-*.jar");
+        assert_eq!(
+            file.url,
+            "https://cdn.modrinth.com/data/oxBNHOmi/versions/dZcofTOJ/shippy-ships-1.0.28.2-FABRIC-MC-26.3.jar"
+        );
+        assert!(file.url.starts_with("https://cdn.modrinth.com/"));
+        assert!(!file.url.starts_with("https://github.com/"));
+        assert_eq!(
+            file.sha512,
+            "29941b69f1c5eb5f9c3d452afcb39c60b16ebcd1dc70b050bb6b0ef12b9110562059d00dadc9c2402f9d09567d39f6f2f70e7d20340f4bf21e699e3ca8730a23"
+        );
+        assert_eq!(
+            file.sha1.as_deref(),
+            Some("57e9afc6553eb00933dbe00ebb51b733ddb827df")
+        );
+        assert_eq!(file.size, 2_608_709);
+        for id in ["ingeniumapi", "shippyships"] {
+            for kit in ["basic", "full", "recommended"] {
+                assert!(
+                    manifest.kits[kit].components.iter().any(|item| item == id),
+                    "{kit} missing {id}"
+                );
+            }
+        }
+        for skipped in ["distanthorizons", "fastipping"] {
+            assert!(
+                manifest
+                    .components
+                    .iter()
+                    .all(|component| component.id != skipped),
+                "{skipped} should stay out"
+            );
+        }
     }
 
     #[test]
@@ -2174,8 +2276,10 @@ mod tests {
         expected.insert("culturaldelights".to_string());
         expected.insert("xaerominimap".to_string());
         expected.insert("xaeroworldmap".to_string());
+        expected.insert("ingeniumapi".to_string());
+        expected.insert("shippyships".to_string());
         expected.insert("deck".to_string());
-        assert_eq!(locked.len(), 56);
+        assert_eq!(locked.len(), 58);
         assert_eq!(locked, expected);
     }
 

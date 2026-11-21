@@ -424,6 +424,8 @@ mod tests {
             "culturaldelights",
             "xaerominimap",
             "xaeroworldmap",
+            "ingeniumapi",
+            "shippyships",
         ] {
             assert!(
                 plan.components.iter().any(|item| item == id),
@@ -714,6 +716,8 @@ mod tests {
             "culturaldelights",
             "xaerominimap",
             "xaeroworldmap",
+            "ingeniumapi",
+            "shippyships",
             "base",
         ] {
             assert!(
