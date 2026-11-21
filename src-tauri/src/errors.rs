@@ -150,7 +150,7 @@ impl AppError {
             Self::Collision { path, detail } => ErrorPayload {
                 code: self.code(),
                 title: format!("A different {path} is already in your mods folder"),
-                hint: "Replace it (the old one is kept in the restore point), keep yours and skip, or cancel. Unknown snow jars are left alone until you choose.".to_string(),
+                hint: "Replace it (the old one is kept in the restore point), keep yours and skip, or cancel.".to_string(),
                 detail: detail.clone(),
             },
             Self::Io(detail) => ErrorPayload {
@@ -237,13 +237,13 @@ mod tests {
     }
 
     #[test]
-    fn collision_asks_before_touching_unknown_snow() {
+    fn collision_asks_before_replacing_an_unknown_jar() {
         let payload = AppError::Collision {
-            path: "mods/arnold-snowfall-mystery.jar".into(),
+            path: "mods/arnold-ships-client-custom.jar".into(),
             detail: "checksum is not a known Arnold build".into(),
         }
         .to_payload();
         assert_eq!(payload.code, "P-COLLISION");
-        assert!(payload.hint.contains("Unknown snow"));
+        assert!(payload.hint.contains("keep yours and skip"));
     }
 }

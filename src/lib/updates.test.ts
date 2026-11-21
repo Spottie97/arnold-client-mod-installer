@@ -6,7 +6,7 @@ import { TOUR_TIPS } from "./tour";
 const manifest = {
   components: [
     { id: "ships", name: "Arnold Ships", version: "0.10.2", files: [] },
-    { id: "snow", name: "Arnold Snow", version: "1.3.3", files: [] },
+    { id: "deck", name: "Arnold Deck", version: "0.11.1", files: [] },
   ],
 } as unknown as Manifest;
 
@@ -15,7 +15,7 @@ describe("update badges", () => {
     const installed = {
       components: [
         { id: "ships", name: "Arnold Ships", version: "0.10.1" },
-        { id: "snow", name: "Arnold Snow", version: "1.3.3" },
+        { id: "deck", name: "Arnold Deck", version: "0.11.1" },
       ],
     } as InstalledState;
     const badges = updateBadges(manifest, installed);
@@ -26,7 +26,7 @@ describe("update badges", () => {
 
   it("is empty when current", () => {
     const installed = {
-      components: [{ id: "snow", name: "Arnold Snow", version: "1.3.3" }],
+      components: [{ id: "deck", name: "Arnold Deck", version: "0.11.1" }],
     } as InstalledState;
     expect(updateBadges(manifest, installed)).toEqual([]);
   });

@@ -31,7 +31,7 @@ use crate::local_source::{LocalAwareFetcher, LOCAL_SOURCE_BANNER};
 use crate::log::{build_summary, diagnostics_text, export_install_log, local_export_stamp};
 use crate::manifest::{
     active_manifest_public_key, component_by_id, default_cache_dir, lite_preset,
-    load_bundled_manifest, Manifest, ManifestLoad, SNOW_LITE_PRESET,
+    load_bundled_manifest, Manifest, ManifestLoad,
 };
 use crate::pack_dirs::{self, CopyItem, ResolvedDir};
 use crate::packs::{self, BA_PLUS_PACK_ID};
@@ -347,7 +347,7 @@ pub fn plan(sel: Selection, state: State<AppState>) -> Result<InstallPlan, Error
     let manifest = manifest_of(&state).map_err(|e| e.to_payload())?;
     let detection = detect(state.clone()).ok();
     let fabric_installed = detection.as_ref().is_some_and(|item| item.fabric.installed);
-    destination::plan_at(
+    let mut planned = destination::plan_at(
         &manifest,
         &sel,
         &load_prefs().unwrap_or_default(),
@@ -356,7 +356,12 @@ pub fn plan(sel: Selection, state: State<AppState>) -> Result<InstallPlan, Error
         &default_candidates(),
         fabric_installed,
     )
-    .map_err(|e| e.to_payload())
+    .map_err(|e| e.to_payload())?;
+    if let Ok(dir) = game_dir_of(&state) {
+        let rels = crate::import::legacy_snow_rels(&dir).map_err(|e| e.to_payload())?;
+        crate::plan::schedule_legacy_snow_removals(&mut planned, &rels);
+    }
+    Ok(planned)
 }
 
 /// Register this request's cancel flag before any other work, and stop now if
@@ -837,7 +842,7 @@ pub fn get_config(id: String, state: State<AppState>) -> Result<serde_json::Valu
         "exists": existing.is_some(),
         "text": existing.clone().unwrap_or_default(),
         "liteDetected": lite_detected,
-        "presetId": SNOW_LITE_PRESET,
+        "presetId": lite_preset(config).map(|_| "lite"),
         "settings": config.settings,
     }))
 }
@@ -898,7 +903,7 @@ pub fn set_config(
         "skippedSwitch": outcome.skipped_switch,
         "addedKeys": outcome.added_keys,
         "rewritten": outcome.rewritten,
-        "presetId": SNOW_LITE_PRESET,
+        "presetId": lite_preset(config).map(|_| "lite"),
     }))
 }
 

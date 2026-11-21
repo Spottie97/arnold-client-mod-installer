@@ -62,7 +62,6 @@ export interface Component {
 export interface Kit {
   name: string;
   components: string[];
-  snowLite?: boolean;
   description: string;
 }
 
@@ -73,7 +72,6 @@ export interface QualityRow {
   description: string;
   skipComponents?: string[];
   recommendOcean?: boolean;
-  snow?: { quality: string; fpsTarget?: number; adaptiveFps?: boolean; legacyLite?: boolean };
   ships?: { particles: number; spray?: boolean; wake?: boolean; hdModels?: boolean };
   sodium?: {
     weatherQuality: string;
@@ -212,7 +210,6 @@ export interface Hardware {
 
 export interface Recommendation {
   kit: string;
-  snowLite: boolean;
   quality: QualityLevel;
   recommendOcean: boolean;
   reasons: string[];
@@ -226,7 +223,6 @@ export interface Selection {
   ocean: boolean;
   /** Optional add-ons other than Ocean. A missing id stays off. */
   addons?: Record<string, boolean>;
-  snowLite: boolean | null;
   quality: QualityLevel | null;
 }
 
@@ -245,9 +241,8 @@ export interface InstallPlan {
   add: PlanFile[];
   update: PlanFile[];
   remove: PlanFile[];
-  configs: { componentId: string; file: string; snowLite: boolean }[];
+  configs: { componentId: string; file: string }[];
   loader?: { id: string; url: string; sha512: string } | null;
-  snowLite: boolean;
   quality: QualityLevel;
   kit: string;
   components: string[];

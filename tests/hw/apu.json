@@ -6,6 +6,5 @@
   "gpu": "AMD Radeon Graphics",
   "vramGB": 2,
   "dedicatedGpu": false,
-  "expectKit": "basic",
-  "expectSnowLite": true
+  "expectKit": "basic"
 }

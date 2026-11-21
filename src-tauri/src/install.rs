@@ -15,7 +15,7 @@ use crate::download::verify_sha512;
 use crate::errors::AppError;
 use crate::fabric::install_loader;
 use crate::fetch::{FetchKind, Fetcher};
-use crate::import::{is_known_legacy_snow_jar, SNOW_LEGACY_GLOBS};
+use crate::import::legacy_snow_rels;
 use crate::local_source::copy_local_settings;
 use crate::log::append_install_log;
 use crate::manifest::{component_by_id, lite_preset, Manifest};
@@ -122,18 +122,6 @@ fn own_tracked_sha512<'a>(
     state.file_by_path(rel).map(|file| file.sha512.as_str())
 }
 
-pub fn snow_replace_patterns(component_id: &str, extra: &[String]) -> Vec<String> {
-    let mut patterns = extra.to_vec();
-    if component_id == "snow" {
-        for glob in SNOW_LEGACY_GLOBS {
-            if !patterns.iter().any(|p| p == glob) {
-                patterns.push((*glob).to_string());
-            }
-        }
-    }
-    patterns
-}
-
 fn cancelled(flag: &AtomicBool) -> Result<(), AppError> {
     if flag.load(Ordering::SeqCst) {
         Err(AppError::Cancelled)
@@ -197,18 +185,10 @@ fn refuse_unconfirmed_collisions(
         .map(|item| item.rel.clone())
         .collect();
     if let Some(path) = asks.first() {
-        let older_build = asks
-            .iter()
-            .any(|rel| rel.rsplit('/').next().is_some_and(is_known_legacy_snow_jar));
-        let named = if older_build {
-            " The name matches an older Snowfall build, but the bytes don't match one the installer put there, so it may be your own copy."
-        } else {
-            ""
-        };
         return Err(AppError::Collision {
             path: path.clone(),
             detail: format!(
-                "Unknown Arnold-looking file(s) {}. Tracked files and known checksums are replaced automatically; this one was left for you to confirm.{named}",
+                "Unknown Arnold-looking file(s) {}. Tracked files and known checksums are replaced automatically; this one was left for you to confirm.",
                 asks.join(", ")
             ),
         });
@@ -252,8 +232,7 @@ fn collect_replacements(
         .collect();
     for file in plan.add.iter().chain(plan.update.iter()) {
         let folder = file.dest.folder();
-        let patterns = snow_replace_patterns(&file.component_id, &file.legacy_match);
-        let mut all_patterns = patterns;
+        let mut all_patterns = file.legacy_match.clone();
         if !all_patterns.iter().any(|p| p == &file.match_glob) {
             all_patterns.push(file.match_glob.clone());
         }
@@ -295,11 +274,6 @@ fn apply_plan_config(
     plan: &InstallPlan,
 ) -> Result<(), AppError> {
     for item in &plan.configs {
-        if item.component_id == "snow" {
-            // Snowfall 1.3 writes `quality` in apply_quality. The lite-file
-            // swap stays there, and only for migrating old installs.
-            continue;
-        }
         let Some(component) = component_by_id(manifest, &item.component_id) else {
             continue;
         };
@@ -318,11 +292,7 @@ fn apply_plan_config(
                 lite_over.insert(key.clone(), format_setting_value(value));
             }
         }
-        let switch = if item.snow_lite {
-            ConfigSwitch::ToLite
-        } else {
-            ConfigSwitch::ToNormal
-        };
+        let switch = ConfigSwitch::ToNormal;
         let header = config.header.as_deref().unwrap_or(MANAGED_HEADER);
         let marker = lite_preset(config)
             .and_then(|p| p.marker.as_deref())
@@ -980,6 +950,10 @@ pub fn run_install<F: Fetcher>(
 
         cancelled(cancel)?;
         let replacements = collect_replacements(game_dir, plan, existing.as_ref(), &kept_aside)?;
+        let legacy_snow: Vec<String> = legacy_snow_rels(game_dir)?
+            .into_iter()
+            .filter(|rel| !kept_aside.iter().any(|item| item == rel))
+            .collect();
         refuse_unconfirmed_collisions(
             game_dir,
             plan,
@@ -1015,6 +989,12 @@ pub fn run_install<F: Fetcher>(
             let path = game_dir.join(&rel);
             if path.is_file() && snap_state.file_by_path(&rel).is_none() {
                 record_file(&mut snap_state, &rel, hash_file(&path)?, "pre-existing");
+            }
+        }
+        for rel in &legacy_snow {
+            let path = game_dir.join(rel);
+            if path.is_file() && snap_state.file_by_path(rel).is_none() {
+                record_file(&mut snap_state, rel, hash_file(&path)?, "pre-existing");
             }
         }
         let snapshot = create_snapshot(game_dir, &snap_state, "before-install")?;
@@ -1061,6 +1041,12 @@ pub fn run_install<F: Fetcher>(
                 if dest.is_file() {
                     fs::remove_file(dest)?;
                 }
+            }
+        }
+        for rel in &legacy_snow {
+            let dest = game_dir.join(rel);
+            if dest.is_file() {
+                fs::remove_file(dest)?;
             }
         }
 
@@ -1140,6 +1126,9 @@ pub fn run_install<F: Fetcher>(
                     continue;
                 }
                 if replacements.iter().any(|r| r.rel == tracked.path) {
+                    continue;
+                }
+                if legacy_snow.iter().any(|rel| rel == &tracked.path) {
                     continue;
                 }
                 recorded.push((
@@ -1243,7 +1232,6 @@ pub fn repair_tracked<F: Fetcher>(
         remove: Vec::new(),
         configs: Vec::new(),
         loader: None,
-        snow_lite: state.quality.unwrap_or_default().snow_lite(),
         quality: state.quality.unwrap_or(QualityLevel::Normal),
         kit: state.kit.clone().unwrap_or_else(|| "repair".into()),
         components: state.components.iter().map(|c| c.id.clone()).collect(),
@@ -1306,7 +1294,6 @@ pub(crate) mod test_support {
             custom_components: vec![],
             ocean: false,
             addons: Default::default(),
-            snow_lite: Some(true),
             quality: None,
         }
     }
@@ -1366,10 +1353,14 @@ mod tests {
         let tmp = tempdir().unwrap();
         let game = tmp.path();
         prepare_game(game);
-        fs::write(game.join("mods/arnold-snowfall-1.3.2.jar"), b"players-own").unwrap();
+        fs::write(
+            game.join("mods/arnold-ships-client-0.10.2.jar"),
+            b"players-own",
+        )
+        .unwrap();
         let (manifest, _, _) = test_manifest_and_fetcher();
         let plan = basic_plan(&manifest);
-        let rel = "mods/arnold-snowfall-1.3.2.jar";
+        let rel = "mods/arnold-ships-client-0.10.2.jar";
         // The name matches an older build, but the bytes are unknown: ask.
         let plain = collect_replacements(game, &plan, None, &[]).unwrap();
         let found = plain.iter().find(|item| item.rel == rel).unwrap();
@@ -1416,7 +1407,7 @@ mod tests {
         let (manifest, _, _) = test_manifest_and_fetcher();
         let mut plan = basic_plan(&manifest);
         plan.pack_id = "pack-x".into();
-        let rel = "mods/arnold-snowfall-1.3.2.jar";
+        let rel = "mods/arnold-ships-client-0.10.2.jar";
         fs::write(game.join(rel), b"installer-wrote-this").unwrap();
         let action = |state: &InstalledState| {
             collect_replacements(game, &plan, Some(state), &[])
@@ -1429,12 +1420,12 @@ mod tests {
 
         let mut own = InstalledState::new("installer", "x-1");
         own.pack_id = Some("pack-x".into());
-        record_file(&mut own, rel, sha512_hex(b"installer-wrote-this"), "snow");
+        record_file(&mut own, rel, sha512_hex(b"installer-wrote-this"), "ships");
         assert_eq!(action(&own), ReplaceAction::Replace);
 
         let mut edited = own.clone();
         edited.files.clear();
-        record_file(&mut edited, rel, sha512_hex(b"something-else"), "snow");
+        record_file(&mut edited, rel, sha512_hex(b"something-else"), "ships");
         assert_eq!(action(&edited), ReplaceAction::Ask);
 
         let mut other = own.clone();
@@ -1449,13 +1440,13 @@ mod tests {
         prepare_game(game);
         let (manifest, _, _) = test_manifest_and_fetcher();
         let mut plan = basic_plan(&manifest);
-        let rel = "mods/arnold-snowfall-1.3.2.jar";
-        let snow = plan
+        let rel = "mods/arnold-ships-client-0.10.2.jar";
+        let ships = plan
             .add
             .iter_mut()
-            .find(|file| file.component_id == "snow")
-            .expect("basic plan installs snow");
-        snow.sha512 = sha512_hex(b"shipped-build");
+            .find(|file| file.component_id == "ships")
+            .expect("basic plan installs ships");
+        ships.sha512 = sha512_hex(b"shipped-build");
         fs::write(game.join(rel), b"shipped-build").unwrap();
         let found = collect_replacements(game, &plan, None, &[]).unwrap();
         let item = found.iter().find(|item| item.rel == rel).unwrap();
@@ -1482,15 +1473,15 @@ mod tests {
         )
         .unwrap();
         assert!(run.starts_with("run-"));
-        let snow = game.join("mods/arnold-snowfall-1.3.3.jar");
-        assert!(snow.is_file());
+        assert!(game.join("mods/arnold-ships-client-0.10.3.jar").is_file());
+        assert!(!game.join("mods/arnold-snowfall-1.3.3.jar").exists());
         let state = load_state(game).unwrap().unwrap();
         assert_eq!(state.source, "installer");
-        assert!(state.files.iter().any(|f| f.path.contains("snowfall")));
-        let config = fs::read_to_string(game.join("config/arnold-snow-client.properties")).unwrap();
-        assert!(config.starts_with("# arnold-installer-managed"), "{config}");
-        assert!(config.contains("quality=lite"), "{config}");
-        assert!(!config.starts_with("# arnold-installer-lite"));
+        assert!(state.files.iter().any(|f| f.component_id == "ships"));
+        assert!(!state
+            .files
+            .iter()
+            .any(|f| f.path.contains("snowfall") || f.component_id == "snow"));
         let logged = events.lock().unwrap();
         assert!(logged.iter().any(|e| e.step == "download"));
         assert!(logged.last().unwrap().percent == 100);
@@ -1574,121 +1565,33 @@ mod tests {
     }
 
     #[test]
-    fn unknown_snow_jar_asks() {
+    fn installed_snowfall_jars_are_removed_and_not_reinstalled() {
         let tmp = tempdir().unwrap();
         let game = tmp.path();
         prepare_game(game);
-        fs::write(game.join("mods/arnold-snowfall-mystery.jar"), b"not-ours").unwrap();
-        let (manifest, fetcher, _) = test_manifest_and_fetcher();
-        let plan = basic_plan(&manifest);
-        let err = run_install(
-            &InstallTarget::same_folder(game),
-            &plan,
-            &manifest,
-            &fetcher,
-            &AtomicBool::new(false),
-            false,
-            16.0,
-            &|_| {},
-        )
-        .unwrap_err();
-        assert_eq!(err.code(), "P-COLLISION");
-        assert!(game.join("mods/arnold-snowfall-mystery.jar").exists());
-        assert!(!game.join("mods/arnold-snowfall-1.3.3.jar").exists());
-    }
-
-    #[test]
-    fn known_legacy_snow_is_replaced() {
-        let tmp = tempdir().unwrap();
-        let game = tmp.path();
-        prepare_game(game);
-        let (mut manifest, mut fetcher, _) = test_manifest_and_fetcher();
-        let old = b"legacy-snow-client";
-        let old_hash = sha512_hex(old);
-        if let Some(snow) = manifest.components.iter_mut().find(|c| c.id == "snow") {
-            snow.known_sha512.push(old_hash.clone());
-            snow.legacy_match = vec![
-                "arnold-snow-client*.jar".into(),
-                "arnold-snowfall*.jar".into(),
-            ];
-        }
-        for component in &manifest.components {
-            for file in &component.files {
-                fetcher.insert(&file.url, format!("blob-{}", file.file).into_bytes());
-            }
-        }
-        fs::write(game.join("mods/arnold-snow-client-0.8.0.jar"), old).unwrap();
-        let mut plan = basic_plan(&manifest);
-        for file in plan.add.iter_mut().chain(plan.update.iter_mut()) {
-            if file.component_id == "snow" {
-                file.known_sha512 = vec![old_hash.clone()];
-                file.legacy_match = vec![
-                    "arnold-snow-client*.jar".into(),
-                    "arnold-snowfall*.jar".into(),
-                ];
-            }
-        }
-        run_install(
-            &InstallTarget::same_folder(game),
-            &plan,
-            &manifest,
-            &fetcher,
-            &AtomicBool::new(false),
-            false,
-            16.0,
-            &|_| {},
-        )
-        .unwrap();
-        assert!(!game.join("mods/arnold-snow-client-0.8.0.jar").exists());
-        assert!(game.join("mods/arnold-snowfall-1.3.3.jar").exists());
-    }
-
-    #[test]
-    fn named_legacy_snowfall_jars_need_consent() {
-        let tmp = tempdir().unwrap();
-        let game = tmp.path();
-        prepare_game(game);
-        let (manifest, fetcher, _) = test_manifest_and_fetcher();
         let names = [
-            "arnold-snowfall-1.2.0.jar",
-            "arnold-snowfall-1.3.0.jar",
-            "arnold-snowfall-1.3.1.jar",
+            "arnold-snowfall-1.3.3.jar",
             "arnold-snowfall-1.3.2.jar",
+            "arnold-snowfall-mystery.jar",
+            "arnold-snow-client-0.8.0.jar",
         ];
         for name in names {
             fs::write(game.join("mods").join(name), format!("old-{name}")).unwrap();
         }
+        let (manifest, fetcher, _) = test_manifest_and_fetcher();
         let plan = basic_plan(&manifest);
-        // Name alone is not proof of ownership: nothing is touched without consent.
-        let err = run_install(
-            &InstallTarget::same_folder(game),
-            &plan,
-            &manifest,
-            &fetcher,
-            &AtomicBool::new(false),
-            false,
-            16.0,
-            &|_| {},
-        )
-        .unwrap_err();
-        assert_eq!(err.code(), "P-COLLISION");
-        for name in names {
-            assert_eq!(
-                fs::read(game.join("mods").join(name)).unwrap(),
-                format!("old-{name}").into_bytes(),
-                "{name} must be left alone"
-            );
-        }
-        assert!(!game.join("mods/arnold-snowfall-1.3.3.jar").exists());
-
-        // The player confirms: the existing consent path replaces them.
+        assert!(!plan
+            .add
+            .iter()
+            .chain(plan.update.iter())
+            .any(|file| file.file.contains("snowfall") || file.component_id == "snow"));
         run_install(
             &InstallTarget::same_folder(game),
             &plan,
             &manifest,
             &fetcher,
             &AtomicBool::new(false),
-            true,
+            false,
             16.0,
             &|_| {},
         )
@@ -1696,7 +1599,11 @@ mod tests {
         for name in names {
             assert!(!game.join("mods").join(name).exists(), "{name} should go");
         }
-        assert!(game.join("mods/arnold-snowfall-1.3.3.jar").exists());
+        assert!(game.join("mods/arnold-ships-client-0.10.3.jar").is_file());
+        let state = load_state(game).unwrap().unwrap();
+        assert!(!state.files.iter().any(|file| {
+            file.path.contains("snowfall") || file.path.contains("arnold-snow-client")
+        }));
     }
 
     #[test]
@@ -1717,7 +1624,15 @@ mod tests {
             &|_| {},
         )
         .unwrap();
-        fs::write(game.join("mods/arnold-snowfall-1.3.3.jar"), b"broken").unwrap();
+        let ships = plan
+            .add
+            .iter()
+            .find(|file| file.component_id == "ships")
+            .unwrap()
+            .file
+            .clone();
+        let path = game.join("mods").join(&ships);
+        fs::write(&path, b"broken").unwrap();
         repair_tracked(
             &InstallTarget::same_folder(game),
             &manifest,
@@ -1727,11 +1642,9 @@ mod tests {
             &|_| {},
         )
         .unwrap();
-        let expected = "blob-arnold-snowfall-1.3.3.jar".to_string();
-        assert_eq!(
-            fs::read(game.join("mods/arnold-snowfall-1.3.3.jar")).unwrap(),
-            expected.as_bytes()
-        );
+        let expected = format!("blob-{ships}");
+        assert_eq!(fs::read(path).unwrap(), expected.as_bytes());
+        assert!(!game.join("mods/arnold-snowfall-1.3.3.jar").exists());
     }
 
     #[test]
@@ -1809,7 +1722,6 @@ mod tests {
                 custom_components: ids.iter().map(|id| (*id).to_string()).collect(),
                 ocean: false,
                 addons: Default::default(),
-                snow_lite: None,
                 quality: None,
             },
             None,
@@ -2050,7 +1962,6 @@ mod tests {
             custom_components: vec![],
             ocean: false,
             addons,
-            snow_lite: None,
             quality: None,
         }
     }
@@ -2112,7 +2023,8 @@ mod tests {
         let (result, events) = install_events(game, &plan, &manifest, &fetcher);
         assert!(result.is_ok(), "{result:?}");
         assert!(!game.join("mods").join(&architect).exists());
-        assert!(game.join("mods/arnold-snowfall-1.3.3.jar").is_file());
+        assert!(game.join("mods/arnold-ships-client-0.10.3.jar").is_file());
+        assert!(!game.join("mods/arnold-snowfall-1.3.3.jar").exists());
         let state = load_state(game).unwrap().unwrap();
         assert!(state
             .components
@@ -2157,7 +2069,8 @@ mod tests {
         for name in [&malilib, &litematica, &architect] {
             assert!(!game.join("mods").join(name).exists(), "{name}");
         }
-        assert!(game.join("mods/arnold-snowfall-1.3.3.jar").is_file());
+        assert!(game.join("mods/arnold-ships-client-0.10.3.jar").is_file());
+        assert!(!game.join("mods/arnold-snowfall-1.3.3.jar").exists());
         let state = load_state(game).unwrap().unwrap();
         for id in ["malilib", "litematica", "architect"] {
             assert!(state.components.iter().all(|component| component.id != id));
@@ -2270,7 +2183,8 @@ mod tests {
         .unwrap_err();
         assert_eq!(err.code(), "E-IO");
         assert_eq!(fs::read(&architect_path).unwrap(), b"broken");
-        assert!(game.join("mods/arnold-snowfall-1.3.3.jar").is_file());
+        assert!(game.join("mods/arnold-ships-client-0.10.3.jar").is_file());
+        assert!(!game.join("mods/arnold-snowfall-1.3.3.jar").exists());
         let state = load_state(game).unwrap().unwrap();
         assert!(state
             .components
@@ -2510,7 +2424,6 @@ mod tests {
                 custom_components: vec![],
                 ocean: false,
                 addons: Default::default(),
-                snow_lite: Some(true),
                 quality: None,
             },
             None,

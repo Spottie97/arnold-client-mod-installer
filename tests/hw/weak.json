@@ -6,6 +6,5 @@
   "gpu": "Intel UHD Graphics 630",
   "vramGB": 0.5,
   "dedicatedGpu": false,
-  "expectKit": "basic",
-  "expectSnowLite": true
+  "expectKit": "basic"
 }

@@ -6,6 +6,5 @@
   "gpu": "NVIDIA GeForce RTX 3060",
   "vramGB": 12,
   "dedicatedGpu": true,
-  "expectKit": "full",
-  "expectSnowLite": false
+  "expectKit": "full"
 }

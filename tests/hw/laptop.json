@@ -6,6 +6,5 @@
   "gpu": "Intel Iris Xe",
   "vramGB": 1.5,
   "dedicatedGpu": false,
-  "expectKit": "basic",
-  "expectSnowLite": true
+  "expectKit": "basic"
 }

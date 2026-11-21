@@ -15,7 +15,6 @@ function plan(packDir: string): InstallPlan {
     remove: [],
     configs: [],
     loader: null,
-    snowLite: false,
     quality: "normal",
     kit: "basic",
     components: [],

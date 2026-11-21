@@ -11,7 +11,7 @@
 
 ## ⚔️ What it does
 
-The Arnold Client Mod Installer sets up everything a player needs to see the Avalon realm the way it was built: Arnold's ships with their sails and rigging, decks you can walk on smoothly, and snowfall with drifts and footprints. Pick a kit, press install, and play.
+The Arnold Client Mod Installer sets up everything a player needs to see the Avalon realm the way it was built: Arnold's ships with their sails and rigging, and decks you can walk on smoothly. Pick a kit, press install, and play. Better Adventures+ already covers snow.
 
 The Arnold server runs Better Adventures+ 1.64, so every kit installs the Better Adventures+ mods the server needs to let you join. Everything else (shaders, client-only Better Adventures+ extras, the Ocean pack) is optional.
 
@@ -19,8 +19,8 @@ The Arnold server runs Better Adventures+ 1.64, so every kit installs the Better
 
 | Kit | For | What's inside |
 |---|---|---|
-| **Basic** | Almost any PC | The Better Adventures+ mods needed to join, Sodium and the client performance mods, Arnold Decks, Ships and *lighter* Snowfall, Diet+ food groups, Wakes and Particle Rain |
-| **Full** | Gaming PCs | Everything in Basic with full Snowfall, plus the Better Adventures+ client mods, shaders (Iris + Complementary Reimagined, Miniature), AppleSkin food info and the Ocean mods |
+| **Basic** | Almost any PC | The Better Adventures+ mods needed to join, Sodium and the client performance mods, Arnold Decks and Ships, Diet+ food groups, Serene Seasons, Drink Beer Refill, Farmer's Delight, Hardcore Revival, Waystones, Cultural Delights, Xaero's maps, Shippy Ships, Traveler's Backpack, feeding troughs, Wakes and Particle Rain |
+| **Full** | Gaming PCs | Everything in Basic, plus the Better Adventures+ client mods (including Better Snow Coverage), shaders (Iris + Complementary Reimagined, Miniature), AppleSkin food info and the Ocean mods |
 | **Custom** | Tinkerers | Pick mods one by one. Arnold Decks and the mods needed to join always stay on |
 
 Full and Recommended also put the six Better Adventures+ resource packs in your `resourcepacks` folder. Turn them on in Minecraft under Options → Resource Packs. Installer 3.2.0 or newer is needed for this mod list.

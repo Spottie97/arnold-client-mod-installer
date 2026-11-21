@@ -50,7 +50,7 @@ export function Manage({
           Repair
         </button>
         <button type="button" className="btn-secondary" onClick={onSettings}>
-          Ships &amp; snow settings
+          Ships settings
         </button>
       </div>
     </div>

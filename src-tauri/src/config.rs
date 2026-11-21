@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::Value;
 
-/// First-line marker that means the installer still owns a lite snow file.
+/// First-line marker for an installer-owned lite preset file.
 pub const LITE_MARKER: &str = "# arnold-installer-lite";
 pub const MANAGED_HEADER: &str = "# arnold-installer-managed";
 
@@ -294,7 +294,7 @@ mod tests {
             .collect()
     }
 
-    fn snow_defaults() -> BTreeMap<String, String> {
+    fn sample_defaults() -> BTreeMap<String, String> {
         map(&[
             ("denserSnow", "true"),
             ("density", "24"),
@@ -303,7 +303,7 @@ mod tests {
         ])
     }
 
-    fn snow_lite() -> BTreeMap<String, String> {
+    fn lite_overrides() -> BTreeMap<String, String> {
         map(&[("density", "8"), ("treeCaps", "false")])
     }
 
@@ -312,7 +312,7 @@ mod tests {
         let existing = "# player note\ndenserSnow=false\n! keep me\ndensity=99\n";
         let out = apply_properties(
             Some(existing),
-            &snow_defaults(),
+            &sample_defaults(),
             None,
             MANAGED_HEADER,
             LITE_MARKER,
@@ -339,7 +339,7 @@ mod tests {
         let existing = "denserSnow=false\r\ndensity=1\r\n";
         let out = apply_properties(
             Some(existing),
-            &snow_defaults(),
+            &sample_defaults(),
             None,
             MANAGED_HEADER,
             LITE_MARKER,
@@ -354,7 +354,7 @@ mod tests {
     fn creates_new_file_with_header() {
         let out = apply_properties(
             None,
-            &snow_defaults(),
+            &sample_defaults(),
             None,
             MANAGED_HEADER,
             LITE_MARKER,
@@ -370,8 +370,8 @@ mod tests {
         let existing = format!("{LITE_MARKER}\ndensity=3\ntreeCaps=true\n");
         let out = apply_properties(
             Some(&existing),
-            &snow_defaults(),
-            Some(&snow_lite()),
+            &sample_defaults(),
+            Some(&lite_overrides()),
             MANAGED_HEADER,
             LITE_MARKER,
             ConfigSwitch::ToLite,
@@ -387,8 +387,8 @@ mod tests {
     fn lite_creates_when_missing() {
         let out = apply_properties(
             None,
-            &snow_defaults(),
-            Some(&snow_lite()),
+            &sample_defaults(),
+            Some(&lite_overrides()),
             MANAGED_HEADER,
             LITE_MARKER,
             ConfigSwitch::ToLite,
@@ -403,8 +403,8 @@ mod tests {
         let existing = "denserSnow=false\ndensity=99\n";
         let out = apply_properties(
             Some(existing),
-            &snow_defaults(),
-            Some(&snow_lite()),
+            &sample_defaults(),
+            Some(&lite_overrides()),
             MANAGED_HEADER,
             LITE_MARKER,
             ConfigSwitch::ToLite,
@@ -421,8 +421,8 @@ mod tests {
         let existing = format!("{LITE_MARKER}\ndensity=8\n");
         let out = apply_properties(
             Some(&existing),
-            &snow_defaults(),
-            Some(&snow_lite()),
+            &sample_defaults(),
+            Some(&lite_overrides()),
             MANAGED_HEADER,
             LITE_MARKER,
             ConfigSwitch::ToNormal,
@@ -438,8 +438,8 @@ mod tests {
         let existing = "density=7\n";
         let out = apply_properties(
             Some(existing),
-            &snow_defaults(),
-            Some(&snow_lite()),
+            &sample_defaults(),
+            Some(&lite_overrides()),
             MANAGED_HEADER,
             LITE_MARKER,
             ConfigSwitch::ToNormal,
@@ -451,7 +451,7 @@ mod tests {
     #[test]
     fn reports_values_that_differ_from_defaults() {
         let existing = "density=7\ntreeCaps=true\n";
-        let diffs = values_that_differ(existing, &snow_defaults());
+        let diffs = values_that_differ(existing, &sample_defaults());
         assert_eq!(diffs, vec![("density".into(), "7".into(), "24".into())]);
     }
 

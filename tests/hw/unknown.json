@@ -6,6 +6,5 @@
   "gpu": "Unknown",
   "vramGB": 0,
   "dedicatedGpu": false,
-  "expectKit": "basic",
-  "expectSnowLite": true
+  "expectKit": "basic"
 }

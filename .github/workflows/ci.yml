@@ -57,7 +57,11 @@ jobs:
           test -s /tmp/arnold-manifest/manifest.json
           test -s /tmp/arnold-manifest/manifest.json.sig
           test -s /tmp/arnold-manifest/SHA512SUMS.txt
-          grep -q 'arnold-snowfall-1.3.3.jar' /tmp/arnold-manifest/SHA512SUMS.txt
+          grep -q 'arnold-ships-client-0.10.3.jar' /tmp/arnold-manifest/SHA512SUMS.txt
+          if grep -q 'arnold-snowfall' /tmp/arnold-manifest/SHA512SUMS.txt; then
+            echo "SHA512SUMS still lists the removed snowfall jar"
+            exit 1
+          fi
       - name: build
         run: cargo build --manifest-path src-tauri/Cargo.toml
       - name: build (local-source, not a release)

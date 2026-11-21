@@ -13,23 +13,19 @@ const GROUPS: { id: Component["group"]; title: string }[] = [
 export function Custom({
   manifest,
   selected,
-  snowLite,
   plan,
   quality,
   addons,
   onToggle,
   onAddon,
-  onSnowLite,
 }: {
   manifest: Manifest;
   selected: string[];
-  snowLite: boolean;
   plan: InstallPlan;
   quality: QualityLevel;
   addons: AddonRow[];
   onToggle: (id: string) => void;
   onAddon: (id: string, on: boolean) => void;
-  onSnowLite: (on: boolean) => void;
 }) {
   return (
     <div className="flex flex-1 flex-col">
@@ -86,14 +82,6 @@ export function Custom({
         ))}
       </div>
       <AddonToggles addons={addons} onToggle={onAddon} />
-      <label className="panel mt-5 flex items-center gap-3">
-        <input
-          type="checkbox"
-          checked={snowLite}
-          onChange={(event) => onSnowLite(event.target.checked)}
-        />
-        <span className="font-heading">Lighter snow</span>
-      </label>
       <p className="mt-4 text-sm text-muted">
         Plan: add {plan.add.length}, update {plan.update.length}, remove {plan.remove.length}.
       </p>

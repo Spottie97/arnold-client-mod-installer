@@ -137,7 +137,7 @@ struct LegacySelection {
 /// Groups the 3.0.x Custom screen renders. `base` is a valid group and is not listed.
 const LEGACY_CUSTOM_GROUPS: &[&str] = &["arnold", "shaders", "ocean"];
 
-const LEGACY_CUSTOM_DEFAULTS: &[&str] = &["deck", "ships", "snow", "sodium", "base"];
+const LEGACY_CUSTOM_DEFAULTS: &[&str] = &["deck", "ships", "sodium", "base"];
 
 fn parse_legacy(bytes: &str) -> Result<LegacyManifest, String> {
     let manifest: LegacyManifest = serde_json::from_str(bytes).map_err(|err| err.to_string())?;

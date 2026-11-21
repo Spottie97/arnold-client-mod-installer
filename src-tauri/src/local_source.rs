@@ -12,16 +12,10 @@ use crate::manifest::{decode_signature, parse_and_verify, Manifest, ManifestLoad
 pub const LOCAL_SOURCE_BANNER: &str = "TEST BUILD - local source";
 pub const LOCAL_SOURCE_ENV: &str = "ARNOLD_LOCAL_SOURCE";
 
-pub const LOCAL_SETTINGS_FILES: &[(&str, &str)] = &[
-    (
-        "arnold-ships-client.properties",
-        "config/arnold-ships-client.properties",
-    ),
-    (
-        "arnold-snow-client.properties",
-        "config/arnold-snow-client.properties",
-    ),
-];
+pub const LOCAL_SETTINGS_FILES: &[(&str, &str)] = &[(
+    "arnold-ships-client.properties",
+    "config/arnold-ships-client.properties",
+)];
 
 pub fn is_enabled() -> bool {
     cfg!(feature = "local-source")
@@ -415,15 +409,15 @@ mod tests {
         hex::encode(key.sign(bytes).to_bytes())
     }
 
-    fn write_signed_folder(dir: &Path, snow_bytes: &[u8]) -> String {
+    fn write_signed_folder(dir: &Path, ships_bytes: &[u8]) -> String {
         let mut manifest: serde_json::Value = serde_json::from_str(BUNDLED_MANIFEST_JSON).unwrap();
-        let hash = sha512_hex(snow_bytes);
+        let hash = sha512_hex(ships_bytes);
         for component in manifest["components"].as_array_mut().unwrap() {
-            if component["id"] == "snow" {
+            if component["id"] == "ships" {
                 for file in component["files"].as_array_mut().unwrap() {
-                    if file["file"] == "arnold-snowfall-1.3.3.jar" {
+                    if file["file"] == "arnold-ships-client-0.10.3.jar" {
                         file["sha512"] = serde_json::Value::String(hash.clone());
-                        file["size"] = serde_json::Value::from(snow_bytes.len() as u64);
+                        file["size"] = serde_json::Value::from(ships_bytes.len() as u64);
                     }
                 }
             }
@@ -431,10 +425,10 @@ mod tests {
         let json = serde_json::to_vec_pretty(&manifest).unwrap();
         fs::write(dir.join("manifest.json"), &json).unwrap();
         fs::write(dir.join("manifest.json.sig"), sign_bytes(&json)).unwrap();
-        fs::write(dir.join("arnold-snowfall-1.3.3.jar"), snow_bytes).unwrap();
+        fs::write(dir.join("arnold-ships-client-0.10.3.jar"), ships_bytes).unwrap();
         fs::write(
-            dir.join("arnold-snow-client.properties"),
-            "quality=normal\nfpsTarget=60\nadaptiveFps=true\n",
+            dir.join("arnold-ships-client.properties"),
+            "particles=1.0\nwaterMask=true\n",
         )
         .unwrap();
         hash
@@ -490,22 +484,22 @@ mod tests {
     #[test]
     fn load_local_verifies_sig_and_rewrites_present_jars() {
         let tmp = tempdir().unwrap();
-        let snow = b"local-snow-jar";
-        write_signed_folder(tmp.path(), snow);
+        let ships = b"local-ships-jar";
+        write_signed_folder(tmp.path(), ships);
         let loaded = load_local_manifest(tmp.path(), TEST_MANIFEST_PUBLIC_KEY_HEX).unwrap();
         assert_eq!(loaded.source, "local");
         assert!(loaded.local_source);
         assert_eq!(loaded.message.as_deref(), Some(LOCAL_SOURCE_BANNER));
-        let snow_file = loaded
+        let ships_file = loaded
             .manifest
             .components
             .iter()
-            .find(|c| c.id == "snow")
+            .find(|c| c.id == "ships")
             .unwrap()
             .files
             .first()
             .unwrap();
-        assert!(snow_file.url.starts_with("file:"), "{}", snow_file.url);
+        assert!(ships_file.url.starts_with("file:"), "{}", ships_file.url);
         let sodium = loaded
             .manifest
             .components
@@ -748,29 +742,29 @@ mod tests {
         let game = tmp.path().join("game");
         fs::create_dir_all(&root).unwrap();
         fs::write(
-            root.join("arnold-snow-client.properties"),
-            "quality=normal\n",
+            root.join("arnold-ships-client.properties"),
+            "particles=1.0\n",
         )
         .unwrap();
         let copied = copy_local_settings(&root, &game).unwrap();
         assert_eq!(
             copied,
-            vec!["config/arnold-snow-client.properties".to_string()]
+            vec!["config/arnold-ships-client.properties".to_string()]
         );
         assert_eq!(
-            fs::read_to_string(game.join("config/arnold-snow-client.properties")).unwrap(),
-            "quality=normal\n"
+            fs::read_to_string(game.join("config/arnold-ships-client.properties")).unwrap(),
+            "particles=1.0\n"
         );
         fs::write(
-            game.join("config/arnold-snow-client.properties"),
-            "quality=ultra\n",
+            game.join("config/arnold-ships-client.properties"),
+            "particles=0.3\n",
         )
         .unwrap();
         let again = copy_local_settings(&root, &game).unwrap();
         assert!(again.is_empty());
         assert_eq!(
-            fs::read_to_string(game.join("config/arnold-snow-client.properties")).unwrap(),
-            "quality=ultra\n"
+            fs::read_to_string(game.join("config/arnold-ships-client.properties")).unwrap(),
+            "particles=0.3\n"
         );
     }
 

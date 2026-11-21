@@ -12,7 +12,7 @@ use crate::config::{
 };
 use crate::download::sha512_hex;
 use crate::errors::AppError;
-use crate::manifest::{component_by_id, lite_preset, FileDest, Manifest};
+use crate::manifest::{component_by_id, FileDest, Manifest};
 use crate::scan::Hardware;
 use crate::state::{hash_file, record_file, save_state, InstalledState};
 
@@ -61,10 +61,6 @@ impl QualityLevel {
                 "Heaviest. Complementary on its High profile. Extra ship particles when Arnold sends those values."
             }
         }
-    }
-
-    pub fn snow_lite(self) -> bool {
-        matches!(self, Self::Potato | Self::Lite)
     }
 
     pub fn recommend_ocean(self) -> bool {
@@ -120,8 +116,6 @@ pub struct QualityRow {
     #[serde(default)]
     pub recommend_ocean: bool,
     #[serde(default)]
-    pub snow: SnowQuality,
-    #[serde(default)]
     pub ships: ShipsQuality,
     #[serde(default)]
     pub sodium: SodiumQuality,
@@ -130,45 +124,6 @@ pub struct QualityRow {
     #[serde(default)]
     pub complementary: ComplementaryQuality,
 }
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct SnowQuality {
-    #[serde(default = "default_snow_quality")]
-    pub quality: String,
-    #[serde(default = "default_fps")]
-    pub fps_target: u32,
-    #[serde(default = "default_adaptive_fps")]
-    pub adaptive_fps: bool,
-    #[serde(default)]
-    pub legacy_lite: bool,
-}
-
-impl Default for SnowQuality {
-    fn default() -> Self {
-        Self {
-            quality: "normal".into(),
-            fps_target: 60,
-            adaptive_fps: true,
-            legacy_lite: false,
-        }
-    }
-}
-
-fn default_snow_quality() -> String {
-    "normal".into()
-}
-fn default_fps() -> u32 {
-    60
-}
-
-fn default_adaptive_fps() -> bool {
-    true
-}
-
-/// Current Snowfall jar. Quality writes the `quality` key on this build.
-/// The lite-file swap stays only for migrating 1.2 / pre-1.3.3 installs.
-pub const SNOW_V13_JAR: &str = "arnold-snowfall-1.3.3.jar";
 
 /// Arnold: these ship keys stay on. Quality must never write them false.
 pub const SHIPS_ALWAYS_TRUE: [&str; 3] = ["waterMask", "rigidRoot", "calmWhenAboard"];
@@ -290,12 +245,6 @@ pub fn builtin_quality_table() -> QualityTable {
             description: QualityLevel::Potato.description().into(),
             skip_components: vec!["wakes".into(), "waves".into()],
             recommend_ocean: false,
-            snow: SnowQuality {
-                quality: "potato".into(),
-                fps_target: 60,
-                adaptive_fps: true,
-                legacy_lite: true,
-            },
             ships: ShipsQuality {
                 particles: 0.3,
                 spray: false,
@@ -320,12 +269,6 @@ pub fn builtin_quality_table() -> QualityTable {
             description: QualityLevel::Lite.description().into(),
             skip_components: Vec::new(),
             recommend_ocean: false,
-            snow: SnowQuality {
-                quality: "lite".into(),
-                fps_target: 60,
-                adaptive_fps: true,
-                legacy_lite: true,
-            },
             ships: ShipsQuality {
                 particles: 0.5,
                 spray: true,
@@ -350,12 +293,6 @@ pub fn builtin_quality_table() -> QualityTable {
             description: QualityLevel::Normal.description().into(),
             skip_components: Vec::new(),
             recommend_ocean: true,
-            snow: SnowQuality {
-                quality: "normal".into(),
-                fps_target: 60,
-                adaptive_fps: true,
-                legacy_lite: false,
-            },
             ships: ShipsQuality::default(),
             sodium: SodiumQuality::default(),
             iris: IrisQuality {
@@ -370,12 +307,6 @@ pub fn builtin_quality_table() -> QualityTable {
             description: QualityLevel::Ultra.description().into(),
             skip_components: Vec::new(),
             recommend_ocean: true,
-            snow: SnowQuality {
-                quality: "ultra".into(),
-                fps_target: 60,
-                adaptive_fps: true,
-                legacy_lite: false,
-            },
             ships: ShipsQuality {
                 particles: 1.6,
                 spray: true,
@@ -456,11 +387,6 @@ fn has_id(installed_ids: &[String], id: &str) -> bool {
 /// Config files Quality writes and records in state.json (not options.txt).
 pub fn quality_managed_paths(manifest: &Manifest, installed_ids: &[String]) -> Vec<String> {
     let mut out = Vec::new();
-    if has_id(installed_ids, "snow") {
-        if let Some(file) = component_by_id(manifest, "snow").and_then(|c| c.config.as_ref()) {
-            out.push(file.file.clone());
-        }
-    }
     if has_id(installed_ids, "ships") {
         if let Some(file) = component_by_id(manifest, "ships").and_then(|c| c.config.as_ref()) {
             out.push(file.file.clone());
@@ -637,9 +563,6 @@ pub fn apply_quality(
     let mut written = Vec::new();
     let has = |id: &str| installed_ids.iter().any(|x| x == id);
 
-    if has("snow") {
-        written.extend(apply_snow(game_dir, manifest, row, state)?);
-    }
     if has("ships") {
         written.extend(apply_ships(game_dir, manifest, row, state)?);
     }
@@ -651,90 +574,6 @@ pub fn apply_quality(
         written.extend(apply_complementary(game_dir, manifest, row, state)?);
     }
     Ok(written)
-}
-
-fn apply_snow(
-    game_dir: &Path,
-    manifest: &Manifest,
-    row: &QualityRow,
-    state: Option<&InstalledState>,
-) -> Result<Vec<(String, String, String)>, AppError> {
-    let Some(component) = component_by_id(manifest, "snow") else {
-        return Ok(Vec::new());
-    };
-    let Some(config) = &component.config else {
-        return Ok(Vec::new());
-    };
-    let rel = config.file.clone();
-    let path = game_dir.join(&rel);
-    let existing = fs::read_to_string(&path).unwrap_or_default();
-    let mut defaults = BTreeMap::new();
-    for (key, spec) in &config.settings {
-        if matches!(key.as_str(), "quality" | "adaptiveFps" | "fpsTarget") {
-            continue;
-        }
-        defaults.insert(key.clone(), format_setting_value(&spec.default));
-    }
-    let mut lite_over = BTreeMap::new();
-    if let Some(preset) = lite_preset(config) {
-        for (key, value) in &preset.overrides {
-            if matches!(key.as_str(), "quality" | "adaptiveFps" | "fpsTarget") {
-                continue;
-            }
-            lite_over.insert(key.clone(), format_setting_value(value));
-        }
-    }
-    let header = config.header.as_deref().unwrap_or(MANAGED_HEADER);
-    let marker = lite_preset(config)
-        .and_then(|p| p.marker.as_deref())
-        .unwrap_or(LITE_MARKER);
-    let owned = existing.is_empty() || may_update(game_dir, &rel, &existing, state);
-    let lite = if lite_over.is_empty() {
-        None
-    } else {
-        Some(&lite_over)
-    };
-    // 1.3 writes `quality` and only fills adaptiveFps / fpsTarget when missing.
-    // Per-effect switches stay with the player. The lite-file swap is only for
-    // migrating old installs that do not already have 1.3 keys.
-    let migrating_old = !existing.is_empty() && !looks_like_snow_v13(&existing);
-    let use_v12_fallback = row.snow.legacy_lite && owned && migrating_old;
-    let base = if use_v12_fallback {
-        apply_properties(None, &defaults, lite, header, marker, ConfigSwitch::ToLite).content
-    } else if existing.is_empty() {
-        apply_properties(None, &defaults, None, header, marker, ConfigSwitch::None).content
-    } else {
-        existing
-    };
-    let mut quality_keys = BTreeMap::new();
-    quality_keys.insert("quality".into(), row.snow.quality.clone());
-    let with_quality = if base.is_empty() {
-        apply_properties(
-            None,
-            &quality_keys,
-            None,
-            header,
-            marker,
-            ConfigSwitch::None,
-        )
-        .content
-    } else {
-        update_property_keys(&base, &quality_keys)
-    };
-    let mut fps_if_missing = BTreeMap::new();
-    fps_if_missing.insert("adaptiveFps".into(), bool_str(row.snow.adaptive_fps));
-    fps_if_missing.insert("fpsTarget".into(), row.snow.fps_target.to_string());
-    let content = apply_properties(
-        Some(with_quality.as_str()),
-        &fps_if_missing,
-        None,
-        header,
-        marker,
-        ConfigSwitch::None,
-    )
-    .content;
-    write_owned(game_dir, &rel, &content)?;
-    Ok(vec![(rel, sha512_hex(content.as_bytes()), "snow".into())])
 }
 
 fn apply_ships(
@@ -806,19 +645,6 @@ fn apply_ships(
 
 fn format_particles(n: f64) -> String {
     format!("{n:.1}")
-}
-
-fn looks_like_snow_v13(existing: &str) -> bool {
-    existing.lines().any(|line| {
-        let trimmed = line.trim_start();
-        if trimmed.starts_with('#') || trimmed.starts_with('!') {
-            return false;
-        }
-        matches!(
-            trimmed.split_once('=').map(|(k, _)| k.trim()),
-            Some("quality") | Some("adaptiveFps") | Some("fpsTarget")
-        )
-    })
 }
 
 fn bool_str(v: bool) -> String {
@@ -1129,8 +955,6 @@ mod tests {
         assert_eq!(table.lite.ships.particles, 0.5);
         assert!(!table.lite.ships.hd_models);
         assert_eq!(table.ultra.ships.particles, 1.6);
-        assert_eq!(table.normal.snow.fps_target, 60);
-        assert!(table.normal.snow.adaptive_fps);
     }
 
     #[test]
@@ -1156,12 +980,7 @@ mod tests {
             game,
             &manifest,
             QualityLevel::Potato,
-            &[
-                "ships".into(),
-                "sodium".into(),
-                "shaders".into(),
-                "snow".into(),
-            ],
+            &["ships".into(), "sodium".into(), "shaders".into()],
             None,
         )
         .unwrap();
@@ -1292,109 +1111,14 @@ mod tests {
         assert_eq!(table.ultra.complementary.profile, "HIGH");
         assert_eq!(table.potato.sodium.weather_quality, "FAST");
         assert!(!table.potato.iris.enable_shaders);
-        assert_eq!(SNOW_V13_JAR, "arnold-snowfall-1.3.3.jar");
-        let snow = crate::manifest::component_by_id(&manifest, "snow").unwrap();
-        assert_eq!(snow.files[0].file, "arnold-snowfall-1.3.3.jar");
-        assert_eq!(snow.version, "1.3.3");
-        assert_eq!(snow.files[0].size, 152127);
-        assert!(snow
-            .legacy_match
-            .iter()
-            .any(|p| p == "arnold-snowfall*.jar"));
-        assert!(snow
-            .legacy_match
-            .iter()
-            .any(|p| p == "arnold-snow-client*.jar"));
-        assert!(snow.known_sha512.iter().any(|h| h
-            == "f281c3aa82bc83cf68cc95e6959a5135b32ebab9b850435b17e0d7691c4eac2e3c193a2ed87c14c24bb758adf0a01a0fd744d6ca36c0bfc4d52a38feb56d1285"));
+        assert!(crate::manifest::component_by_id(&manifest, "snow").is_none());
     }
 
     #[test]
-    fn snow_quality_aliases_low_and_high() {
+    fn quality_aliases_low_and_high() {
         assert_eq!(QualityLevel::parse("low"), Some(QualityLevel::Lite));
         assert_eq!(QualityLevel::parse("high"), Some(QualityLevel::Ultra));
         assert_eq!(QualityLevel::parse("LITE"), Some(QualityLevel::Lite));
-    }
-
-    #[test]
-    fn snow_v13_writes_quality_and_only_fills_missing_fps_keys() {
-        use crate::manifest::load_fixture_manifest;
-        use tempfile::tempdir;
-
-        let tmp = tempdir().unwrap();
-        let game = tmp.path();
-        fs::create_dir_all(game.join("config")).unwrap();
-        fs::write(
-            game.join("config/arnold-snow-client.properties"),
-            "quality=normal\nadaptiveFps=false\nfpsTarget=90\ndenserSnow=false\nbreath=false\n",
-        )
-        .unwrap();
-        let manifest = load_fixture_manifest().unwrap();
-        apply_quality(
-            game,
-            &manifest,
-            QualityLevel::Potato,
-            &["snow".into()],
-            None,
-        )
-        .unwrap();
-        let snow = fs::read_to_string(game.join("config/arnold-snow-client.properties")).unwrap();
-        assert!(snow.contains("quality=potato"), "{snow}");
-        assert!(
-            snow.contains("adaptiveFps=false"),
-            "player adaptiveFps must stay: {snow}"
-        );
-        assert!(
-            snow.contains("fpsTarget=90"),
-            "player fpsTarget must stay: {snow}"
-        );
-        assert!(
-            snow.contains("denserSnow=false"),
-            "effect switches stay: {snow}"
-        );
-        assert!(snow.contains("breath=false"), "{snow}");
-    }
-
-    #[test]
-    fn snow_v13_fresh_install_writes_quality_not_lite_file() {
-        use crate::config::{LITE_MARKER, MANAGED_HEADER};
-        use crate::manifest::load_fixture_manifest;
-        use tempfile::tempdir;
-
-        let tmp = tempdir().unwrap();
-        let game = tmp.path();
-        let manifest = load_fixture_manifest().unwrap();
-        apply_quality(game, &manifest, QualityLevel::Lite, &["snow".into()], None).unwrap();
-        let snow = fs::read_to_string(game.join("config/arnold-snow-client.properties")).unwrap();
-        assert!(snow.starts_with(MANAGED_HEADER), "{snow}");
-        assert!(!snow.starts_with(LITE_MARKER), "{snow}");
-        assert!(snow.contains("quality=lite"), "{snow}");
-        assert!(snow.contains("adaptiveFps=true"), "{snow}");
-        assert!(snow.contains("fpsTarget=60"), "{snow}");
-    }
-
-    #[test]
-    fn snow_v12_fallback_still_rewrites_owned_lite() {
-        use crate::config::{LITE_MARKER, MANAGED_HEADER};
-        use crate::manifest::load_fixture_manifest;
-        use tempfile::tempdir;
-
-        let tmp = tempdir().unwrap();
-        let game = tmp.path();
-        fs::create_dir_all(game.join("config")).unwrap();
-        fs::write(
-            game.join("config/arnold-snow-client.properties"),
-            format!("{MANAGED_HEADER}\ndensity=24\ntreeCaps=true\n"),
-        )
-        .unwrap();
-        let manifest = load_fixture_manifest().unwrap();
-        apply_quality(game, &manifest, QualityLevel::Lite, &["snow".into()], None).unwrap();
-        let snow = fs::read_to_string(game.join("config/arnold-snow-client.properties")).unwrap();
-        assert!(snow.starts_with(LITE_MARKER), "{snow}");
-        assert!(snow.contains("density=8"), "{snow}");
-        assert!(snow.contains("quality=lite"), "{snow}");
-        assert!(snow.contains("adaptiveFps=true"), "{snow}");
-        assert!(snow.contains("fpsTarget=60"), "{snow}");
     }
 
     #[test]

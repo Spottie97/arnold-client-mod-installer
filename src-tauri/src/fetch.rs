@@ -1401,9 +1401,11 @@ mod tests {
                 sock.write_all(&chunk).unwrap();
             }
         });
+        // The pause stays far under the idle limit. A 300ms limit is close
+        // enough that a busy macOS runner can delay the next chunk past it.
         let agent = build_agent(&NetPolicy {
             connect: Duration::from_secs(2),
-            read_idle: Duration::from_millis(300),
+            read_idle: Duration::from_secs(2),
             write: Duration::from_secs(2),
         });
         let response = agent

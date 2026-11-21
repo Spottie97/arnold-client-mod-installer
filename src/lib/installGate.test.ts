@@ -29,7 +29,6 @@ function plan(overrides: Partial<InstallPlan> = {}): InstallPlan {
     remove: [],
     configs: [],
     loader: null,
-    snowLite: false,
     quality: "normal",
     kit: "recommended",
     components: [],

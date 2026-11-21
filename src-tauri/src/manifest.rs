@@ -127,7 +127,6 @@ pub fn active_manifest_public_key() -> Result<&'static str, AppError> {
 }
 
 pub const MANIFEST_SCHEMA: u32 = 3;
-pub const SNOW_LITE_PRESET: &str = "snow.lite";
 pub const REMOTE_MANIFEST_URL: &str =
     "https://github.com/Spottie97/arnold-client-mod-installer/releases/latest/download/manifest.json";
 pub const REMOTE_MANIFEST_SIG_URL: &str =
@@ -149,7 +148,7 @@ pub struct Manifest {
     pub addons: BTreeMap<String, Addon>,
     #[serde(default)]
     pub recommend: Option<RecommendConfig>,
-    /// Per-level Sodium / Iris / Complementary / snow / ships knobs.
+    /// Per-level Sodium / Iris / Complementary / ships knobs.
     /// Arnold can ship new particle values later without an installer rebuild.
     #[serde(default)]
     pub quality_presets: Option<QualityTable>,
@@ -320,8 +319,6 @@ pub struct PendingInfo {
 pub struct Kit {
     pub name: String,
     pub components: Vec<String>,
-    #[serde(default)]
-    pub snow_lite: bool,
     pub description: String,
 }
 
@@ -339,8 +336,6 @@ pub struct Addon {
 pub struct RecommendConfig {
     #[serde(default)]
     pub full: Option<HardwareThresholds>,
-    #[serde(default)]
-    pub mid_snow_full: Option<HardwareThresholds>,
     #[serde(default, rename = "warnRamBelowGB")]
     pub warn_ram_below_gb: Option<f64>,
 }
@@ -686,10 +681,7 @@ pub fn component_by_id<'a>(manifest: &'a Manifest, id: &str) -> Option<&'a Compo
 }
 
 pub fn lite_preset(config: &ModConfig) -> Option<&ConfigPreset> {
-    config
-        .presets
-        .get(SNOW_LITE_PRESET)
-        .or_else(|| config.presets.get("lite"))
+    config.presets.get("lite")
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -1109,15 +1101,14 @@ mod tests {
                 );
             }
         }
-        // deck, ships, snow, Diet+, plus the rehosted BA+ cosmetics:
+        // deck, ships, Diet+, plus the rehosted BA+ cosmetics:
         // unboundthirdperson, planeadvancements, audiohotkeys, weatherglass.
-        assert_eq!(github_files, 8);
+        assert_eq!(github_files, 7);
         assert_eq!(
             github_ids,
             [
                 "deck",
                 "ships",
-                "snow",
                 "dietplus",
                 "unboundthirdperson",
                 "planeadvancements",
@@ -1211,17 +1202,507 @@ mod tests {
     }
 
     #[test]
-    fn serene_seasons_and_glitchcore_stay_out_until_reinhardt_decides() {
-        // Provisional: PR 19 holds them for Arnold Colonies. To restore, see the BA+ plan §9.2.
+    fn serene_seasons_and_glitchcore_come_from_modrinth_in_every_kit() {
         let manifest = load_fixture_manifest().unwrap();
-        for id in ["sereneseasons", "glitchcore"] {
-            assert!(
-                manifest.components.iter().all(|c| c.id != id),
-                "{id} should stay out"
+        let by_id = |id: &str| {
+            manifest
+                .components
+                .iter()
+                .find(|c| c.id == id)
+                .unwrap_or_else(|| panic!("missing {id}"))
+        };
+
+        // Both are All Rights Reserved: download from Modrinth, never rehost.
+        let pins = [
+            (
+                "glitchcore",
+                "26.3.0.0.5",
+                "GlitchCore-fabric-26.3-26.3.0.0.5.jar",
+                "GlitchCore-fabric-*.jar",
+                "https://cdn.modrinth.com/data/s3dmwKy5/versions/kfFeDnrp/GlitchCore-fabric-26.3-26.3.0.0.5.jar",
+                "f975535e561285898163e7512008fe61ffaac66b6fc60a4e4763d0f2279617f75900d7a2ab2708d8dc348337119df61d2783aa101a9f1a24020f99888aa0d457",
+                "33efbdb5c192e8af21f6e1ee3c2799682bd4adf8",
+                339_788,
+            ),
+            (
+                "sereneseasons",
+                "26.1.2.0.7",
+                "SereneSeasons-fabric-26.3-26.1.2.0.7.jar",
+                "SereneSeasons-fabric-*.jar",
+                "https://cdn.modrinth.com/data/e0bNACJD/versions/V9PxJPuw/SereneSeasons-fabric-26.3-26.1.2.0.7.jar",
+                "f0ef802ab4a7d95df76855100656f3c0f65c7954b52330d7e3c224a0900359d8e8db8953dde3aca52231a5a90428e9925cac99ca01b22485d4af37640620069c",
+                "6b3513d4f7c35cea1222143a2d2b66928d9de939",
+                410_505,
+            ),
+        ];
+        for (id, version, name, glob, url, sha512, sha1, size) in pins {
+            let component = by_id(id);
+            assert_eq!(component.version, version, "{id}");
+            assert_eq!(component.group, ComponentGroup::Arnold, "{id}");
+            assert!(component.required_in_all_kits, "{id} must be locked");
+            assert_eq!(
+                component.license.as_deref(),
+                Some("LicenseRef-All-Rights-Reserved"),
+                "{id}"
             );
-            for (kit_id, kit) in &manifest.kits {
-                assert!(!kit.components.iter().any(|i| i == id), "{kit_id} has {id}");
+            assert_eq!(component.files.len(), 1, "{id}");
+            let file = file_of(&manifest, id, name);
+            assert_eq!(file.match_glob, glob, "{id}");
+            assert_eq!(file.url, url, "{id}");
+            assert!(
+                file.url.starts_with("https://cdn.modrinth.com/"),
+                "{id} {}",
+                file.url
+            );
+            assert!(
+                !file.url.starts_with("https://github.com/"),
+                "{id} must not be rehosted"
+            );
+            assert_eq!(file.sha512, sha512, "{id}");
+            assert_eq!(file.sha1.as_deref(), Some(sha1), "{id}");
+            assert_eq!(file.size, size, "{id}");
+            for kit in ["basic", "full", "recommended"] {
+                assert!(
+                    manifest.kits[kit].components.iter().any(|item| item == id),
+                    "{kit} missing {id}"
+                );
             }
+        }
+        assert_eq!(by_id("glitchcore").requires, vec!["base".to_string()]);
+        assert_eq!(
+            by_id("sereneseasons").requires,
+            vec!["base".to_string(), "glitchcore".to_string()]
+        );
+    }
+
+    #[test]
+    fn drink_beer_refill_comes_from_modrinth_in_every_kit() {
+        let manifest = load_fixture_manifest().unwrap();
+        let beer = manifest
+            .components
+            .iter()
+            .find(|component| component.id == "drinkbeer")
+            .expect("missing drinkbeer");
+        assert_eq!(beer.version, "1.4.2");
+        assert_eq!(beer.name, "Drink Beer Refill");
+        assert_eq!(beer.group, ComponentGroup::Arnold);
+        assert!(beer.required_in_all_kits, "drinkbeer must be locked");
+        assert_eq!(beer.requires, vec!["base".to_string()]);
+        assert_eq!(
+            beer.license.as_deref(),
+            Some("LicenseRef-All-Rights-Reserved")
+        );
+        let description = beer.description.to_ascii_lowercase();
+        assert!(
+            description.contains("brewing") && description.contains("bartending"),
+            "{}",
+            beer.description
+        );
+        assert!(
+            beer.description
+                .contains("The server runs it too, so every kit installs it."),
+            "{}",
+            beer.description
+        );
+        assert_eq!(beer.files.len(), 1);
+        let file = file_of(
+            &manifest,
+            "drinkbeer",
+            "drinkbeer-refill-26.3-fabric-1.4.2+fabric.jar",
+        );
+        assert_eq!(file.match_glob, "drinkbeer-refill-*.jar");
+        assert_eq!(
+            file.url,
+            "https://cdn.modrinth.com/data/RZwVw5iA/versions/tRYmjF1L/drinkbeer-refill-26.3-fabric-1.4.2%2Bfabric.jar"
+        );
+        assert!(file.url.starts_with("https://cdn.modrinth.com/"));
+        assert!(
+            !file.url.starts_with("https://github.com/"),
+            "drinkbeer must not be rehosted"
+        );
+        assert_eq!(
+            file.sha512,
+            "79ecd4aca42bd1a7f3fd109b21dd178f2c18f5690590152c0f51cc014218db796f254aaa5e84f6fbaee6ad4f7bdc9693b0dc9d14142eca867a2aed240b4b0c8e"
+        );
+        assert_eq!(
+            file.sha1.as_deref(),
+            Some("4cbc42aa098adb7bf9d0828368a65f5829044d90")
+        );
+        assert_eq!(file.size, 1_693_588);
+        for kit in ["basic", "full", "recommended"] {
+            assert!(
+                manifest.kits[kit]
+                    .components
+                    .iter()
+                    .any(|id| id == "drinkbeer"),
+                "{kit} missing drinkbeer"
+            );
+        }
+    }
+
+    #[test]
+    fn farming_and_revival_mods_come_from_modrinth_in_every_kit() {
+        let manifest = load_fixture_manifest().unwrap();
+        let by_id = |id: &str| {
+            manifest
+                .components
+                .iter()
+                .find(|component| component.id == id)
+                .unwrap_or_else(|| panic!("missing {id}"))
+        };
+        let pins = [
+            (
+                "farmersdelight",
+                "Farmer's Delight Refabricated",
+                "26.3-3.6.30",
+                "MIT",
+                "FarmersDelight-26.3-3.6.30+refabricated.jar",
+                "FarmersDelight-*.jar",
+                "https://cdn.modrinth.com/data/7vxePowz/versions/dRScyUeE/FarmersDelight-26.3-3.6.30%2Brefabricated.jar",
+                "099f724599022ac9232f265d62907fdde6ad48a73b246d45930d938a7f850be6a8b520244ffa218a59fdef96b0170fc0c04f00ff91f108b5a02bbc4cb2a013bc",
+                "691967a54ec63e012c7447ff3960eb595ca31d13",
+                3_482_244_u64,
+            ),
+            (
+                "balm",
+                "Balm",
+                "26.3.0.3",
+                "LicenseRef-All-Rights-Reserved",
+                "balm-fabric-26.3-26.3.0.3.jar",
+                "balm-fabric-*.jar",
+                "https://cdn.modrinth.com/data/MBAkmtvl/versions/MYj31XNG/balm-fabric-26.3-26.3.0.3.jar",
+                "aaf07f5b94f7015c87df7b242f3f45f0729fb3f72d887745ad5c5ceb31eb071e425254009158774101676d6480f31c832dd60860d79da5b661cc10b84241c319",
+                "1b44d97048c1c2e9cc7e0a03c00f5cb117463a60",
+                1_213_047,
+            ),
+            (
+                "hardcorerevival",
+                "Hardcore Revival",
+                "26.3.0.1",
+                "LicenseRef-All-Rights-Reserved",
+                "hardcorerevival-fabric-26.3-26.3.0.1.jar",
+                "hardcorerevival-fabric-*.jar",
+                "https://cdn.modrinth.com/data/HqKoXaXz/versions/9d4cslv4/hardcorerevival-fabric-26.3-26.3.0.1.jar",
+                "89df9da2716ef91234568123ab62bcc62f320956eb8355ea88e1eb5cbe317447b44e47c8a943a1735556b7e3a9a8a7b9989827d72f2b394c1cb9b776c1204638",
+                "b3b4bb2937f88502c0211a14eeea3216944b0728",
+                370_684,
+            ),
+        ];
+        for (id, name, version, license, filename, glob, url, sha512, sha1, size) in pins {
+            let component = by_id(id);
+            assert_eq!(component.name, name, "{id}");
+            assert_eq!(component.version, version, "{id}");
+            assert_eq!(component.group, ComponentGroup::Arnold, "{id}");
+            assert_eq!(component.kind, ComponentKind::Download, "{id}");
+            assert!(component.required_in_all_kits, "{id} must be locked");
+            assert_eq!(component.license.as_deref(), Some(license), "{id}");
+            assert!(
+                component
+                    .description
+                    .contains("The server runs it too, so every kit installs it."),
+                "{id}"
+            );
+            assert_eq!(component.files.len(), 1, "{id}");
+            let file = file_of(&manifest, id, filename);
+            assert_eq!(file.dest, FileDest::Mods, "{id}");
+            assert_eq!(file.match_glob, glob, "{id}");
+            assert_eq!(file.url, url, "{id}");
+            assert!(file.url.starts_with("https://cdn.modrinth.com/"), "{id}");
+            assert!(
+                !file.url.starts_with("https://github.com/"),
+                "{id} must not be rehosted"
+            );
+            assert_eq!(file.sha512, sha512, "{id}");
+            assert_eq!(file.sha1.as_deref(), Some(sha1), "{id}");
+            assert_eq!(file.size, size, "{id}");
+            for kit in ["basic", "full", "recommended"] {
+                assert!(
+                    manifest.kits[kit].components.iter().any(|item| item == id),
+                    "{kit} missing {id}"
+                );
+            }
+        }
+        assert_eq!(by_id("farmersdelight").requires, vec!["base".to_string()]);
+        assert_eq!(by_id("balm").requires, vec!["base".to_string()]);
+        assert_eq!(
+            by_id("hardcorerevival").requires,
+            vec!["base".to_string(), "balm".to_string()]
+        );
+        assert_eq!(manifest.components.len(), 128);
+        assert_eq!(manifest.kits["basic"].components.len(), 71);
+        assert_eq!(manifest.kits["full"].components.len(), 122);
+        assert_eq!(manifest.kits["recommended"].components.len(), 122);
+    }
+
+    #[test]
+    fn waystones_crops_and_xaero_maps_come_from_modrinth_in_every_kit() {
+        let manifest = load_fixture_manifest().unwrap();
+        let by_id = |id: &str| {
+            manifest
+                .components
+                .iter()
+                .find(|component| component.id == id)
+                .unwrap_or_else(|| panic!("missing {id}"))
+        };
+        let pins = [
+            (
+                "shogi",
+                "Shogi",
+                "26.3.0.3",
+                "Library needed by Waystones. The server runs it too, so every kit installs it.",
+                "shogi-fabric-26.3-26.3.0.3.jar",
+                "shogi-*.jar",
+                "https://cdn.modrinth.com/data/bi4iCmsw/versions/9gkJoFhj/shogi-fabric-26.3-26.3.0.3.jar",
+                "f050b6360b188a82ca7e3fbb0d00eff4c02b9b39bc991fbddcf4a3588f594887d15f6421e50d5a7452a53ec35d44ec9b325d7826f77393af9543fe3383cb142d",
+                "5a24c09a6b175c9fc2a0f4a9cab114c14e00aaa9",
+                466_899_u64,
+            ),
+            (
+                "waystones",
+                "Waystones",
+                "26.3.0.3",
+                "Teleport stones for the Arnold server. The server runs it too, so every kit installs it.",
+                "waystones-fabric-26.3-26.3.0.3.jar",
+                "waystones-*.jar",
+                "https://cdn.modrinth.com/data/LOpKHB2A/versions/prbIOsDC/waystones-fabric-26.3-26.3.0.3.jar",
+                "1b4d1208382f4568f83341c7cc412354beb5c360e4f0bf0718615908e05a4a6eddc1abca8e3a7b233d273d5d95f93dff7f954072e4939f97edb8180021e83619",
+                "606b37a18939e59bf0a3fbcb48db5d27ebd7f7ae",
+                1_262_275,
+            ),
+            (
+                "culturaldelights",
+                "Cultural Delights Refabricated",
+                "0.19.8.4-26.3-refabricated",
+                "More crops and foods for Farmer's Delight. The server runs it too, so every kit installs it.",
+                "culturaldelights-26.3-0.19.8.4-refabricated.jar",
+                "culturaldelights-*.jar",
+                "https://cdn.modrinth.com/data/YttyNOFA/versions/Tm0VloHM/culturaldelights-26.3-0.19.8.4-refabricated.jar",
+                "b67f6b5183d57a3a198d2ef90df8466d2e32f426d6874e22a72f25433b84b92f445482c06c470f982fea754813dc9f4d6d8465a257a90ec50706e57bee5cd077",
+                "c47a843c7e7ccef3223533c8532949acc4af9bd6",
+                1_209_907,
+            ),
+            (
+                "xaerominimap",
+                "Xaero's Minimap",
+                "26.6.2",
+                "Minimap. Fair-play settings come from the server, so every kit gets the same map.",
+                "xaerominimap-fabric-26.3-26.6.2.jar",
+                "xaerominimap-*.jar",
+                "https://cdn.modrinth.com/data/1bokaNcj/versions/MfxfgXaO/xaerominimap-fabric-26.3-26.6.2.jar",
+                "edf57b80cfe0e0fe229728a6babc3b25c364c07a0406bcdb3a21f73fc225b98954c68ff456c7b1af3182c48512f29d47238ddc501dbfd5eaca0a4609fddcc280",
+                "9b44e5718f9258ed32283a391e19a1d46464188a",
+                2_233_189,
+            ),
+            (
+                "xaeroworldmap",
+                "Xaero's World Map",
+                "1.47.2",
+                "Full-screen world map of places you have seen. Every kit gets it so nobody is left without a map.",
+                "xaeroworldmap-fabric-26.3-1.47.2.jar",
+                "xaeroworldmap-*.jar",
+                "https://cdn.modrinth.com/data/NcUtCpym/versions/VM8lNSSM/xaeroworldmap-fabric-26.3-1.47.2.jar",
+                "cac3c0fb3121ddebc7f073571dcbce5f1811ca001ea94ef03c1da667e8a3413144f570c4b593f632358eff98fa138631ed7907fd1bd5da7d43c037ea782125fb",
+                "1282302b6c92050cfab7c1db45cf3d92d9a331c5",
+                1_488_669,
+            ),
+        ];
+        for (id, name, version, description, filename, glob, url, sha512, sha1, size) in pins {
+            let component = by_id(id);
+            assert_eq!(component.name, name, "{id}");
+            assert_eq!(component.version, version, "{id}");
+            assert_eq!(component.description, description, "{id}");
+            assert_eq!(component.group, ComponentGroup::Arnold, "{id}");
+            assert_eq!(component.kind, ComponentKind::Download, "{id}");
+            assert!(component.required_in_all_kits, "{id} must be locked");
+            assert_eq!(
+                component.license.as_deref(),
+                Some("LicenseRef-All-Rights-Reserved"),
+                "{id}"
+            );
+            assert_eq!(component.files.len(), 1, "{id}");
+            let file = file_of(&manifest, id, filename);
+            assert_eq!(file.dest, FileDest::Mods, "{id}");
+            assert_eq!(file.match_glob, glob, "{id}");
+            assert_eq!(file.url, url, "{id}");
+            assert!(file.url.starts_with("https://cdn.modrinth.com/"), "{id}");
+            assert!(
+                !file.url.starts_with("https://github.com/"),
+                "{id} must not be rehosted"
+            );
+            assert_eq!(file.sha512, sha512, "{id}");
+            assert_eq!(file.sha1.as_deref(), Some(sha1), "{id}");
+            assert_eq!(file.size, size, "{id}");
+            for kit in ["basic", "full", "recommended"] {
+                assert!(
+                    manifest.kits[kit].components.iter().any(|item| item == id),
+                    "{kit} missing {id}"
+                );
+            }
+        }
+        assert_eq!(by_id("shogi").requires, vec!["base".to_string()]);
+        assert_eq!(
+            by_id("waystones").requires,
+            vec!["base".to_string(), "balm".to_string(), "shogi".to_string()]
+        );
+        assert_eq!(
+            by_id("culturaldelights").requires,
+            vec!["base".to_string(), "farmersdelight".to_string()]
+        );
+        assert_eq!(by_id("xaerominimap").requires, vec!["base".to_string()]);
+        assert_eq!(by_id("xaeroworldmap").requires, vec!["base".to_string()]);
+    }
+
+    #[test]
+    fn shippy_ships_and_ingenium_come_from_modrinth_in_every_kit() {
+        let manifest = load_fixture_manifest().unwrap();
+        let by_id = |id: &str| {
+            manifest
+                .components
+                .iter()
+                .find(|component| component.id == id)
+                .unwrap_or_else(|| panic!("missing {id}"))
+        };
+        let api = by_id("ingeniumapi");
+        assert_eq!(api.name, "Ingenium API");
+        assert_eq!(api.version, "1.1");
+        assert_eq!(api.group, ComponentGroup::Arnold);
+        assert_eq!(api.kind, ComponentKind::Download);
+        assert!(api.required_in_all_kits);
+        assert_eq!(api.requires, vec!["base".to_string()]);
+        assert_eq!(api.license.as_deref(), Some("MIT"));
+        assert_eq!(
+            api.description,
+            "Library needed by Shippy Ships. The server runs it too, so every kit installs it."
+        );
+        let api_file = file_of(
+            &manifest,
+            "ingeniumapi",
+            "ingeniumapi-1.1-FABRIC-MC-26.X.jar",
+        );
+        assert_eq!(api_file.match_glob, "ingeniumapi-*.jar");
+        assert_eq!(
+            api_file.url,
+            "https://cdn.modrinth.com/data/bhnA6sV8/versions/bRhQB9Tl/ingeniumapi-1.1-FABRIC-MC-26.X.jar"
+        );
+        assert!(api_file.url.starts_with("https://cdn.modrinth.com/"));
+        assert!(!api_file.url.starts_with("https://github.com/"));
+        assert_eq!(
+            api_file.sha512,
+            "680ce9a30090466b8e475706d99a5bd733fc423abde58d6be668ee8afca0309ba990e497f5dbc1b63f3b30cc3f24a935f91c06fd4e9a2f93c9a5f89aa5b91445"
+        );
+        assert_eq!(
+            api_file.sha1.as_deref(),
+            Some("c932919958eaa7908a86b0074946f5b72d4ee846")
+        );
+        assert_eq!(api_file.size, 13_267);
+
+        let ships = by_id("shippyships");
+        assert_eq!(ships.name, "Shippy Ships");
+        // Modrinth labels this release 1.0.28.3. The jar filename still says 1.0.28.2.
+        assert_eq!(ships.version, "1.0.28.3");
+        assert_eq!(ships.group, ComponentGroup::Arnold);
+        assert!(ships.required_in_all_kits);
+        assert_eq!(
+            ships.requires,
+            vec!["base".to_string(), "ingeniumapi".to_string()]
+        );
+        assert_eq!(
+            ships.license.as_deref(),
+            Some("LicenseRef-Custom-License---Limited-Rights-Granted")
+        );
+        assert!(ships.description.contains("Caesius_Leo"));
+        assert!(ships.description.contains("never rehosted"));
+        let file = file_of(
+            &manifest,
+            "shippyships",
+            "shippy-ships-1.0.28.2-FABRIC-MC-26.3.jar",
+        );
+        assert!(file.file.contains("1.0.28.2"));
+        assert!(!file.file.contains("1.0.28.3"));
+        assert_eq!(file.match_glob, "shippy-ships-*.jar");
+        assert_eq!(
+            file.url,
+            "https://cdn.modrinth.com/data/oxBNHOmi/versions/dZcofTOJ/shippy-ships-1.0.28.2-FABRIC-MC-26.3.jar"
+        );
+        assert!(file.url.starts_with("https://cdn.modrinth.com/"));
+        assert!(!file.url.starts_with("https://github.com/"));
+        assert_eq!(
+            file.sha512,
+            "29941b69f1c5eb5f9c3d452afcb39c60b16ebcd1dc70b050bb6b0ef12b9110562059d00dadc9c2402f9d09567d39f6f2f70e7d20340f4bf21e699e3ca8730a23"
+        );
+        assert_eq!(
+            file.sha1.as_deref(),
+            Some("57e9afc6553eb00933dbe00ebb51b733ddb827df")
+        );
+        assert_eq!(file.size, 2_608_709);
+        for id in [
+            "ingeniumapi",
+            "shippyships",
+            "travelersbackpack",
+            "animalfeedingtrough",
+        ] {
+            for kit in ["basic", "full", "recommended"] {
+                assert!(
+                    manifest.kits[kit].components.iter().any(|item| item == id),
+                    "{kit} missing {id}"
+                );
+            }
+        }
+        let pack = by_id("travelersbackpack");
+        assert_eq!(pack.name, "Traveler's Backpack");
+        assert_eq!(pack.version, "26.3-11.4.6");
+        assert_eq!(pack.license.as_deref(), Some("LGPL-3.0-only"));
+        assert!(pack.required_in_all_kits);
+        assert_eq!(
+            pack.requires,
+            vec!["base".to_string(), "forgeconfigapiport".to_string()]
+        );
+        let pack_file = file_of(
+            &manifest,
+            "travelersbackpack",
+            "travelersbackpack-fabric-26.3-11.4.6.jar",
+        );
+        assert_eq!(pack_file.match_glob, "travelersbackpack-*.jar");
+        assert_eq!(
+            pack_file.url,
+            "https://cdn.modrinth.com/data/rlloIFEV/versions/RSmOmcy4/travelersbackpack-fabric-26.3-11.4.6.jar"
+        );
+        assert!(!pack_file.url.starts_with("https://github.com/"));
+        assert_eq!(
+            pack_file.sha512,
+            "ca4fa3611d61d30109dfa3c3612ef2950257cb1ecfdd3b04acc07d2cf70f2f2d972a0640af0bf37519e83b9fc6a5c9e5fda6a08ad21bf52350f658290c856066"
+        );
+        assert_eq!(pack_file.size, 1_576_052);
+        let trough = by_id("animalfeedingtrough");
+        assert_eq!(trough.name, "Animal Feeding Trough");
+        assert_eq!(trough.version, "1.2.1+26.3");
+        assert_eq!(trough.license.as_deref(), Some("MIT"));
+        assert!(trough.required_in_all_kits);
+        assert_eq!(trough.requires, vec!["base".to_string()]);
+        let trough_file = file_of(
+            &manifest,
+            "animalfeedingtrough",
+            "animal_feeding_trough-1.2.1+26.3.jar",
+        );
+        assert_eq!(trough_file.match_glob, "animal_feeding_trough-*.jar");
+        assert_eq!(
+            trough_file.url,
+            "https://cdn.modrinth.com/data/bRFWnJ87/versions/pTYiM3Eb/animal_feeding_trough-1.2.1%2B26.3.jar"
+        );
+        assert!(!trough_file.url.starts_with("https://github.com/"));
+        assert_eq!(
+            trough_file.sha512,
+            "022351f8ab792530352c2761d628308c64b01844497881b37c10e9b9dfd657b9428cab2dba1de946b61ccd25811037a4d8e19e7c61abfc3e8f85793dd5a93566"
+        );
+        assert_eq!(trough_file.size, 274_338);
+        for skipped in ["distanthorizons", "fastipping"] {
+            assert!(
+                manifest
+                    .components
+                    .iter()
+                    .all(|component| component.id != skipped),
+                "{skipped} should stay out"
+            );
         }
     }
 
@@ -1386,7 +1867,7 @@ mod tests {
     #[test]
     fn kit_missing_deck_fails() {
         let mut v = valid_json();
-        v["kits"]["basic"]["components"] = serde_json::json!(["base", "sodium", "ships", "snow"]);
+        v["kits"]["basic"]["components"] = serde_json::json!(["base", "sodium", "ships"]);
         let err = parse_manifest(&serde_json::to_vec(&v).unwrap()).unwrap_err();
         assert!(err.to_string().contains("deck"));
     }
@@ -1463,35 +1944,45 @@ mod tests {
         assert!(!table.lite.ships.hd_models);
         assert_eq!(table.normal.ships.particles, 1.0);
         assert_eq!(table.ultra.ships.particles, 1.6);
-        assert_eq!(table.normal.snow.fps_target, 60);
-        assert!(table.normal.snow.adaptive_fps);
     }
 
     #[test]
-    fn snow_lite_preset_id_is_snow_dot_lite() {
+    fn manifest_has_no_snowfall_component_and_kits_omit_snow() {
         let manifest = load_fixture_manifest().unwrap();
-        let snow = component_by_id(&manifest, "snow").unwrap();
-        let preset = lite_preset(snow.config.as_ref().unwrap()).unwrap();
-        assert!(snow
-            .config
-            .as_ref()
-            .unwrap()
-            .presets
-            .contains_key(SNOW_LITE_PRESET));
-        assert_eq!(preset.marker.as_deref(), Some("# arnold-installer-lite"));
-        assert_eq!(
-            snow.config
-                .as_ref()
-                .unwrap()
-                .settings
-                .get("quality")
-                .and_then(|s| s.default.as_str()),
-            Some("normal")
-        );
-        assert_eq!(
-            preset.overrides.get("quality").and_then(|v| v.as_str()),
-            Some("lite")
-        );
+        assert_eq!(manifest.components.len(), 128);
+        assert!(component_by_id(&manifest, "snow").is_none());
+        assert!(component_by_id(&manifest, "bettersnowcoverage").is_some());
+        assert!(component_by_id(&manifest, "weatherglass").is_some());
+        assert!(!manifest.components.iter().any(|component| {
+            (component.id.contains("snow") && component.id != "bettersnowcoverage")
+                || component
+                    .files
+                    .iter()
+                    .any(|file| file.file.contains("snowfall") || file.file.contains("arnold-snow"))
+        }));
+        let counts = [("basic", 71), ("recommended", 122), ("full", 122)];
+        for (kit_id, count) in counts {
+            let kit = manifest.kits.get(kit_id).unwrap();
+            assert_eq!(kit.components.len(), count, "{kit_id}");
+            assert!(!kit.components.iter().any(|id| id == "snow"), "{kit_id}");
+        }
+        assert!(manifest.kits["full"]
+            .components
+            .iter()
+            .any(|id| id == "bettersnowcoverage"));
+        assert!(manifest.kits["full"]
+            .components
+            .iter()
+            .any(|id| id == "weatherglass"));
+        assert!(manifest.kits["basic"]
+            .components
+            .iter()
+            .all(|id| id != "bettersnowcoverage"));
+        assert!(manifest.recommend.as_ref().is_some());
+        let raw = BUNDLED_MANIFEST_JSON;
+        assert!(!raw.contains("\"midSnowFull\""));
+        assert!(!raw.contains("\"snow.lite\""));
+        assert!(!raw.contains("arnold-snowfall"));
     }
 
     #[test]
@@ -1827,8 +2318,23 @@ mod tests {
             .collect();
         expected.insert("midnightlib".to_string());
         expected.insert("dietplus".to_string());
+        expected.insert("glitchcore".to_string());
+        expected.insert("sereneseasons".to_string());
+        expected.insert("drinkbeer".to_string());
+        expected.insert("farmersdelight".to_string());
+        expected.insert("balm".to_string());
+        expected.insert("hardcorerevival".to_string());
+        expected.insert("shogi".to_string());
+        expected.insert("waystones".to_string());
+        expected.insert("culturaldelights".to_string());
+        expected.insert("xaerominimap".to_string());
+        expected.insert("xaeroworldmap".to_string());
+        expected.insert("ingeniumapi".to_string());
+        expected.insert("shippyships".to_string());
+        expected.insert("travelersbackpack".to_string());
+        expected.insert("animalfeedingtrough".to_string());
         expected.insert("deck".to_string());
-        assert_eq!(locked.len(), 45);
+        assert_eq!(locked.len(), 60);
         assert_eq!(locked, expected);
     }
 
@@ -2260,7 +2766,6 @@ mod tests {
                 .find(|component| component.id == id)
                 .unwrap_or_else(|| panic!("missing {id}"))
         };
-        // Serene Seasons and GlitchCore are ARR too: if restored (plan §9.2), add them to this list.
         for id in [
             "coolrain",
             "tradecycling",
@@ -2273,6 +2778,16 @@ mod tests {
             "voicechat",
             "rainbowsfoliage",
             "grassrise",
+            "glitchcore",
+            "sereneseasons",
+            "drinkbeer",
+            "balm",
+            "hardcorerevival",
+            "shogi",
+            "waystones",
+            "culturaldelights",
+            "xaerominimap",
+            "xaeroworldmap",
         ] {
             let component = by_id(id);
             assert_eq!(

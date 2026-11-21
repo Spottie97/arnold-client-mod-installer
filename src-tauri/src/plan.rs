@@ -20,7 +20,6 @@ pub struct Selection {
     /// is not applied here, so an older saved selection cannot gain a new addon.
     #[serde(default)]
     pub addons: BTreeMap<String, bool>,
-    pub snow_lite: Option<bool>,
     #[serde(default)]
     pub quality: Option<QualityLevel>,
 }
@@ -48,7 +47,6 @@ pub struct PlanFile {
 pub struct PlanConfig {
     pub component_id: String,
     pub file: String,
-    pub snow_lite: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -67,7 +65,6 @@ pub struct InstallPlan {
     pub remove: Vec<PlanFile>,
     pub configs: Vec<PlanConfig>,
     pub loader: Option<PlanLoader>,
-    pub snow_lite: bool,
     pub quality: QualityLevel,
     pub kit: String,
     pub components: Vec<String>,
@@ -260,18 +257,7 @@ pub fn build_plan(
     }
     let mut base_selected = selected.clone();
 
-    let kit_lite = manifest
-        .kits
-        .get(&selection.kit)
-        .map(|k| k.snow_lite)
-        .unwrap_or(false);
-    let hint_lite = selection.snow_lite.unwrap_or(kit_lite);
-    let quality = selection.quality.unwrap_or(if hint_lite {
-        QualityLevel::Lite
-    } else {
-        QualityLevel::Normal
-    });
-    let snow_lite = quality.snow_lite();
+    let quality = selection.quality.unwrap_or(QualityLevel::Normal);
     let table = table_from_manifest(manifest);
     let skip = &row_for(&table, quality).skip_components;
 
@@ -322,7 +308,6 @@ pub fn build_plan(
             configs.push(PlanConfig {
                 component_id: component.id.clone(),
                 file: component.config.as_ref().unwrap().file.clone(),
-                snow_lite: component.id == "snow" && snow_lite,
             });
         }
     }
@@ -345,7 +330,6 @@ pub fn build_plan(
         remove,
         configs,
         loader,
-        snow_lite,
         quality,
         kit: kit_id.to_string(),
         components: resolved,
@@ -355,6 +339,37 @@ pub fn build_plan(
         pack_id: String::new(),
         pack_dir: String::new(),
     })
+}
+
+/// Queue retired Snowfall jars for deletion. They are not installed again.
+pub fn schedule_legacy_snow_removals(plan: &mut InstallPlan, rels: &[String]) {
+    for rel in rels {
+        if plan.remove.iter().any(|file| file.file == *rel) {
+            continue;
+        }
+        let file_name = rel.rsplit('/').next().unwrap_or(rel);
+        if plan
+            .add
+            .iter()
+            .chain(plan.update.iter())
+            .any(|file| file.file == file_name)
+        {
+            continue;
+        }
+        plan.remove.push(PlanFile {
+            component_id: "snow".into(),
+            name: "Arnold Snow".into(),
+            version: String::new(),
+            file: rel.clone(),
+            dest: FileDest::from_rel_path(rel).unwrap_or(FileDest::Mods),
+            url: String::new(),
+            sha512: String::new(),
+            size: 0,
+            match_glob: String::new(),
+            legacy_match: Vec::new(),
+            known_sha512: Vec::new(),
+        });
+    }
 }
 
 #[cfg(test)]
@@ -400,7 +415,6 @@ mod tests {
                 custom_components: vec!["shaders".into()],
                 ocean: false,
                 addons: BTreeMap::new(),
-                snow_lite: Some(false),
                 quality: None,
             },
             None,
@@ -411,6 +425,29 @@ mod tests {
         assert!(plan.components.contains(&"base".into()));
         assert!(plan.components.contains(&"sodium".into()));
         assert!(plan.components.contains(&"shaders".into()));
+        for id in [
+            "dietplus",
+            "glitchcore",
+            "sereneseasons",
+            "drinkbeer",
+            "farmersdelight",
+            "balm",
+            "hardcorerevival",
+            "shogi",
+            "waystones",
+            "culturaldelights",
+            "xaerominimap",
+            "xaeroworldmap",
+            "ingeniumapi",
+            "shippyships",
+            "travelersbackpack",
+            "animalfeedingtrough",
+        ] {
+            assert!(
+                plan.components.iter().any(|item| item == id),
+                "custom must lock {id}"
+            );
+        }
         assert!(
             !plan.warnings.iter().any(|w| w.contains("Deck")),
             "server Shipwright 0.11.2 meets Deck 0.11.1: {warnings:?}",
@@ -428,7 +465,6 @@ mod tests {
                 custom_components: vec![],
                 ocean: true,
                 addons: BTreeMap::new(),
-                snow_lite: None,
                 quality: None,
             },
             None,
@@ -438,7 +474,7 @@ mod tests {
         assert!(!plan.components.contains(&"waves".into()));
         assert!(plan.components.contains(&"particlerain".into()));
         assert!(plan.loader.is_some());
-        assert!(plan.snow_lite);
+        assert!(!plan.components.iter().any(|id| id == "snow"));
     }
 
     #[test]
@@ -459,7 +495,6 @@ mod tests {
                 custom_components: vec![],
                 ocean: false,
                 addons: BTreeMap::new(),
-                snow_lite: Some(true),
                 quality: None,
             },
             Some(&state),
@@ -487,7 +522,6 @@ mod tests {
                 custom_components: vec![],
                 ocean: true,
                 addons: BTreeMap::new(),
-                snow_lite: None,
                 quality: Some(QualityLevel::Potato),
             },
             None,
@@ -495,7 +529,6 @@ mod tests {
         )
         .unwrap();
         assert_eq!(plan.quality, QualityLevel::Potato);
-        assert!(plan.snow_lite);
         assert!(plan.components.contains(&"particlerain".into()));
         assert!(!plan.components.contains(&"wakes".into()));
         assert!(!plan.components.contains(&"waves".into()));
@@ -505,25 +538,96 @@ mod tests {
     }
 
     #[test]
-    fn quality_drives_snow_lite() {
+    fn explicit_quality_stays_and_no_kit_installs_snow() {
         let manifest = load_fixture_manifest().unwrap();
-        let ultra = build_plan(
+        for kit in ["basic", "recommended", "full", "custom"] {
+            let plan = build_plan(
+                &manifest,
+                &Selection {
+                    kit: kit.into(),
+                    custom_components: vec!["shaders".into()],
+                    ocean: true,
+                    addons: BTreeMap::new(),
+                    quality: Some(QualityLevel::Ultra),
+                },
+                None,
+                true,
+            )
+            .unwrap();
+            assert_eq!(plan.quality, QualityLevel::Ultra);
+            assert!(!plan.components.iter().any(|id| id == "snow"), "{kit}");
+            assert!(!plan
+                .add
+                .iter()
+                .chain(plan.update.iter())
+                .any(|file| file.file.contains("snowfall") || file.component_id == "snow"));
+        }
+    }
+
+    #[test]
+    fn tracked_snowfall_jar_is_scheduled_for_removal() {
+        let manifest = load_fixture_manifest().unwrap();
+        let mut state = InstalledState::new("installer", "old");
+        record_file(&mut state, "mods/arnold-snowfall-1.3.3.jar", "abc", "snow");
+        record_file(
+            &mut state,
+            "mods/arnold-snow-client-0.8.0.jar",
+            "def",
+            "snow",
+        );
+        let plan = build_plan(
+            &manifest,
+            &Selection {
+                kit: "full".into(),
+                custom_components: vec![],
+                ocean: false,
+                addons: BTreeMap::new(),
+                quality: Some(QualityLevel::Normal),
+            },
+            Some(&state),
+            true,
+        )
+        .unwrap();
+        assert!(plan
+            .remove
+            .iter()
+            .any(|file| file.file == "mods/arnold-snowfall-1.3.3.jar"));
+        assert!(plan
+            .remove
+            .iter()
+            .any(|file| file.file == "mods/arnold-snow-client-0.8.0.jar"));
+        assert!(!plan
+            .add
+            .iter()
+            .chain(plan.update.iter())
+            .any(|file| file.file.contains("snowfall") || file.component_id == "snow"));
+    }
+
+    #[test]
+    fn legacy_snowfall_path_is_scheduled_once() {
+        let manifest = load_fixture_manifest().unwrap();
+        let mut plan = build_plan(
             &manifest,
             &Selection {
                 kit: "basic".into(),
                 custom_components: vec![],
                 ocean: false,
                 addons: BTreeMap::new(),
-                snow_lite: Some(true),
-                quality: Some(QualityLevel::Ultra),
+                quality: Some(QualityLevel::Normal),
             },
             None,
             true,
         )
         .unwrap();
-        assert!(!ultra.snow_lite);
-        assert_eq!(ultra.quality, QualityLevel::Ultra);
-        assert!(!ultra.components.contains(&"architect".into()));
+        let rel = "mods/arnold-snowfall-1.3.3.jar".to_string();
+        schedule_legacy_snow_removals(&mut plan, std::slice::from_ref(&rel));
+        schedule_legacy_snow_removals(&mut plan, std::slice::from_ref(&rel));
+        let hits = plan.remove.iter().filter(|file| file.file == rel).count();
+        assert_eq!(hits, 1);
+        assert!(!plan
+            .add
+            .iter()
+            .any(|file| file.file == "arnold-snowfall-1.3.3.jar"));
     }
 
     fn selection_from(raw: &str) -> Selection {
@@ -580,7 +684,6 @@ mod tests {
                         custom_components: vec![],
                         ocean: true,
                         addons: BTreeMap::new(),
-                        snow_lite: None,
                         quality: Some(quality),
                     },
                     None,
@@ -611,7 +714,6 @@ mod tests {
                 custom_components: vec![],
                 ocean: false,
                 addons: addons.clone(),
-                snow_lite: None,
                 quality: Some(QualityLevel::Normal),
             },
             None,
@@ -629,7 +731,6 @@ mod tests {
                 custom_components: vec![],
                 ocean: false,
                 addons,
-                snow_lite: None,
                 quality: Some(QualityLevel::Normal),
             },
             None,
@@ -670,7 +771,6 @@ mod tests {
                 custom_components: vec![],
                 ocean: false,
                 addons: BTreeMap::new(),
-                snow_lite: None,
                 quality: None,
             },
             None,
@@ -684,6 +784,21 @@ mod tests {
             "lithium",
             "clumps",
             "dietplus",
+            "glitchcore",
+            "sereneseasons",
+            "drinkbeer",
+            "farmersdelight",
+            "balm",
+            "hardcorerevival",
+            "shogi",
+            "waystones",
+            "culturaldelights",
+            "xaerominimap",
+            "xaeroworldmap",
+            "ingeniumapi",
+            "shippyships",
+            "travelersbackpack",
+            "animalfeedingtrough",
             "base",
         ] {
             assert!(
@@ -691,13 +806,7 @@ mod tests {
                 "basic missing {id}"
             );
         }
-        for id in [
-            "coolrain",
-            "flashback",
-            "appleskin",
-            "miniature",
-            "glitchcore",
-        ] {
+        for id in ["coolrain", "flashback", "appleskin", "miniature"] {
             assert!(
                 !plan.components.iter().any(|item| item == id),
                 "basic has {id}"
@@ -731,7 +840,6 @@ mod tests {
                 custom_components: vec![],
                 ocean: false,
                 addons: BTreeMap::new(),
-                snow_lite: None,
                 quality: None,
             },
             None,
@@ -786,7 +894,6 @@ mod tests {
             custom_components: vec![],
             ocean: false,
             addons: BTreeMap::new(),
-            snow_lite: None,
             quality: None,
         };
         let mut present = InstalledState::new("installer", "old");
@@ -840,7 +947,6 @@ mod tests {
                 custom_components: vec!["matchablockoverlays".into(), "rainbowsfoliage".into()],
                 ocean: false,
                 addons: BTreeMap::new(),
-                snow_lite: None,
                 quality: None,
             },
             None,
@@ -863,7 +969,6 @@ mod tests {
             custom_components: custom.iter().map(|id| (*id).to_string()).collect(),
             ocean: false,
             addons,
-            snow_lite: None,
             quality: None,
         }
     }
@@ -928,7 +1033,6 @@ mod tests {
                 custom_components: vec![],
                 ocean: true,
                 addons: BTreeMap::new(),
-                snow_lite: None,
                 quality: None,
             },
             None,
@@ -951,7 +1055,6 @@ mod tests {
             custom_components: vec![],
             ocean: false,
             addons: BTreeMap::new(),
-            snow_lite: Some(true),
             quality: None,
         };
         let fresh = build_plan(&manifest, &selection, None, true).unwrap();

@@ -9,22 +9,32 @@ use crate::manifest::{component_by_id, Manifest};
 use crate::plan::match_glob;
 use crate::state::{load_state, record_file, save_state, InstalledComponent, InstalledState};
 
+/// Retired Snowfall jars. The component is gone; matching files are removed on the next install.
 pub const SNOW_LEGACY_GLOBS: &[&str] = &["arnold-snow-client*.jar", "arnold-snowfall*.jar"];
 
-/// Older shipping and review jars that install may replace by name.
-pub const SNOW_LEGACY_JARS: &[&str] = &[
-    "arnold-snowfall-1.2.0.jar",
-    "arnold-snowfall-1.3.0.jar",
-    "arnold-snowfall-1.3.1.jar",
-    "arnold-snowfall-1.3.2.jar",
-    "arnold-snow-client-1.2.0.jar",
-    "arnold-snow-client-1.3.0.jar",
-    "arnold-snow-client-1.3.1.jar",
-    "arnold-snow-client-1.3.2.jar",
-];
+pub fn is_legacy_snow_jar(file_name: &str) -> bool {
+    SNOW_LEGACY_GLOBS
+        .iter()
+        .any(|pattern| match_glob(pattern, file_name))
+}
 
-pub fn is_known_legacy_snow_jar(file_name: &str) -> bool {
-    SNOW_LEGACY_JARS.contains(&file_name)
+pub fn legacy_snow_rels(game_dir: &Path) -> Result<Vec<String>, AppError> {
+    let mods = game_dir.join("mods");
+    if !mods.is_dir() {
+        return Ok(Vec::new());
+    }
+    let mut rels = Vec::new();
+    for entry in fs::read_dir(mods)?.flatten() {
+        if !entry.path().is_file() {
+            continue;
+        }
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if is_legacy_snow_jar(&name) {
+            rels.push(format!("mods/{name}"));
+        }
+    }
+    rels.sort();
+    Ok(rels)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -243,12 +253,11 @@ mod tests {
             "arnold-snow-client*.jar",
             "arnold-snow-0.8.0.jar"
         ));
-        assert!(is_known_legacy_snow_jar("arnold-snowfall-1.2.0.jar"));
-        assert!(is_known_legacy_snow_jar("arnold-snowfall-1.3.0.jar"));
-        assert!(is_known_legacy_snow_jar("arnold-snowfall-1.3.1.jar"));
-        assert!(is_known_legacy_snow_jar("arnold-snowfall-1.3.2.jar"));
-        assert!(!is_known_legacy_snow_jar("arnold-snowfall-1.3.3.jar"));
-        assert!(!is_known_legacy_snow_jar("arnold-snowfall-mystery.jar"));
+        assert!(is_legacy_snow_jar("arnold-snowfall-1.2.0.jar"));
+        assert!(is_legacy_snow_jar("arnold-snowfall-1.3.3.jar"));
+        assert!(is_legacy_snow_jar("arnold-snowfall-mystery.jar"));
+        assert!(is_legacy_snow_jar("arnold-snow-client-0.8.0.jar"));
+        assert!(!is_legacy_snow_jar("arnold-ships-client-0.10.3.jar"));
     }
 
     #[test]
