@@ -1,5 +1,5 @@
 import { LogExportResult } from "../components/LogExport";
-import type { InstallPlan } from "../types";
+import type { InstallPlan, ProgressEvent } from "../types";
 
 export function Done({
   plan,
@@ -7,6 +7,7 @@ export function Done({
   showLauncherNote,
   logPath,
   logError,
+  skipped,
   onCopyLogPath,
   onOpenLogFolder,
 }: {
@@ -15,6 +16,7 @@ export function Done({
   showLauncherNote: boolean;
   logPath: string | null;
   logError: string | null;
+  skipped: ProgressEvent[];
   onCopyLogPath: () => void;
   onOpenLogFolder: () => void;
 }) {
@@ -39,6 +41,16 @@ export function Done({
           </li>
         </ul>
       </section>
+      {skipped.length > 0 ? (
+        <section className="panel mt-6" aria-label="Skipped optional add-ons">
+          <h2 className="font-heading text-xl text-gold">Skipped optional add-ons</h2>
+          <ul className="mt-3 space-y-2 text-gold">
+            {skipped.map((row, index) => (
+              <li key={`${row.file ?? row.step}-${index}`}>{row.message}</li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
       <LogExportResult
         path={logPath}
         error={logError}

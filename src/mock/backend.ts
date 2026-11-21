@@ -191,6 +191,7 @@ export function mockPlan(sel: Selection): InstallPlan {
     quality,
     kit: sel.kit,
     components: ids,
+    optionalComponents: [],
     warnings,
     bytes: kitBytes(ids),
   };

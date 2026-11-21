@@ -70,6 +70,10 @@ pub struct InstallPlan {
     pub quality: QualityLevel,
     pub kit: String,
     pub components: Vec<String>,
+    /// Components present only because an add-on toggle is on. Kit members,
+    /// locked components, and direct custom picks are never listed here.
+    #[serde(default)]
+    pub optional_components: Vec<String>,
     pub warnings: Vec<String>,
     pub bytes: u64,
 }
@@ -159,6 +163,7 @@ pub fn build_plan(
             selected.push(component.id.clone());
         }
     }
+    let mut base_selected = selected.clone();
 
     let kit_lite = manifest
         .kits
@@ -185,12 +190,22 @@ pub fn build_plan(
         push_addon_components(manifest, &mut selected, skip, id);
     }
 
-    selected.retain(|id| {
+    let keep = |id: &String| {
         !skip.iter().any(|s| s == id)
             && component_by_id(manifest, id).is_some_and(|c| c.kind != ComponentKind::Pending)
-    });
+    };
+    selected.retain(&keep);
+    base_selected.retain(&keep);
 
+    let base_resolved = resolve_requires(manifest, &base_selected)?;
     let resolved = resolve_requires(manifest, &selected)?;
+    let base_ids: std::collections::BTreeSet<&str> =
+        base_resolved.iter().map(String::as_str).collect();
+    let optional_components: Vec<String> = resolved
+        .iter()
+        .filter(|id| !base_ids.contains(id.as_str()))
+        .cloned()
+        .collect();
 
     let mut add = Vec::new();
     let mut update = Vec::new();
@@ -283,6 +298,7 @@ pub fn build_plan(
         quality,
         kit: kit_id.to_string(),
         components: resolved,
+        optional_components,
         warnings,
         bytes,
     })
@@ -782,5 +798,95 @@ mod tests {
         assert!(plan.components.contains(&"polytone".into()));
         assert!(plan.components.contains(&"matchablockoverlays".into()));
         assert!(plan.components.contains(&"rainbowsfoliage".into()));
+    }
+
+    fn addon_selection(kit: &str, addon: Option<&str>, custom: &[&str]) -> Selection {
+        let mut addons = BTreeMap::new();
+        if let Some(addon) = addon {
+            addons.insert(addon.to_string(), true);
+        }
+        Selection {
+            kit: kit.into(),
+            custom_components: custom.iter().map(|id| (*id).to_string()).collect(),
+            ocean: false,
+            addons,
+            snow_lite: None,
+            quality: None,
+        }
+    }
+
+    #[test]
+    fn recommended_flashback_is_not_optional() {
+        let manifest = load_fixture_manifest().unwrap();
+        for kit in ["recommended", "full"] {
+            let plan = build_plan(&manifest, &addon_selection(kit, None, &[]), None, true).unwrap();
+            assert!(plan.components.iter().any(|id| id == "flashback"), "{kit}");
+            assert!(
+                !plan.optional_components.iter().any(|id| id == "flashback"),
+                "{kit} {:?}",
+                plan.optional_components
+            );
+        }
+    }
+
+    #[test]
+    fn architect_addon_on_recommended_is_optional() {
+        let manifest = load_fixture_manifest().unwrap();
+        let plan = build_plan(
+            &manifest,
+            &addon_selection("recommended", Some("architect"), &[]),
+            None,
+            true,
+        )
+        .unwrap();
+        assert_eq!(
+            plan.optional_components,
+            vec![
+                "malilib".to_string(),
+                "litematica".to_string(),
+                "architect".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn custom_direct_pick_of_malilib_is_not_optional_even_with_architect_addon() {
+        let manifest = load_fixture_manifest().unwrap();
+        let plan = build_plan(
+            &manifest,
+            &addon_selection("custom", Some("architect"), &["malilib"]),
+            None,
+            true,
+        )
+        .unwrap();
+        assert!(!plan.optional_components.iter().any(|id| id == "malilib"));
+        assert!(plan.optional_components.iter().any(|id| id == "litematica"));
+        assert!(plan.optional_components.iter().any(|id| id == "architect"));
+        assert!(plan.components.iter().any(|id| id == "malilib"));
+    }
+
+    #[test]
+    fn ocean_addon_on_basic_marks_particlerain_and_wakes_optional() {
+        let manifest = load_fixture_manifest().unwrap();
+        let plan = build_plan(
+            &manifest,
+            &Selection {
+                kit: "basic".into(),
+                custom_components: vec![],
+                ocean: true,
+                addons: BTreeMap::new(),
+                snow_lite: None,
+                quality: None,
+            },
+            None,
+            true,
+        )
+        .unwrap();
+        assert_eq!(
+            plan.optional_components,
+            vec!["particlerain".to_string(), "wakes".to_string()]
+        );
+        assert!(!plan.components.iter().any(|id| id == "waves"));
+        assert!(!plan.optional_components.iter().any(|id| id == "waves"));
     }
 }

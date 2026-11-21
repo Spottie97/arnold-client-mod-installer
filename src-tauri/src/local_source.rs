@@ -345,6 +345,23 @@ impl<F: Fetcher> Fetcher for LocalAwareFetcher<F> {
         self.inner.fetch_with_progress(url, kind, on_bytes)
     }
 
+    fn fetch_with_status(
+        &self,
+        url: &str,
+        kind: FetchKind,
+        on_bytes: &mut dyn FnMut(u64, Option<u64>, &str) -> bool,
+    ) -> Result<Vec<u8>, AppError> {
+        if is_file_url(url) {
+            let path = resolve_local_path(url, self.root_for(url)?)?;
+            let file = fs::File::open(&path)?;
+            let total = file.metadata()?.len();
+            return read_body(file, MAX_BODY_BYTES, Some(total), &mut |done, reported| {
+                on_bytes(done, reported, "")
+            });
+        }
+        self.inner.fetch_with_status(url, kind, on_bytes)
+    }
+
     fn local_root(&self) -> Option<&Path> {
         self.root.as_deref()
     }

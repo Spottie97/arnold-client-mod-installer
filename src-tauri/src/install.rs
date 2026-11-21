@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -216,6 +217,8 @@ fn build_new_state(
     manifest: &Manifest,
     plan: &InstallPlan,
     files: Vec<(String, String, String)>,
+    existing: Option<&InstalledState>,
+    skipped: &BTreeSet<String>,
 ) -> InstalledState {
     let mut state = InstalledState::new("installer", &manifest.manifest_version);
     state.kit = Some(plan.kit.clone());
@@ -228,10 +231,161 @@ fn build_new_state(
             });
         }
     }
+    if let Some(existing) = existing {
+        for prev in &existing.components {
+            if skipped.contains(&prev.id) && state.components.iter().all(|item| item.id != prev.id)
+            {
+                state.components.push(prev.clone());
+            }
+        }
+    }
     for (path, sha, component_id) in files {
         record_file(&mut state, path, sha, component_id);
     }
     state
+}
+
+/// A component is optional only when the plan says so and a fresh read of the
+/// manifest agrees. Kit members, locked components, and anything required by
+/// a non-optional component stay required.
+fn effective_optional(manifest: &Manifest, plan: &InstallPlan) -> BTreeSet<String> {
+    let mut optional: BTreeSet<String> = plan.optional_components.iter().cloned().collect();
+    optional.retain(|id| plan.components.iter().any(|picked| picked == id));
+    optional.retain(|id| {
+        component_by_id(manifest, id).is_some_and(|component| !component.required_in_all_kits)
+    });
+    if let Some(kit) = manifest.kits.get(&plan.kit) {
+        optional.retain(|id| !kit.components.iter().any(|member| member == id));
+    }
+    let outside: Vec<String> = plan
+        .components
+        .iter()
+        .filter(|id| !optional.contains(*id))
+        .cloned()
+        .collect();
+    let mut required_by_outside = BTreeSet::new();
+    for id in &outside {
+        collect_requires(manifest, id, &mut required_by_outside);
+    }
+    optional.retain(|id| !required_by_outside.contains(id));
+    optional
+}
+
+fn collect_requires(manifest: &Manifest, id: &str, out: &mut BTreeSet<String>) {
+    let Some(component) = component_by_id(manifest, id) else {
+        return;
+    };
+    for req in &component.requires {
+        if out.insert(req.clone()) {
+            collect_requires(manifest, req, out);
+        }
+    }
+}
+
+fn grow_skipped(manifest: &Manifest, optional: &BTreeSet<String>, dropped: &mut BTreeSet<String>) {
+    loop {
+        let mut grew = false;
+        for id in optional {
+            if dropped.contains(id) {
+                continue;
+            }
+            if requires_dropped(manifest, id, dropped, &mut Vec::new()) {
+                dropped.insert(id.clone());
+                grew = true;
+            }
+        }
+        if !grew {
+            break;
+        }
+    }
+}
+
+fn requires_dropped(
+    manifest: &Manifest,
+    id: &str,
+    dropped: &BTreeSet<String>,
+    stack: &mut Vec<String>,
+) -> bool {
+    if stack.iter().any(|seen| seen == id) {
+        return false;
+    }
+    let Some(component) = component_by_id(manifest, id) else {
+        return false;
+    };
+    stack.push(id.to_string());
+    let hit = component
+        .requires
+        .iter()
+        .any(|req| dropped.contains(req) || requires_dropped(manifest, req, dropped, stack));
+    stack.pop();
+    hit
+}
+
+fn optional_can_skip(optional: &BTreeSet<String>, component_id: &str, err: &AppError) -> bool {
+    !matches!(err, AppError::Cancelled) && optional.contains(component_id)
+}
+
+fn skip_reason(err: &AppError) -> &'static str {
+    match err {
+        AppError::HashMismatch { .. } => "check failed",
+        _ => "download failed",
+    }
+}
+
+fn skipped_done_message(
+    manifest: &Manifest,
+    components: &[String],
+    dropped: &BTreeSet<String>,
+    failed: &BTreeMap<String, AppError>,
+) -> String {
+    let mut parts = Vec::new();
+    for id in components {
+        if !dropped.contains(id) {
+            continue;
+        }
+        let name = component_by_id(manifest, id)
+            .map(|component| component.name.as_str())
+            .unwrap_or(id.as_str());
+        if let Some(err) = failed.get(id) {
+            parts.push(format!("{name} ({})", skip_reason(err)));
+        } else {
+            parts.push(format!("{name} (needs a skipped add-on)"));
+        }
+    }
+    if parts.is_empty() {
+        return "Install finished".to_string();
+    }
+    format!(
+        "Install finished — skipped optional add-on(s): {}. Everything else is installed; run Install again to retry.",
+        parts.join(", ")
+    )
+}
+
+struct SkipBook<'a> {
+    manifest: &'a Manifest,
+    optional: &'a BTreeSet<String>,
+    skipped_errors: &'a mut BTreeMap<String, AppError>,
+    dropped: &'a mut BTreeSet<String>,
+}
+
+fn record_optional_skip(
+    book: &mut SkipBook<'_>,
+    emit_log: &impl Fn(&str, &str, u8, &str, Option<String>),
+    file: &PlanFile,
+    index: usize,
+    total_files: usize,
+    err: AppError,
+) {
+    emit_log(
+        "download",
+        &format!("Skipped optional {} {}: {}", file.name, file.version, err),
+        download_slot_percent(index, total_files, 0, None),
+        "skipped",
+        Some(file.file.clone()),
+    );
+    book.dropped.insert(file.component_id.clone());
+    book.skipped_errors.insert(file.component_id.clone(), err);
+    grow_skipped(book.manifest, book.optional, book.dropped);
 }
 
 fn expected_download_bytes(reported: Option<u64>, planned: u64) -> Option<u64> {
@@ -258,7 +412,13 @@ fn download_slot_percent(index: usize, total_files: usize, done: u64, expected: 
     (slot_lo as u128 + frac).min(slot_hi as u128) as u8
 }
 
-fn download_progress_message(name: &str, version: &str, done: u64, expected: u64) -> String {
+fn download_progress_message(
+    name: &str,
+    version: &str,
+    done: u64,
+    expected: u64,
+    note: &str,
+) -> String {
     let done_mb = done as f64 / (1024.0 * 1024.0);
     let expected_mb = expected as f64 / (1024.0 * 1024.0);
     let what = if version.is_empty() {
@@ -266,7 +426,12 @@ fn download_progress_message(name: &str, version: &str, done: u64, expected: u64
     } else {
         format!("{name} {version}")
     };
-    format!("Downloading {what} — {done_mb:.1}/{expected_mb:.1} MB")
+    let base = format!("Downloading {what} — {done_mb:.1}/{expected_mb:.1} MB");
+    if note.is_empty() {
+        base
+    } else {
+        format!("{base} — {note}")
+    }
 }
 
 fn running_download(
@@ -339,10 +504,16 @@ pub fn run_install<F: Fetcher>(
         let staging = installer_dir(game_dir).join("staging").join(&run_id);
         fs::create_dir_all(&staging)?;
 
+        let optional = effective_optional(manifest, plan);
+        let mut skipped_errors: BTreeMap<String, AppError> = BTreeMap::new();
+        let mut dropped: BTreeSet<String> = BTreeSet::new();
         let downloads: Vec<&PlanFile> = plan.add.iter().chain(plan.update.iter()).collect();
         let total = downloads.len().max(1);
         for (index, file) in downloads.iter().enumerate() {
             cancelled(cancel)?;
+            if dropped.contains(&file.component_id) {
+                continue;
+            }
             emit_log(
                 "download",
                 &format!("Downloading {} {}", file.name, file.version),
@@ -351,10 +522,10 @@ pub fn run_install<F: Fetcher>(
                 Some(file.file.clone()),
             );
             // Per-chunk updates stay out of the install log. The command sink throttles them.
-            let bytes = fetcher.fetch_with_progress(
+            let fetched = fetcher.fetch_with_status(
                 &file.url,
                 FetchKind::Component,
-                &mut |done, content_len| {
+                &mut |done, content_len, note| {
                     let expected = expected_download_bytes(content_len, file.size);
                     progress(running_download(
                         &run_id,
@@ -365,12 +536,51 @@ pub fn run_install<F: Fetcher>(
                             &file.version,
                             done,
                             expected.unwrap_or(0),
+                            note,
                         ),
                     ));
                     !cancel.load(Ordering::SeqCst)
                 },
-            )?;
-            verify_sha512(&bytes, &file.sha512)?;
+            );
+            let bytes = match fetched {
+                Ok(bytes) => bytes,
+                Err(err) if optional_can_skip(&optional, &file.component_id, &err) => {
+                    record_optional_skip(
+                        &mut SkipBook {
+                            manifest,
+                            optional: &optional,
+                            skipped_errors: &mut skipped_errors,
+                            dropped: &mut dropped,
+                        },
+                        &emit_log,
+                        file,
+                        index,
+                        total,
+                        err,
+                    );
+                    continue;
+                }
+                Err(err) => return Err(err),
+            };
+            if let Err(err) = verify_sha512(&bytes, &file.sha512) {
+                if optional_can_skip(&optional, &file.component_id, &err) {
+                    record_optional_skip(
+                        &mut SkipBook {
+                            manifest,
+                            optional: &optional,
+                            skipped_errors: &mut skipped_errors,
+                            dropped: &mut dropped,
+                        },
+                        &emit_log,
+                        file,
+                        index,
+                        total,
+                        err,
+                    );
+                    continue;
+                }
+                return Err(err);
+            }
             let staged = staging.join(dest_rel(file));
             if let Some(parent) = staged.parent() {
                 fs::create_dir_all(parent)?;
@@ -387,16 +597,22 @@ pub fn run_install<F: Fetcher>(
                 "running",
                 Some(loader.id.clone()),
             );
-            let bytes = fetcher.fetch_with_progress(
+            let bytes = fetcher.fetch_with_status(
                 &loader.url,
                 FetchKind::Loader,
-                &mut |done, content_len| {
+                &mut |done, content_len, note| {
                     let expected = content_len.filter(|n| *n > 0).unwrap_or(0);
                     progress(running_download(
                         &run_id,
                         Some(loader.id.clone()),
                         66,
-                        download_progress_message("Fabric loader profile", "", done, expected),
+                        download_progress_message(
+                            "Fabric loader profile",
+                            "",
+                            done,
+                            expected,
+                            note,
+                        ),
                     ));
                     !cancel.load(Ordering::SeqCst)
                 },
@@ -404,6 +620,30 @@ pub fn run_install<F: Fetcher>(
             verify_sha512(&bytes, &loader.sha512)?;
             fs::write(staging.join("loader.json"), bytes)?;
         }
+
+        let planned_components = plan.components.clone();
+        let done_message = if dropped.is_empty() {
+            "Install finished".to_string()
+        } else {
+            skipped_done_message(manifest, &planned_components, &dropped, &skipped_errors)
+        };
+        let filtered = if dropped.is_empty() {
+            None
+        } else {
+            let mut effective = plan.clone();
+            effective
+                .add
+                .retain(|file| !dropped.contains(&file.component_id));
+            effective
+                .update
+                .retain(|file| !dropped.contains(&file.component_id));
+            effective
+                .configs
+                .retain(|item| !dropped.contains(&item.component_id));
+            effective.components.retain(|id| !dropped.contains(id));
+            Some(effective)
+        };
+        let plan = filtered.as_ref().unwrap_or(plan);
 
         cancelled(cancel)?;
         let existing = load_state(game_dir)?;
@@ -591,10 +831,10 @@ pub fn run_install<F: Fetcher>(
                 ));
             }
         }
-        let mut new_state = build_new_state(manifest, plan, recorded);
+        let mut new_state = build_new_state(manifest, plan, recorded, existing.as_ref(), &dropped);
         record_quality_files(&mut new_state, quality_written, plan.quality);
         save_state(game_dir, &new_state)?;
-        emit_log("done", "Install finished", 100, "done", None);
+        emit_log("done", &done_message, 100, "done", None);
         let _ = fs::remove_dir_all(&staging);
         Ok(run_id.clone())
     })();
@@ -686,6 +926,7 @@ pub fn repair_tracked<F: Fetcher>(
         quality: state.quality.unwrap_or(QualityLevel::Normal),
         kit: state.kit.clone().unwrap_or_else(|| "repair".into()),
         components: state.components.iter().map(|c| c.id.clone()).collect(),
+        optional_components: Vec::new(),
         warnings: Vec::new(),
         bytes: 0,
     };
@@ -1208,14 +1449,14 @@ mod tests {
             self.inner.fetch_kind(url, kind)
         }
 
-        fn fetch_with_progress(
+        fn fetch_with_status(
             &self,
             url: &str,
             kind: FetchKind,
-            on_bytes: &mut dyn FnMut(u64, Option<u64>) -> bool,
+            on_bytes: &mut dyn FnMut(u64, Option<u64>, &str) -> bool,
         ) -> Result<Vec<u8>, AppError> {
             self.cancel.store(true, Ordering::SeqCst);
-            self.inner.fetch_with_progress(url, kind, on_bytes)
+            self.inner.fetch_with_status(url, kind, on_bytes)
         }
     }
 
@@ -1228,18 +1469,18 @@ mod tests {
             self.inner.fetch_kind(url, kind)
         }
 
-        fn fetch_with_progress(
+        fn fetch_with_status(
             &self,
             url: &str,
             kind: FetchKind,
-            on_bytes: &mut dyn FnMut(u64, Option<u64>) -> bool,
+            on_bytes: &mut dyn FnMut(u64, Option<u64>, &str) -> bool,
         ) -> Result<Vec<u8>, AppError> {
             let bytes = self.fetch_kind(url, kind)?;
             let len = bytes.len() as u64;
             let steps = 4_u64;
             for step in 1..=steps {
                 let done = (u128::from(len) * u128::from(step) / u128::from(steps)) as u64;
-                if !on_bytes(done, Some(len)) {
+                if !on_bytes(done, Some(len), "") {
                     return Err(AppError::Cancelled);
                 }
             }
@@ -1329,5 +1570,308 @@ mod tests {
         let finished = logged.last().unwrap();
         assert_eq!(finished.status, "done");
         assert_eq!(finished.percent, 100);
+    }
+
+    fn kit_selection(kit: &str, addon: Option<&str>) -> Selection {
+        let mut addons = BTreeMap::new();
+        if let Some(addon) = addon {
+            addons.insert(addon.to_string(), true);
+        }
+        Selection {
+            kit: kit.into(),
+            custom_components: vec![],
+            ocean: false,
+            addons,
+            snow_lite: None,
+            quality: None,
+        }
+    }
+
+    fn kit_plan(
+        manifest: &crate::manifest::Manifest,
+        kit: &str,
+        addon: Option<&str>,
+    ) -> InstallPlan {
+        build_plan(manifest, &kit_selection(kit, addon), None, true).unwrap()
+    }
+
+    fn planned_name<'a>(plan: &'a InstallPlan, id: &str) -> &'a str {
+        plan.add
+            .iter()
+            .chain(plan.update.iter())
+            .find(|file| file.component_id == id)
+            .unwrap_or_else(|| panic!("plan is missing {id}"))
+            .file
+            .as_str()
+    }
+
+    fn install_events(
+        game: &Path,
+        plan: &InstallPlan,
+        manifest: &crate::manifest::Manifest,
+        fetcher: &MapFetcher,
+    ) -> (Result<String, AppError>, Vec<ProgressEvent>) {
+        let events = Mutex::new(Vec::new());
+        let result = run_install(
+            game,
+            plan,
+            manifest,
+            fetcher,
+            &AtomicBool::new(false),
+            false,
+            16.0,
+            &|event| events.lock().unwrap().push(event),
+        );
+        (result, events.into_inner().unwrap())
+    }
+
+    #[test]
+    fn optional_addon_failure_installs_the_rest() {
+        let tmp = tempdir().unwrap();
+        let game = tmp.path();
+        prepare_game(game);
+        let (manifest, mut fetcher, _) = test_manifest_and_fetcher();
+        let plan = kit_plan(&manifest, "recommended", Some("architect"));
+        let architect = planned_name(&plan, "architect").to_string();
+        let url = plan
+            .add
+            .iter()
+            .find(|file| file.component_id == "architect")
+            .unwrap()
+            .url
+            .clone();
+        fetcher.fail.insert(url);
+        let (result, events) = install_events(game, &plan, &manifest, &fetcher);
+        assert!(result.is_ok(), "{result:?}");
+        assert!(!game.join("mods").join(&architect).exists());
+        assert!(game.join("mods/arnold-snowfall-1.3.3.jar").is_file());
+        let state = load_state(game).unwrap().unwrap();
+        assert!(state
+            .components
+            .iter()
+            .all(|component| component.id != "architect"));
+        assert!(state
+            .components
+            .iter()
+            .any(|component| component.id == "base"));
+        assert!(events.iter().any(|event| event.status == "skipped"));
+        let done = events.last().unwrap();
+        assert_eq!(done.status, "done");
+        assert!(done.message.contains("Architect"), "{}", done.message);
+        assert!(done.message.contains("download failed"), "{}", done.message);
+        assert!(
+            done.message.contains("Everything else is installed"),
+            "{}",
+            done.message
+        );
+    }
+
+    #[test]
+    fn optional_dependency_failure_drops_dependents() {
+        let tmp = tempdir().unwrap();
+        let game = tmp.path();
+        prepare_game(game);
+        let (manifest, mut fetcher, _) = test_manifest_and_fetcher();
+        let plan = kit_plan(&manifest, "recommended", Some("architect"));
+        let malilib = planned_name(&plan, "malilib").to_string();
+        let litematica = planned_name(&plan, "litematica").to_string();
+        let architect = planned_name(&plan, "architect").to_string();
+        let url = plan
+            .add
+            .iter()
+            .find(|file| file.component_id == "malilib")
+            .unwrap()
+            .url
+            .clone();
+        fetcher.fail.insert(url);
+        let (result, _) = install_events(game, &plan, &manifest, &fetcher);
+        assert!(result.is_ok(), "{result:?}");
+        for name in [&malilib, &litematica, &architect] {
+            assert!(!game.join("mods").join(name).exists(), "{name}");
+        }
+        assert!(game.join("mods/arnold-snowfall-1.3.3.jar").is_file());
+        let state = load_state(game).unwrap().unwrap();
+        for id in ["malilib", "litematica", "architect"] {
+            assert!(state.components.iter().all(|component| component.id != id));
+        }
+    }
+
+    #[test]
+    fn required_flashback_failure_aborts_recommended() {
+        let tmp = tempdir().unwrap();
+        let game = tmp.path();
+        prepare_game(game);
+        let (manifest, mut fetcher, _) = test_manifest_and_fetcher();
+        let plan = kit_plan(&manifest, "recommended", None);
+        let url = plan
+            .add
+            .iter()
+            .find(|file| file.component_id == "flashback")
+            .unwrap()
+            .url
+            .clone();
+        fetcher.fail.insert(url);
+        let err = run_install(
+            game,
+            &plan,
+            &manifest,
+            &fetcher,
+            &AtomicBool::new(false),
+            false,
+            16.0,
+            &|_| {},
+        )
+        .unwrap_err();
+        assert_eq!(err.code(), "E-IO");
+        assert!(fs::read_dir(game.join("mods")).unwrap().next().is_none());
+        assert!(load_state(game).unwrap().is_none());
+    }
+
+    #[test]
+    fn tampered_plan_cannot_make_flashback_optional() {
+        let tmp = tempdir().unwrap();
+        let game = tmp.path();
+        prepare_game(game);
+        let (manifest, mut fetcher, _) = test_manifest_and_fetcher();
+        let mut plan = kit_plan(&manifest, "recommended", None);
+        plan.optional_components = vec!["flashback".into()];
+        let url = plan
+            .add
+            .iter()
+            .find(|file| file.component_id == "flashback")
+            .unwrap()
+            .url
+            .clone();
+        fetcher.fail.insert(url);
+        let err = run_install(
+            game,
+            &plan,
+            &manifest,
+            &fetcher,
+            &AtomicBool::new(false),
+            false,
+            16.0,
+            &|_| {},
+        )
+        .unwrap_err();
+        assert_eq!(err.code(), "E-IO");
+        assert!(load_state(game).unwrap().is_none());
+        assert!(!game
+            .join("mods")
+            .join(planned_name(&plan, "flashback"))
+            .exists());
+    }
+
+    #[test]
+    fn repair_is_strict() {
+        let tmp = tempdir().unwrap();
+        let game = tmp.path();
+        prepare_game(game);
+        let (manifest, mut fetcher, _) = test_manifest_and_fetcher();
+        let plan = kit_plan(&manifest, "basic", Some("architect"));
+        run_install(
+            game,
+            &plan,
+            &manifest,
+            &fetcher,
+            &AtomicBool::new(false),
+            false,
+            16.0,
+            &|_| {},
+        )
+        .unwrap();
+        let architect = planned_name(&plan, "architect");
+        let architect_path = game.join("mods").join(architect);
+        fs::write(&architect_path, b"broken").unwrap();
+        let url = plan
+            .add
+            .iter()
+            .find(|file| file.component_id == "architect")
+            .unwrap()
+            .url
+            .clone();
+        fetcher.fail.insert(url);
+        let err = repair_tracked(
+            game,
+            &manifest,
+            &fetcher,
+            &AtomicBool::new(false),
+            16.0,
+            &|_| {},
+        )
+        .unwrap_err();
+        assert_eq!(err.code(), "E-IO");
+        assert_eq!(fs::read(&architect_path).unwrap(), b"broken");
+        assert!(game.join("mods/arnold-snowfall-1.3.3.jar").is_file());
+        let state = load_state(game).unwrap().unwrap();
+        assert!(state
+            .components
+            .iter()
+            .any(|component| component.id == "architect"));
+    }
+
+    #[test]
+    fn optional_update_failure_keeps_prior_component() {
+        let tmp = tempdir().unwrap();
+        let game = tmp.path();
+        prepare_game(game);
+        let (manifest, mut fetcher, _) = test_manifest_and_fetcher();
+        let plan = kit_plan(&manifest, "basic", Some("architect"));
+        run_install(
+            game,
+            &plan,
+            &manifest,
+            &fetcher,
+            &AtomicBool::new(false),
+            false,
+            16.0,
+            &|_| {},
+        )
+        .unwrap();
+        let installed = load_state(game).unwrap().unwrap();
+        let prior = installed
+            .components
+            .iter()
+            .find(|component| component.id == "architect")
+            .unwrap()
+            .clone();
+        let mut again = build_plan(
+            &manifest,
+            &kit_selection("basic", Some("architect")),
+            Some(&installed),
+            true,
+        )
+        .unwrap();
+        let mut update = again
+            .add
+            .iter()
+            .chain(again.update.iter())
+            .find(|file| file.component_id == "architect")
+            .cloned()
+            .unwrap_or_else(|| {
+                plan.add
+                    .iter()
+                    .find(|file| file.component_id == "architect")
+                    .unwrap()
+                    .clone()
+            });
+        update.sha512 = sha512_hex(b"newer-architect");
+        fetcher.fail.insert(update.url.clone());
+        again.update.push(update);
+        let (result, _) = install_events(game, &again, &manifest, &fetcher);
+        assert!(result.is_ok(), "{result:?}");
+        let architect = planned_name(&plan, "architect");
+        assert_eq!(
+            fs::read(game.join("mods").join(architect)).unwrap(),
+            format!("blob-{architect}").into_bytes()
+        );
+        let state = load_state(game).unwrap().unwrap();
+        let kept = state
+            .components
+            .iter()
+            .find(|component| component.id == "architect")
+            .expect("prior architect component");
+        assert_eq!(kept.version, prior.version);
+        assert_eq!(kept.name, prior.name);
     }
 }

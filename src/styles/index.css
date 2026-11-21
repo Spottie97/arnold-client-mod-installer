@@ -56,6 +56,27 @@ input:focus-visible {
   @apply rounded-2xl bg-panel p-5;
 }
 
+.install-log {
+  height: 16rem;
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: var(--gold) transparent;
+}
+
+.install-log::-webkit-scrollbar {
+  width: 10px;
+}
+
+.install-log::-webkit-scrollbar-thumb {
+  background: var(--gold);
+  border-radius: 999px;
+}
+
+.install-log::-webkit-scrollbar-track {
+  background: #12101a;
+}
+
 .progress-track {
   height: 10px;
   border-radius: 999px;

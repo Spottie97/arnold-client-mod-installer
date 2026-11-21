@@ -91,6 +91,7 @@ function emptyPlan(): InstallPlan {
     quality: "normal",
     kit: "recommended",
     components: [],
+    optionalComponents: [],
     warnings: [],
     bytes: 0,
   };
@@ -550,6 +551,7 @@ export default function App() {
           showLauncherNote={Boolean(launcher) && (!launcher?.available || launcherFailed)}
           logPath={logPath}
           logError={logError}
+          skipped={progressLog.filter((entry) => entry.status === "skipped")}
           onCopyLogPath={() => void copyLogPath()}
           onOpenLogFolder={() => void openLogFolder()}
         />

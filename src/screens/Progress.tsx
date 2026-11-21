@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import type { InstallPlan, ProgressEvent } from "../types";
 
 export function Progress({
@@ -11,6 +12,12 @@ export function Progress({
 }) {
   const percent = event?.percent ?? 0;
   const rows = log.length > 0 ? log : event ? [event] : [];
+  const logRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const node = logRef.current;
+    if (!node) return;
+    node.scrollTop = node.scrollHeight;
+  }, [log, event]);
   return (
     <div className="flex flex-1 flex-col">
       <h1 className="mt-6 font-heading text-4xl text-gold md:text-5xl">Installing…</h1>
@@ -30,19 +37,34 @@ export function Progress({
       <p className="mt-1 text-sm text-muted">
         {Math.round(plan.bytes / (1024 * 1024))} MB planned
       </p>
-      <section className="panel mt-6 space-y-3" aria-label="Install log">
+      <section
+        ref={logRef}
+        className="panel install-log mt-6 space-y-3"
+        aria-label="Install log"
+      >
         {rows.map((row, index) => {
-          const done = row.status === "done" || index < rows.length - 1;
-          const active = index === rows.length - 1 && row.status !== "done";
+          const skipped = row.status === "skipped";
+          const done = !skipped && (row.status === "done" || index < rows.length - 1);
+          const active = !skipped && index === rows.length - 1 && row.status !== "done";
           return (
             <div
               key={`${row.step}-${row.message}-${index}`}
               className={`flex gap-3 ${
-                active ? "text-glow" : done ? "text-text" : "text-muted"
+                skipped ? "text-gold" : active ? "text-glow" : done ? "text-text" : "text-muted"
               }`}
             >
-              <span className={done ? "text-success" : active ? "text-glow" : "text-muted"}>
-                {done ? "✓" : active ? "↻" : "○"}
+              <span
+                className={
+                  skipped
+                    ? "text-gold"
+                    : done
+                      ? "text-success"
+                      : active
+                        ? "text-glow"
+                        : "text-muted"
+                }
+              >
+                {skipped ? "!" : done ? "✓" : active ? "↻" : "○"}
               </span>
               <span>{row.message}</span>
             </div>

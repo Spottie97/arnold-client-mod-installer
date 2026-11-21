@@ -176,6 +176,8 @@ export interface InstallPlan {
   quality: QualityLevel;
   kit: string;
   components: string[];
+  /** Present only because an add-on toggle is on. Omitted plans treat every file as required. */
+  optionalComponents?: string[];
   warnings: string[];
   bytes: number;
 }
