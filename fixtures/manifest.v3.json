@@ -515,6 +515,129 @@
       ]
     },
     {
+      "id": "shogi",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "requiredInAllKits": true,
+      "name": "Shogi",
+      "version": "26.3.0.3",
+      "description": "Library needed by Waystones. The server runs it too, so every kit installs it.",
+      "license": "LicenseRef-All-Rights-Reserved",
+      "files": [
+        {
+          "file": "shogi-fabric-26.3-26.3.0.3.jar",
+          "dest": "mods",
+          "match": "shogi-*.jar",
+          "url": "https://cdn.modrinth.com/data/bi4iCmsw/versions/9gkJoFhj/shogi-fabric-26.3-26.3.0.3.jar",
+          "sha512": "f050b6360b188a82ca7e3fbb0d00eff4c02b9b39bc991fbddcf4a3588f594887d15f6421e50d5a7452a53ec35d44ec9b325d7826f77393af9543fe3383cb142d",
+          "size": 466899,
+          "sha1": "5a24c09a6b175c9fc2a0f4a9cab114c14e00aaa9"
+        }
+      ]
+    },
+    {
+      "id": "waystones",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base",
+        "balm",
+        "shogi"
+      ],
+      "requiredInAllKits": true,
+      "name": "Waystones",
+      "version": "26.3.0.3",
+      "description": "Teleport stones for the Arnold server. The server runs it too, so every kit installs it.",
+      "license": "LicenseRef-All-Rights-Reserved",
+      "files": [
+        {
+          "file": "waystones-fabric-26.3-26.3.0.3.jar",
+          "dest": "mods",
+          "match": "waystones-*.jar",
+          "url": "https://cdn.modrinth.com/data/LOpKHB2A/versions/prbIOsDC/waystones-fabric-26.3-26.3.0.3.jar",
+          "sha512": "1b4d1208382f4568f83341c7cc412354beb5c360e4f0bf0718615908e05a4a6eddc1abca8e3a7b233d273d5d95f93dff7f954072e4939f97edb8180021e83619",
+          "size": 1262275,
+          "sha1": "606b37a18939e59bf0a3fbcb48db5d27ebd7f7ae"
+        }
+      ]
+    },
+    {
+      "id": "culturaldelights",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base",
+        "farmersdelight"
+      ],
+      "requiredInAllKits": true,
+      "name": "Cultural Delights Refabricated",
+      "version": "0.19.8.4-26.3-refabricated",
+      "description": "More crops and foods for Farmer's Delight. The server runs it too, so every kit installs it.",
+      "license": "LicenseRef-All-Rights-Reserved",
+      "files": [
+        {
+          "file": "culturaldelights-26.3-0.19.8.4-refabricated.jar",
+          "dest": "mods",
+          "match": "culturaldelights-*.jar",
+          "url": "https://cdn.modrinth.com/data/YttyNOFA/versions/Tm0VloHM/culturaldelights-26.3-0.19.8.4-refabricated.jar",
+          "sha512": "b67f6b5183d57a3a198d2ef90df8466d2e32f426d6874e22a72f25433b84b92f445482c06c470f982fea754813dc9f4d6d8465a257a90ec50706e57bee5cd077",
+          "size": 1209907,
+          "sha1": "c47a843c7e7ccef3223533c8532949acc4af9bd6"
+        }
+      ]
+    },
+    {
+      "id": "xaerominimap",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "requiredInAllKits": true,
+      "name": "Xaero's Minimap",
+      "version": "26.6.2",
+      "description": "Minimap. Fair-play settings come from the server, so every kit gets the same map.",
+      "license": "LicenseRef-All-Rights-Reserved",
+      "files": [
+        {
+          "file": "xaerominimap-fabric-26.3-26.6.2.jar",
+          "dest": "mods",
+          "match": "xaerominimap-*.jar",
+          "url": "https://cdn.modrinth.com/data/1bokaNcj/versions/MfxfgXaO/xaerominimap-fabric-26.3-26.6.2.jar",
+          "sha512": "edf57b80cfe0e0fe229728a6babc3b25c364c07a0406bcdb3a21f73fc225b98954c68ff456c7b1af3182c48512f29d47238ddc501dbfd5eaca0a4609fddcc280",
+          "size": 2233189,
+          "sha1": "9b44e5718f9258ed32283a391e19a1d46464188a"
+        }
+      ]
+    },
+    {
+      "id": "xaeroworldmap",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "requiredInAllKits": true,
+      "name": "Xaero's World Map",
+      "version": "1.47.2",
+      "description": "Full-screen world map of places you have seen. Every kit gets it so nobody is left without a map.",
+      "license": "LicenseRef-All-Rights-Reserved",
+      "files": [
+        {
+          "file": "xaeroworldmap-fabric-26.3-1.47.2.jar",
+          "dest": "mods",
+          "match": "xaeroworldmap-*.jar",
+          "url": "https://cdn.modrinth.com/data/NcUtCpym/versions/VM8lNSSM/xaeroworldmap-fabric-26.3-1.47.2.jar",
+          "sha512": "cac3c0fb3121ddebc7f073571dcbce5f1811ca001ea94ef03c1da667e8a3413144f570c4b593f632358eff98fa138631ed7907fd1bd5da7d43c037ea782125fb",
+          "size": 1488669,
+          "sha1": "1282302b6c92050cfab7c1db45cf3d92d9a331c5"
+        }
+      ]
+    },
+    {
       "id": "appleskin",
       "group": "arnold",
       "kind": "download",
@@ -2981,6 +3104,11 @@
         "farmersdelight",
         "balm",
         "hardcorerevival",
+        "shogi",
+        "waystones",
+        "culturaldelights",
+        "xaerominimap",
+        "xaeroworldmap",
         "badoptimizations",
         "modernfix",
         "lithium",
@@ -3052,6 +3180,11 @@
         "farmersdelight",
         "balm",
         "hardcorerevival",
+        "shogi",
+        "waystones",
+        "culturaldelights",
+        "xaerominimap",
+        "xaeroworldmap",
         "appleskin",
         "badoptimizations",
         "modernfix",
@@ -3173,6 +3306,11 @@
         "farmersdelight",
         "balm",
         "hardcorerevival",
+        "shogi",
+        "waystones",
+        "culturaldelights",
+        "xaerominimap",
+        "xaeroworldmap",
         "appleskin",
         "badoptimizations",
         "modernfix",

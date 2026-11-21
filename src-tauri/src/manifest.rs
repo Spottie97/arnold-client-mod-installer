@@ -1437,10 +1437,128 @@ mod tests {
             by_id("hardcorerevival").requires,
             vec!["base".to_string(), "balm".to_string()]
         );
-        assert_eq!(manifest.components.len(), 120);
-        assert_eq!(manifest.kits["basic"].components.len(), 63);
-        assert_eq!(manifest.kits["full"].components.len(), 114);
-        assert_eq!(manifest.kits["recommended"].components.len(), 114);
+        assert_eq!(manifest.components.len(), 125);
+        assert_eq!(manifest.kits["basic"].components.len(), 68);
+        assert_eq!(manifest.kits["full"].components.len(), 119);
+        assert_eq!(manifest.kits["recommended"].components.len(), 119);
+    }
+
+    #[test]
+    fn waystones_crops_and_xaero_maps_come_from_modrinth_in_every_kit() {
+        let manifest = load_fixture_manifest().unwrap();
+        let by_id = |id: &str| {
+            manifest
+                .components
+                .iter()
+                .find(|component| component.id == id)
+                .unwrap_or_else(|| panic!("missing {id}"))
+        };
+        let pins = [
+            (
+                "shogi",
+                "Shogi",
+                "26.3.0.3",
+                "Library needed by Waystones. The server runs it too, so every kit installs it.",
+                "shogi-fabric-26.3-26.3.0.3.jar",
+                "shogi-*.jar",
+                "https://cdn.modrinth.com/data/bi4iCmsw/versions/9gkJoFhj/shogi-fabric-26.3-26.3.0.3.jar",
+                "f050b6360b188a82ca7e3fbb0d00eff4c02b9b39bc991fbddcf4a3588f594887d15f6421e50d5a7452a53ec35d44ec9b325d7826f77393af9543fe3383cb142d",
+                "5a24c09a6b175c9fc2a0f4a9cab114c14e00aaa9",
+                466_899_u64,
+            ),
+            (
+                "waystones",
+                "Waystones",
+                "26.3.0.3",
+                "Teleport stones for the Arnold server. The server runs it too, so every kit installs it.",
+                "waystones-fabric-26.3-26.3.0.3.jar",
+                "waystones-*.jar",
+                "https://cdn.modrinth.com/data/LOpKHB2A/versions/prbIOsDC/waystones-fabric-26.3-26.3.0.3.jar",
+                "1b4d1208382f4568f83341c7cc412354beb5c360e4f0bf0718615908e05a4a6eddc1abca8e3a7b233d273d5d95f93dff7f954072e4939f97edb8180021e83619",
+                "606b37a18939e59bf0a3fbcb48db5d27ebd7f7ae",
+                1_262_275,
+            ),
+            (
+                "culturaldelights",
+                "Cultural Delights Refabricated",
+                "0.19.8.4-26.3-refabricated",
+                "More crops and foods for Farmer's Delight. The server runs it too, so every kit installs it.",
+                "culturaldelights-26.3-0.19.8.4-refabricated.jar",
+                "culturaldelights-*.jar",
+                "https://cdn.modrinth.com/data/YttyNOFA/versions/Tm0VloHM/culturaldelights-26.3-0.19.8.4-refabricated.jar",
+                "b67f6b5183d57a3a198d2ef90df8466d2e32f426d6874e22a72f25433b84b92f445482c06c470f982fea754813dc9f4d6d8465a257a90ec50706e57bee5cd077",
+                "c47a843c7e7ccef3223533c8532949acc4af9bd6",
+                1_209_907,
+            ),
+            (
+                "xaerominimap",
+                "Xaero's Minimap",
+                "26.6.2",
+                "Minimap. Fair-play settings come from the server, so every kit gets the same map.",
+                "xaerominimap-fabric-26.3-26.6.2.jar",
+                "xaerominimap-*.jar",
+                "https://cdn.modrinth.com/data/1bokaNcj/versions/MfxfgXaO/xaerominimap-fabric-26.3-26.6.2.jar",
+                "edf57b80cfe0e0fe229728a6babc3b25c364c07a0406bcdb3a21f73fc225b98954c68ff456c7b1af3182c48512f29d47238ddc501dbfd5eaca0a4609fddcc280",
+                "9b44e5718f9258ed32283a391e19a1d46464188a",
+                2_233_189,
+            ),
+            (
+                "xaeroworldmap",
+                "Xaero's World Map",
+                "1.47.2",
+                "Full-screen world map of places you have seen. Every kit gets it so nobody is left without a map.",
+                "xaeroworldmap-fabric-26.3-1.47.2.jar",
+                "xaeroworldmap-*.jar",
+                "https://cdn.modrinth.com/data/NcUtCpym/versions/VM8lNSSM/xaeroworldmap-fabric-26.3-1.47.2.jar",
+                "cac3c0fb3121ddebc7f073571dcbce5f1811ca001ea94ef03c1da667e8a3413144f570c4b593f632358eff98fa138631ed7907fd1bd5da7d43c037ea782125fb",
+                "1282302b6c92050cfab7c1db45cf3d92d9a331c5",
+                1_488_669,
+            ),
+        ];
+        for (id, name, version, description, filename, glob, url, sha512, sha1, size) in pins {
+            let component = by_id(id);
+            assert_eq!(component.name, name, "{id}");
+            assert_eq!(component.version, version, "{id}");
+            assert_eq!(component.description, description, "{id}");
+            assert_eq!(component.group, ComponentGroup::Arnold, "{id}");
+            assert_eq!(component.kind, ComponentKind::Download, "{id}");
+            assert!(component.required_in_all_kits, "{id} must be locked");
+            assert_eq!(
+                component.license.as_deref(),
+                Some("LicenseRef-All-Rights-Reserved"),
+                "{id}"
+            );
+            assert_eq!(component.files.len(), 1, "{id}");
+            let file = file_of(&manifest, id, filename);
+            assert_eq!(file.dest, FileDest::Mods, "{id}");
+            assert_eq!(file.match_glob, glob, "{id}");
+            assert_eq!(file.url, url, "{id}");
+            assert!(file.url.starts_with("https://cdn.modrinth.com/"), "{id}");
+            assert!(
+                !file.url.starts_with("https://github.com/"),
+                "{id} must not be rehosted"
+            );
+            assert_eq!(file.sha512, sha512, "{id}");
+            assert_eq!(file.sha1.as_deref(), Some(sha1), "{id}");
+            assert_eq!(file.size, size, "{id}");
+            for kit in ["basic", "full", "recommended"] {
+                assert!(
+                    manifest.kits[kit].components.iter().any(|item| item == id),
+                    "{kit} missing {id}"
+                );
+            }
+        }
+        assert_eq!(by_id("shogi").requires, vec!["base".to_string()]);
+        assert_eq!(
+            by_id("waystones").requires,
+            vec!["base".to_string(), "balm".to_string(), "shogi".to_string()]
+        );
+        assert_eq!(
+            by_id("culturaldelights").requires,
+            vec!["base".to_string(), "farmersdelight".to_string()]
+        );
+        assert_eq!(by_id("xaerominimap").requires, vec!["base".to_string()]);
+        assert_eq!(by_id("xaeroworldmap").requires, vec!["base".to_string()]);
     }
 
     #[test]
@@ -2051,8 +2169,13 @@ mod tests {
         expected.insert("farmersdelight".to_string());
         expected.insert("balm".to_string());
         expected.insert("hardcorerevival".to_string());
+        expected.insert("shogi".to_string());
+        expected.insert("waystones".to_string());
+        expected.insert("culturaldelights".to_string());
+        expected.insert("xaerominimap".to_string());
+        expected.insert("xaeroworldmap".to_string());
         expected.insert("deck".to_string());
-        assert_eq!(locked.len(), 51);
+        assert_eq!(locked.len(), 56);
         assert_eq!(locked, expected);
     }
 
@@ -2501,6 +2624,11 @@ mod tests {
             "drinkbeer",
             "balm",
             "hardcorerevival",
+            "shogi",
+            "waystones",
+            "culturaldelights",
+            "xaerominimap",
+            "xaeroworldmap",
         ] {
             let component = by_id(id);
             assert_eq!(

@@ -419,6 +419,11 @@ mod tests {
             "farmersdelight",
             "balm",
             "hardcorerevival",
+            "shogi",
+            "waystones",
+            "culturaldelights",
+            "xaerominimap",
+            "xaeroworldmap",
         ] {
             assert!(
                 plan.components.iter().any(|item| item == id),
@@ -704,6 +709,11 @@ mod tests {
             "farmersdelight",
             "balm",
             "hardcorerevival",
+            "shogi",
+            "waystones",
+            "culturaldelights",
+            "xaerominimap",
+            "xaeroworldmap",
             "base",
         ] {
             assert!(

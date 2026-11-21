@@ -19,7 +19,7 @@ The Arnold server runs Better Adventures+ 1.64, so every kit installs the Better
 
 | Kit | For | What's inside |
 |---|---|---|
-| **Basic** | Almost any PC | The Better Adventures+ mods needed to join, Sodium and the client performance mods, Arnold Decks, Ships and *lighter* Snowfall, Diet+ food groups, Serene Seasons, Drink Beer Refill, Farmer's Delight, Hardcore Revival, Wakes and Particle Rain |
+| **Basic** | Almost any PC | The Better Adventures+ mods needed to join, Sodium and the client performance mods, Arnold Decks, Ships and *lighter* Snowfall, Diet+ food groups, Serene Seasons, Drink Beer Refill, Farmer's Delight, Hardcore Revival, Waystones, Cultural Delights, Xaero's maps, Wakes and Particle Rain |
 | **Full** | Gaming PCs | Everything in Basic with full Snowfall, plus the Better Adventures+ client mods, shaders (Iris + Complementary Reimagined, Miniature), AppleSkin food info and the Ocean mods |
 | **Custom** | Tinkerers | Pick mods one by one. Arnold Decks and the mods needed to join always stay on |
 
