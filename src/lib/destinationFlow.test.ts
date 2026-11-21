@@ -31,6 +31,7 @@ interface Folder {
 interface PendingInstall {
   resolve: (value: string) => void;
   reject: (reason?: unknown) => void;
+  requestId: string | undefined;
 }
 
 interface Backend {
@@ -42,6 +43,10 @@ interface Backend {
   holdInstall: boolean;
   pending: PendingInstall | null;
   legacyOffer: ImportOffer | null;
+  /** Mirrors the Rust CancelRegistry: cancels are kept per request id. */
+  cancelledIds: Set<string>;
+  installIds: (string | undefined)[];
+  cancelIds: (string | undefined)[];
 }
 
 function folderOf(folders: Record<string, Folder>, path: string): Folder {
@@ -152,6 +157,9 @@ function fakeBackend(seed: Pick<Backend, "prefs" | "root" | "folders">): Backend
     holdInstall: false,
     pending: null,
     legacyOffer: null,
+    cancelledIds: new Set(),
+    installIds: [],
+    cancelIds: [],
   };
   unlisten = vi.fn();
   progressHandler = null;
@@ -218,18 +226,27 @@ function fakeBackend(seed: Pick<Backend, "prefs" | "root" | "folders">): Backend
           detail: `${plan.packDir} vs ${dir}`,
         };
       }
+      const requestId = args.requestId as string | undefined;
+      backend.installIds.push(requestId);
       if (backend.holdInstall) {
         return new Promise<string>((resolve, reject) => {
-          backend.pending = { resolve, reject };
+          backend.pending = { resolve, reject, requestId };
         });
+      }
+      if (requestId !== undefined && backend.cancelledIds.has(requestId)) {
+        throw { code: "E-CANCELLED", title: "Cancelled", hint: "", detail: "" };
       }
       backend.installed = plan;
       return "run-1";
     }
     if (cmd === "cancel") {
       backend.calls.push(cmd);
-      if (backend.pending) {
-        backend.pending.reject({ code: "E-CANCELLED", title: "Cancelled", hint: "", detail: "" });
+      const requestId = args.requestId as string | undefined;
+      backend.cancelIds.push(requestId);
+      if (requestId !== undefined) backend.cancelledIds.add(requestId);
+      const pending = backend.pending;
+      if (pending && (requestId === undefined || pending.requestId === requestId)) {
+        pending.reject({ code: "E-CANCELLED", title: "Cancelled", hint: "", detail: "" });
       }
       return null;
     }
@@ -454,6 +471,94 @@ describe("destinationFlow", () => {
     expect(backend.calls.indexOf("cancel")).toBeGreaterThan(backend.calls.indexOf("install"));
     await rejected;
     expect(unlisten).toHaveBeenCalledOnce();
+  });
+
+  it("cancel carries the same request id as the install", async () => {
+    const backend = fakeBackend({
+      prefs: { tourDone: true, selectedPack: "pack-x", useDefaultFolder: true },
+      root: ROOT,
+      folders: { [ROOT]: { owner: "pack-x", arnoldJars: [], stashes: [] } },
+    });
+    backend.holdInstall = true;
+    const flow = flowFor();
+    const pending = flow.install(planOf(backend), detectionOf(backend), "pack-x", false, noHooks);
+    const rejected = expect(pending).rejects.toMatchObject({ code: "E-CANCELLED" });
+    await vi.waitFor(() => expect(backend.calls).toContain("install"));
+    await api.cancelInstall();
+    await rejected;
+    expect(backend.installIds[0]).toMatch(/^req-/);
+    expect(backend.cancelIds).toEqual([backend.installIds[0]]);
+  });
+
+  it("cancel pressed before the install command is sent is honoured", async () => {
+    const backend = fakeBackend({
+      prefs: { tourDone: true, selectedPack: "pack-x", useDefaultFolder: true },
+      root: ROOT,
+      folders: { [ROOT]: { owner: "pack-x", arnoldJars: [], stashes: [] } },
+    });
+    let openListener: (() => void) | null = null;
+    vi.mocked(listen).mockImplementation((async () => {
+      backend.calls.push("listen");
+      await new Promise<void>((resolve) => {
+        openListener = resolve;
+      });
+      return unlisten;
+    }) as unknown as typeof listen);
+    const flow = flowFor();
+    const pending = flow.install(planOf(backend), detectionOf(backend), "pack-x", false, noHooks);
+    const rejected = expect(pending).rejects.toMatchObject({ code: "E-CANCELLED" });
+    await vi.waitFor(() => expect(openListener).not.toBeNull());
+    await api.cancelInstall();
+    expect(backend.cancelIds).toHaveLength(1);
+    expect(backend.cancelIds[0]).toMatch(/^req-/);
+    openListener!();
+    await rejected;
+    expect(backend.calls).not.toContain("install");
+    expect(backend.installed).toBeNull();
+    expect(unlisten).toHaveBeenCalledOnce();
+  });
+
+  it("cancel that reaches the backend before its worker registers is honoured", async () => {
+    const backend = fakeBackend({
+      prefs: { tourDone: true, selectedPack: "pack-x", useDefaultFolder: true },
+      root: ROOT,
+      folders: { [ROOT]: { owner: "pack-x", arnoldJars: [], stashes: [] } },
+    });
+    const flow = flowFor();
+    // The backend has stored this request's cancel before the worker looked at it.
+    const realInvoke = vi.mocked(invoke).getMockImplementation()!;
+    vi.mocked(invoke).mockImplementation(((cmd: string, args?: Record<string, unknown>) => {
+      if (cmd === "install") backend.cancelledIds.add(String(args?.requestId));
+      return realInvoke(cmd, args);
+    }) as typeof invoke);
+    await expect(
+      flow.install(planOf(backend), detectionOf(backend), "pack-x", false, noHooks),
+    ).rejects.toMatchObject({ code: "E-CANCELLED" });
+    expect(backend.installed).toBeNull();
+  });
+
+  it("a cancel from an earlier install never stops the next one", async () => {
+    const backend = fakeBackend({
+      prefs: { tourDone: true, selectedPack: "pack-x", useDefaultFolder: true },
+      root: ROOT,
+      folders: { [ROOT]: { owner: "pack-x", arnoldJars: [], stashes: [] } },
+    });
+    backend.holdInstall = true;
+    const flow = flowFor();
+    const first = flow.install(planOf(backend), detectionOf(backend), "pack-x", false, noHooks);
+    const firstRejected = expect(first).rejects.toMatchObject({ code: "E-CANCELLED" });
+    await vi.waitFor(() => expect(backend.installIds).toHaveLength(1));
+    await api.cancelInstall();
+    await firstRejected;
+    // No install is running now: a stray Cancel has no request to stop.
+    await api.cancelInstall();
+    expect(backend.cancelIds[1]).toBeUndefined();
+    backend.holdInstall = false;
+    await expect(
+      flow.install(planOf(backend), detectionOf(backend), "pack-x", false, noHooks),
+    ).resolves.toBe("run-1");
+    expect(backend.installIds[1]).not.toEqual(backend.installIds[0]);
+    expect(backend.cancelledIds.has(backend.installIds[1]!)).toBe(false);
   });
 
   it("BA+ refusal offers the import, other packs do not", async () => {

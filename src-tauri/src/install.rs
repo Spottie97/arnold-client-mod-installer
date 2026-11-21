@@ -84,21 +84,42 @@ pub fn dest_rel(file: &PlanFile) -> String {
     format!("{}/{}", file.dest.folder(), file.file)
 }
 
+/// A legacy-named file is removed without asking only when the installer can
+/// prove it put those exact bytes there: they match this pack's tracked record,
+/// or a known checksum (the manifest's `knownSha512` or the shipped build).
+/// A matching name alone is never proof. Anything else is a collision to confirm.
 pub fn decide_legacy_replace(
-    is_tracked: bool,
+    tracked_sha512: Option<&str>,
     file_sha512: Option<&str>,
     known: &[String],
-    known_name: bool,
 ) -> ReplaceAction {
-    if is_tracked || known_name {
-        return ReplaceAction::Replace;
+    let Some(hash) = file_sha512 else {
+        return ReplaceAction::Ask;
+    };
+    let owned = tracked_sha512.is_some_and(|tracked| tracked.eq_ignore_ascii_case(hash))
+        || known.iter().any(|k| k.eq_ignore_ascii_case(hash));
+    if owned {
+        ReplaceAction::Replace
+    } else {
+        ReplaceAction::Ask
     }
-    if let Some(hash) = file_sha512 {
-        if known.iter().any(|k| k.eq_ignore_ascii_case(hash)) {
-            return ReplaceAction::Replace;
-        }
+}
+
+/// The tracked record for `rel`, but only from this pack's own state.
+fn own_tracked_sha512<'a>(
+    state: Option<&'a InstalledState>,
+    plan: &InstallPlan,
+    rel: &str,
+) -> Option<&'a str> {
+    let state = state?;
+    let other_pack = matches!(
+        (state.pack_id.as_deref(), plan.pack_id.as_str()),
+        (Some(owner), incoming) if !incoming.is_empty() && owner != incoming
+    );
+    if other_pack {
+        return None;
     }
-    ReplaceAction::Ask
+    state.file_by_path(rel).map(|file| file.sha512.as_str())
 }
 
 pub fn snow_replace_patterns(component_id: &str, extra: &[String]) -> Vec<String> {
@@ -176,10 +197,18 @@ fn refuse_unconfirmed_collisions(
         .map(|item| item.rel.clone())
         .collect();
     if let Some(path) = asks.first() {
+        let older_build = asks
+            .iter()
+            .any(|rel| rel.rsplit('/').next().is_some_and(is_known_legacy_snow_jar));
+        let named = if older_build {
+            " The name matches an older Snowfall build, but the bytes don't match one the installer put there, so it may be your own copy."
+        } else {
+            ""
+        };
         return Err(AppError::Collision {
             path: path.clone(),
             detail: format!(
-                "Unknown Arnold-looking file(s) {}. Tracked files and known checksums are replaced automatically; this one was left for you to confirm.",
+                "Unknown Arnold-looking file(s) {}. Tracked files and known checksums are replaced automatically; this one was left for you to confirm.{named}",
                 asks.join(", ")
             ),
         });
@@ -241,13 +270,14 @@ fn collect_replacements(
             }
             let path = game_dir.join(&rel);
             let hash = hash_file(&path).ok();
-            let tracked = state.is_some_and(|s| s.file_by_path(&rel).is_some());
-            let known_name = file.component_id == "snow" && is_known_legacy_snow_jar(&name);
+            let tracked = own_tracked_sha512(state, plan, &rel);
+            let mut known = file.known_sha512.clone();
+            known.push(file.sha512.clone());
             let kept = kept_aside.iter().any(|item| item == &rel);
             let action = if kept {
                 ReplaceAction::Ask
             } else {
-                decide_legacy_replace(tracked, hash.as_deref(), &file.known_sha512, known_name)
+                decide_legacy_replace(tracked, hash.as_deref(), &known)
             };
             out.push(PendingReplace {
                 rel,
@@ -1340,9 +1370,11 @@ mod tests {
         let (manifest, _, _) = test_manifest_and_fetcher();
         let plan = basic_plan(&manifest);
         let rel = "mods/arnold-snowfall-1.3.2.jar";
+        // The name matches an older build, but the bytes are unknown: ask.
         let plain = collect_replacements(game, &plan, None, &[]).unwrap();
         let found = plain.iter().find(|item| item.rel == rel).unwrap();
-        assert_eq!(found.action, ReplaceAction::Replace);
+        assert_eq!(found.action, ReplaceAction::Ask);
+        assert!(!found.kept_aside);
         let protected = collect_replacements(game, &plan, None, &[rel.to_string()]).unwrap();
         let kept = protected.iter().find(|item| item.rel == rel).unwrap();
         assert_eq!(kept.action, ReplaceAction::Ask);
@@ -1352,21 +1384,82 @@ mod tests {
     #[test]
     fn decide_replace_only_when_tracked_or_known() {
         assert_eq!(
-            decide_legacy_replace(true, Some("abc"), &[], false),
+            decide_legacy_replace(Some("abc"), Some("abc"), &[]),
             ReplaceAction::Replace
         );
         assert_eq!(
-            decide_legacy_replace(false, Some("known"), &["known".into()], false),
+            decide_legacy_replace(None, Some("known"), &["known".into()]),
             ReplaceAction::Replace
         );
         assert_eq!(
-            decide_legacy_replace(false, Some("mystery"), &["known".into()], false),
+            decide_legacy_replace(None, Some("mystery"), &["known".into()]),
             ReplaceAction::Ask
         );
+        // Tracked path, but the player changed the bytes: not ours any more.
         assert_eq!(
-            decide_legacy_replace(false, Some("mystery"), &[], true),
-            ReplaceAction::Replace
+            decide_legacy_replace(Some("abc"), Some("edited"), &[]),
+            ReplaceAction::Ask
         );
+        // Unreadable file: never removed on trust.
+        assert_eq!(
+            decide_legacy_replace(Some("abc"), None, &["abc".into()]),
+            ReplaceAction::Ask
+        );
+        assert_eq!(decide_legacy_replace(None, None, &[]), ReplaceAction::Ask);
+    }
+
+    #[test]
+    fn tracked_legacy_name_is_replaced_only_with_a_matching_hash_from_this_pack() {
+        let tmp = tempdir().unwrap();
+        let game = tmp.path();
+        prepare_game(game);
+        let (manifest, _, _) = test_manifest_and_fetcher();
+        let mut plan = basic_plan(&manifest);
+        plan.pack_id = "pack-x".into();
+        let rel = "mods/arnold-snowfall-1.3.2.jar";
+        fs::write(game.join(rel), b"installer-wrote-this").unwrap();
+        let action = |state: &InstalledState| {
+            collect_replacements(game, &plan, Some(state), &[])
+                .unwrap()
+                .into_iter()
+                .find(|item| item.rel == rel)
+                .unwrap()
+                .action
+        };
+
+        let mut own = InstalledState::new("installer", "x-1");
+        own.pack_id = Some("pack-x".into());
+        record_file(&mut own, rel, sha512_hex(b"installer-wrote-this"), "snow");
+        assert_eq!(action(&own), ReplaceAction::Replace);
+
+        let mut edited = own.clone();
+        edited.files.clear();
+        record_file(&mut edited, rel, sha512_hex(b"something-else"), "snow");
+        assert_eq!(action(&edited), ReplaceAction::Ask);
+
+        let mut other = own.clone();
+        other.pack_id = Some("pack-a".into());
+        assert_eq!(action(&other), ReplaceAction::Ask);
+    }
+
+    #[test]
+    fn exact_copy_of_the_shipped_build_under_a_legacy_name_is_replaced() {
+        let tmp = tempdir().unwrap();
+        let game = tmp.path();
+        prepare_game(game);
+        let (manifest, _, _) = test_manifest_and_fetcher();
+        let mut plan = basic_plan(&manifest);
+        let rel = "mods/arnold-snowfall-1.3.2.jar";
+        let snow = plan
+            .add
+            .iter_mut()
+            .find(|file| file.component_id == "snow")
+            .expect("basic plan installs snow");
+        snow.sha512 = sha512_hex(b"shipped-build");
+        fs::write(game.join(rel), b"shipped-build").unwrap();
+        let found = collect_replacements(game, &plan, None, &[]).unwrap();
+        let item = found.iter().find(|item| item.rel == rel).unwrap();
+        assert_eq!(item.action, ReplaceAction::Replace);
     }
 
     #[test]
@@ -1551,21 +1644,23 @@ mod tests {
     }
 
     #[test]
-    fn named_legacy_snowfall_jars_are_replaced() {
+    fn named_legacy_snowfall_jars_need_consent() {
         let tmp = tempdir().unwrap();
         let game = tmp.path();
         prepare_game(game);
         let (manifest, fetcher, _) = test_manifest_and_fetcher();
-        for name in [
+        let names = [
             "arnold-snowfall-1.2.0.jar",
             "arnold-snowfall-1.3.0.jar",
             "arnold-snowfall-1.3.1.jar",
             "arnold-snowfall-1.3.2.jar",
-        ] {
+        ];
+        for name in names {
             fs::write(game.join("mods").join(name), format!("old-{name}")).unwrap();
         }
         let plan = basic_plan(&manifest);
-        run_install(
+        // Name alone is not proof of ownership: nothing is touched without consent.
+        let err = run_install(
             &InstallTarget::same_folder(game),
             &plan,
             &manifest,
@@ -1575,13 +1670,30 @@ mod tests {
             16.0,
             &|_| {},
         )
+        .unwrap_err();
+        assert_eq!(err.code(), "P-COLLISION");
+        for name in names {
+            assert_eq!(
+                fs::read(game.join("mods").join(name)).unwrap(),
+                format!("old-{name}").into_bytes(),
+                "{name} must be left alone"
+            );
+        }
+        assert!(!game.join("mods/arnold-snowfall-1.3.3.jar").exists());
+
+        // The player confirms: the existing consent path replaces them.
+        run_install(
+            &InstallTarget::same_folder(game),
+            &plan,
+            &manifest,
+            &fetcher,
+            &AtomicBool::new(false),
+            true,
+            16.0,
+            &|_| {},
+        )
         .unwrap();
-        for name in [
-            "arnold-snowfall-1.2.0.jar",
-            "arnold-snowfall-1.3.0.jar",
-            "arnold-snowfall-1.3.1.jar",
-            "arnold-snowfall-1.3.2.jar",
-        ] {
+        for name in names {
             assert!(!game.join("mods").join(name).exists(), "{name} should go");
         }
         assert!(game.join("mods/arnold-snowfall-1.3.3.jar").exists());

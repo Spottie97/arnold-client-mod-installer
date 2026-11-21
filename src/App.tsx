@@ -3,7 +3,9 @@ import { AppShell } from "./components/AppShell";
 import { Tour } from "./components/Tour";
 import {
   asErrorPayload,
+  beginInstallRequest,
   cancelInstall,
+  endInstallRequest,
   confirmImport,
   copyDiagnostics,
   copyFromOldFolder,
@@ -453,20 +455,25 @@ export default function App() {
   };
 
   const startRepair = async () => {
+    const requestId = beginInstallRequest();
     setProgressLog([]);
     go("progress");
-    const stop = await listenProgress((event) => {
-      setProgress(event);
-      setProgressLog((rows) => mergeProgress(rows, event));
-    });
     try {
-      await repairInstall();
-      go("done");
-    } catch (err) {
-      setError(asErrorPayload(err));
-      go("error");
+      const stop = await listenProgress((event) => {
+        setProgress(event);
+        setProgressLog((rows) => mergeProgress(rows, event));
+      });
+      try {
+        await repairInstall(requestId);
+        go("done");
+      } catch (err) {
+        setError(asErrorPayload(err));
+        go("error");
+      } finally {
+        stop();
+      }
     } finally {
-      stop();
+      endInstallRequest(requestId);
     }
   };
 

@@ -137,7 +137,7 @@ pub fn availability_from(found: Option<&FoundLauncher>) -> LauncherAvailability 
 }
 
 /// Store launcher first, then `MinecraftLauncher.exe` under Program Files (x86) and Program Files.
-/// Nothing else. The `minecraft:` protocol is not a launcher we can trust.
+/// Nothing else. The `minecraft` URI scheme is not a launcher we can trust.
 pub fn found_from_probe(probe: &LauncherProbe) -> Option<FoundLauncher> {
     match probe.os {
         HostOs::Windows => {
@@ -988,14 +988,28 @@ mod tests {
 
     #[test]
     fn sources_do_not_link_to_tlauncher_or_a_minecraft_uri() {
-        for source in [
-            include_str!("launcher.rs"),
-            include_str!("profiles.rs"),
-            include_str!("commands.rs"),
+        // Built from pieces so this test does not match its own sentinels.
+        let tl_site = ["tlauncher", ".org"].concat();
+        let mc_uri = ["minecraft", ":"].concat();
+        let test_mod = ["\n", "mod tests {"].concat();
+        for (name, source) in [
+            ("launcher.rs", include_str!("launcher.rs")),
+            ("profiles.rs", include_str!("profiles.rs")),
+            ("commands.rs", include_str!("commands.rs")),
         ] {
-            let lower = source.to_ascii_lowercase();
-            assert!(!lower.contains("tlauncher.org"));
-            assert!(!lower.contains("minecraft:"));
+            // Scan everything above the unit-test module: that is the shipped code.
+            let production = source.split(test_mod.as_str()).next().unwrap();
+            let attr = production.trim_end().lines().last().unwrap_or_default();
+            assert!(
+                attr.starts_with("#[cfg(") && attr.contains("test"),
+                "{name}: cut is not at the #[cfg(test)] module: {attr:?}"
+            );
+            let lower = production.to_ascii_lowercase();
+            assert!(
+                !lower.contains(&tl_site),
+                "{name} links to the TLauncher site"
+            );
+            assert!(!lower.contains(&mc_uri), "{name} uses a minecraft URI");
             let mut start = 0;
             while let Some(found) = lower[start..].find("tlauncher") {
                 let index = start + found;

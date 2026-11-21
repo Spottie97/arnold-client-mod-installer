@@ -38,12 +38,19 @@ export function createDestinationFlow(deps: DestinationDeps) {
       hooks: InstallHooks,
     ): Promise<string | null> => {
       if (!planMatchesDestination(plan, detection, selectedPack)) return null;
-      const stop = await api.listenProgress(hooks.onProgress);
+      // The request exists from the moment the player starts, so a Cancel at any
+      // point after this (even before the backend worker starts) is honoured.
+      const requestId = api.beginInstallRequest();
       try {
-        hooks.onStart();
-        return await api.runInstall(plan, replace);
+        const stop = await api.listenProgress(hooks.onProgress);
+        try {
+          hooks.onStart();
+          return await api.runInstall(plan, replace, requestId);
+        } finally {
+          stop();
+        }
       } finally {
-        stop();
+        api.endInstallRequest(requestId);
       }
     },
     /** Import offer for a Better Adventures+ refusal on an occupied folder, else null. Read only. */

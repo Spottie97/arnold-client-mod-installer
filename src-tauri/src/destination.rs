@@ -527,7 +527,13 @@ mod tests {
         fetcher: &MapFetcher,
         ba: &[u8],
         snow: &[u8],
+        options_before_transition: &[u8],
     ) {
+        // The folder transition itself must not touch the player's options.txt.
+        assert_eq!(
+            fs::read(game.join("options.txt")).unwrap(),
+            options_before_transition
+        );
         let plan = plan_at(
             manifest,
             &basic_selection(),
@@ -581,7 +587,46 @@ mod tests {
             fs::read(game.join("screenshots/shot.png")).unwrap(),
             b"shot"
         );
-        assert_eq!(fs::read(game.join("options.txt")).unwrap(), b"options");
+        assert_player_options_kept(
+            options_before_transition,
+            &fs::read(game.join("options.txt")).unwrap(),
+        );
+        assert!(
+            !load_state(game)
+                .unwrap()
+                .unwrap()
+                .files
+                .iter()
+                .any(|file| file.path == "options.txt"),
+            "options.txt is the player's file and is never owned"
+        );
+    }
+
+    /// Quality may only append vanilla keys the player has not set. Every byte
+    /// the player wrote stays, and a file that already sets them is unchanged.
+    fn assert_player_options_kept(before: &[u8], after: &[u8]) {
+        const QUALITY_KEYS: [&str; 2] = ["renderDistance", "cloudStatus"];
+        let before = std::str::from_utf8(before).unwrap();
+        let after = std::str::from_utf8(after).unwrap();
+        let has_key = |text: &str, key: &str| {
+            text.lines()
+                .any(|line| line.split_once(':').is_some_and(|(k, _)| k == key))
+        };
+        if QUALITY_KEYS.iter().all(|key| has_key(before, key)) {
+            assert_eq!(after, before, "a complete options.txt must not change");
+            return;
+        }
+        assert!(
+            after.starts_with(before),
+            "player's options.txt text was rewritten: {after:?}"
+        );
+        for line in after[before.len()..].lines().filter(|l| !l.is_empty()) {
+            let key = line.split_once(':').map(|(k, _)| k).unwrap_or(line);
+            assert!(
+                QUALITY_KEYS.contains(&key) && !has_key(before, key),
+                "unexpected options.txt change: {line:?}"
+            );
+        }
     }
 
     fn occupied(result: Result<super::Outcome, AppError>) {
@@ -617,6 +662,7 @@ mod tests {
         prepare_game(&game);
         let (ba, snow) = legacy_shared_game(&game);
         let (manifest, fetcher, _) = test_manifest_and_fetcher();
+        let options = fs::read(game.join("options.txt")).unwrap();
         let before = tree_fingerprint(&game);
         let selected = apply_change(
             &Prefs::default(),
@@ -642,7 +688,15 @@ mod tests {
         assert!(toggled.prefs.use_default_folder);
         assert!(report.legacy);
         assert_eq!(report.from, BA_PLUS_PACK_ID);
-        install_pack_x_over_legacy(&game, &toggled.prefs, &manifest, &fetcher, &ba, &snow);
+        install_pack_x_over_legacy(
+            &game,
+            &toggled.prefs,
+            &manifest,
+            &fetcher,
+            &ba,
+            &snow,
+            &options,
+        );
     }
 
     #[test]
@@ -651,6 +705,11 @@ mod tests {
         let game = tmp.path().join("game");
         prepare_game(&game);
         let (ba, snow) = legacy_shared_game(&game);
+        // A real options.txt already sets the quality keys, so it must come
+        // through the transition and the install byte for byte.
+        let options =
+            b"version:4671\r\nrenderDistance:20\r\ncloudStatus:false\r\nfov:0.25".to_vec();
+        fs::write(game.join("options.txt"), &options).unwrap();
         let (manifest, fetcher, _) = test_manifest_and_fetcher();
         let selected = apply_change(
             &Prefs::default(),
@@ -677,7 +736,16 @@ mod tests {
         let report = kept.entry.as_ref().unwrap().switch.as_ref().unwrap();
         assert!(report.legacy);
         assert_eq!(report.from, BA_PLUS_PACK_ID);
-        install_pack_x_over_legacy(&game, &kept.prefs, &manifest, &fetcher, &ba, &snow);
+        install_pack_x_over_legacy(
+            &game,
+            &kept.prefs,
+            &manifest,
+            &fetcher,
+            &ba,
+            &snow,
+            &options,
+        );
+        assert_eq!(fs::read(game.join("options.txt")).unwrap(), options);
     }
 
     #[test]

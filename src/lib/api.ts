@@ -141,22 +141,72 @@ export async function setGameDir(path: string): Promise<Detection> {
   return invoke<Detection>("set_game_dir", { path });
 }
 
+/**
+ * One id per install or repair the player starts. `install`, `repair` and
+ * `cancel` all carry it, so a Cancel pressed before the backend worker has
+ * registered its flag is still honoured, and never leaks into the next run.
+ */
+interface InstallRequest {
+  id: string;
+  cancelled: boolean;
+}
+
+let activeRequest: InstallRequest | null = null;
+let requestSeq = 0;
+
+export const CANCELLED_PAYLOAD: ErrorPayload = {
+  code: "E-CANCELLED",
+  title: "Install cancelled",
+  hint: "Nothing was left half-applied. Your game folder is as it was before this run.",
+  detail: "Cancelled before the install started.",
+};
+
+function newRequestId(): string {
+  requestSeq += 1;
+  const random =
+    globalThis.crypto?.randomUUID?.() ??
+    `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  return `req-${requestSeq}-${random}`;
+}
+
+/** Call when the player starts an install or repair, before anything async. */
+export function beginInstallRequest(): string {
+  const id = newRequestId();
+  activeRequest = { id, cancelled: false };
+  return id;
+}
+
+/** Call when that install or repair has settled. */
+export function endInstallRequest(id: string): void {
+  if (activeRequest?.id === id) activeRequest = null;
+}
+
+function cancelledLocally(id: string | undefined): boolean {
+  return id !== undefined && activeRequest?.id === id && activeRequest.cancelled;
+}
+
 export async function runInstall(
   nextPlan: InstallPlan,
   replaceCollisions = false,
+  requestId?: string,
 ): Promise<string> {
+  if (cancelledLocally(requestId)) throw CANCELLED_PAYLOAD;
   if (!isTauri()) return "mock-run";
-  return invoke<string>("install", { plan: nextPlan, replaceCollisions });
+  return invoke<string>("install", { plan: nextPlan, replaceCollisions, requestId });
 }
 
 export async function cancelInstall(): Promise<void> {
+  const request = activeRequest;
+  if (request) request.cancelled = true;
   if (!isTauri()) return;
-  await invoke("cancel");
+  // With an id the backend keeps the cancel even if its worker has not started yet.
+  await invoke("cancel", request ? { requestId: request.id } : {});
 }
 
-export async function repairInstall(): Promise<string> {
+export async function repairInstall(requestId?: string): Promise<string> {
+  if (cancelledLocally(requestId)) throw CANCELLED_PAYLOAD;
   if (!isTauri()) return "mock-repair";
-  return invoke<string>("repair");
+  return invoke<string>("repair", { requestId });
 }
 
 export async function listenProgress(onEvent: (event: ProgressEvent) => void): Promise<() => void> {

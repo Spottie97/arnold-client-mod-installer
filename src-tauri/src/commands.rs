@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
@@ -11,6 +11,7 @@ use crate::backup::{
     create_snapshot, list_snapshots as list_snapshots_on_disk, rollback as rollback_on_disk,
     uninstall_tracked, SnapshotMeta, UninstallResult,
 };
+use crate::cancel::{anonymous_request_id, CancelGuard, CancelRegistry};
 use crate::config::{
     apply_properties, format_setting_value, update_property_keys, ConfigSwitch, LITE_MARKER,
     MANAGED_HEADER,
@@ -44,9 +45,9 @@ use crate::updater::{check_update_sync, UpdateStatus};
 
 pub struct AppState {
     pub game_dir: Mutex<Option<PathBuf>>,
-    pub cancel_flag: Mutex<Arc<AtomicBool>>,
-    /// True while `install` or `repair` is on the worker. A second call is rejected
-    /// so it cannot replace the running job's cancel flag.
+    /// Request-scoped cancel flags. A cancel sent before the worker registers is kept.
+    pub cancels: CancelRegistry,
+    /// True while `install` or `repair` is on the worker. A second call is rejected.
     pub install_running: AtomicBool,
     pub manifest: Mutex<Option<ManifestLoad>>,
     pub packs: Mutex<Option<packs::PackIndexLoad>>,
@@ -73,7 +74,7 @@ impl AppState {
             .unwrap_or_else(|| BA_PLUS_PACK_ID.to_string());
         Self {
             game_dir: Mutex::new(prefs.last_game_dir),
-            cancel_flag: Mutex::new(Arc::new(AtomicBool::new(false))),
+            cancels: CancelRegistry::new(),
             install_running: AtomicBool::new(false),
             manifest: Mutex::new(None),
             packs: Mutex::new(None),
@@ -358,12 +359,20 @@ pub fn plan(sel: Selection, state: State<AppState>) -> Result<InstallPlan, Error
     .map_err(|e| e.to_payload())
 }
 
-fn fresh_cancel_flag(state: &AppState) -> Arc<AtomicBool> {
-    let next = Arc::new(AtomicBool::new(false));
-    if let Ok(mut guard) = state.cancel_flag.lock() {
-        *guard = next.clone();
+/// Register this request's cancel flag before any other work, and stop now if
+/// the player already pressed Cancel. Nothing has been read or moved yet.
+fn begin_cancellable(
+    state: &AppState,
+    request_id: Option<String>,
+) -> Result<CancelGuard<'_>, AppError> {
+    let id = request_id
+        .filter(|id| !id.trim().is_empty())
+        .unwrap_or_else(anonymous_request_id);
+    let guard = CancelGuard::new(&state.cancels, id);
+    if guard.is_cancelled() {
+        return Err(AppError::Cancelled);
     }
-    next
+    Ok(guard)
 }
 
 struct InstallRunGuard<'a> {
@@ -455,16 +464,18 @@ pub async fn install(
     app: AppHandle,
     plan: InstallPlan,
     replace_collisions: Option<bool>,
+    request_id: Option<String>,
 ) -> Result<String, ErrorPayload> {
     let worker = app.clone();
     let replace = replace_collisions.unwrap_or(false);
     spawn_install_worker("install", move || {
         let state = worker.state::<AppState>();
+        let cancel = begin_cancellable(&state, request_id).map_err(|e| e.to_payload())?;
         let _running = begin_install(&state).map_err(|e| e.to_payload())?;
         let prefs = load_prefs().map_err(|e| e.to_payload())?;
         let loaded = cached_or_load(&state).map_err(|e| e.to_payload())?;
         require_local_folder(&state).map_err(|e| e.to_payload())?;
-        let flag = fresh_cancel_flag(&state);
+        let flag = cancel.flag.clone();
         let fetcher = make_fetcher(&state);
         let name = current_pack_name(&state);
         let selected = selected_pack_id(&state);
@@ -477,6 +488,9 @@ pub async fn install(
             processes: &procs,
         };
         let sink = progress_sink(worker.clone());
+        if flag.load(Ordering::SeqCst) {
+            return Err(AppError::Cancelled.to_payload());
+        }
         let out = destination::install_at(
             &plan,
             &prefs,
@@ -485,6 +499,9 @@ pub async fn install(
             &loaded.manifest,
             |id| load_incoming_manifest(&state, id),
             |dir| {
+                if flag.load(Ordering::SeqCst) {
+                    return Err(AppError::Cancelled);
+                }
                 let pack_dir = dir.to_path_buf();
                 let target = install_target_for(&state, &pack_dir, &name);
                 run_install(
@@ -507,23 +524,22 @@ pub async fn install(
 }
 
 #[tauri::command]
-pub fn cancel(state: State<AppState>) -> Result<(), ErrorPayload> {
-    if let Ok(flag) = state.cancel_flag.lock() {
-        flag.store(true, Ordering::SeqCst);
-    }
+pub fn cancel(state: State<AppState>, request_id: Option<String>) -> Result<(), ErrorPayload> {
+    state.cancels.cancel(request_id.as_deref());
     Ok(())
 }
 
 #[tauri::command]
-pub async fn repair(app: AppHandle) -> Result<String, ErrorPayload> {
+pub async fn repair(app: AppHandle, request_id: Option<String>) -> Result<String, ErrorPayload> {
     let worker = app.clone();
     spawn_install_worker("repair", move || {
         let state = worker.state::<AppState>();
+        let cancel = begin_cancellable(&state, request_id).map_err(|e| e.to_payload())?;
         let _running = begin_install(&state).map_err(|e| e.to_payload())?;
         let prefs = load_prefs().map_err(|e| e.to_payload())?;
         let loaded = cached_or_load(&state).map_err(|e| e.to_payload())?;
         require_local_folder(&state).map_err(|e| e.to_payload())?;
-        let flag = fresh_cancel_flag(&state);
+        let flag = cancel.flag.clone();
         let fetcher = make_fetcher(&state);
         let name = current_pack_name(&state);
         let selected = selected_pack_id(&state);
@@ -535,6 +551,9 @@ pub async fn repair(app: AppHandle) -> Result<String, ErrorPayload> {
             search_roots: &roots,
             processes: &procs,
         };
+        if flag.load(Ordering::SeqCst) {
+            return Err(AppError::Cancelled.to_payload());
+        }
         let (entry, dir) = destination::prepare_destination(&prefs, &selected, &ctx, |id| {
             load_incoming_manifest(&state, id)
         })

@@ -624,9 +624,20 @@ fn error_load(err: AppError) -> ManifestLoad {
         },
         source: "error".into(),
         offline: true,
-        message: Some(err.to_string()),
+        message: Some(error_load_message(&err)),
         local_source: false,
         local_source_dir: None,
+    }
+}
+
+/// `AppError::Other` displays only its title. Keep the detail (which hash or
+/// Minecraft version did not match) so the player and the log can see why.
+fn error_load_message(err: &AppError) -> String {
+    match err {
+        AppError::Other { title, detail, .. } if !detail.trim().is_empty() => {
+            format!("{title}: {detail}")
+        }
+        other => other.to_string(),
     }
 }
 

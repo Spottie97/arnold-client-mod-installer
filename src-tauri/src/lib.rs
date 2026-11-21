@@ -1,4 +1,5 @@
 pub mod backup;
+pub mod cancel;
 pub mod commands;
 pub mod config;
 pub mod destination;
