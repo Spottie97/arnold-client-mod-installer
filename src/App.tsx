@@ -6,7 +6,6 @@ import {
   cancelInstall,
   confirmImport,
   copyDiagnostics,
-  choosePackFolder,
   copyFromOldFolder,
   detect,
   detectLegacy,
@@ -27,18 +26,14 @@ import {
   plan,
   repairInstall,
   rollback,
-  runInstall,
   scanHardware,
-  selectPack,
-  setGameDir,
   setLauncherPrefs,
   setQuality,
   setTourDone,
-  setUseDefaultFolder,
 } from "./lib/api";
 import { addonRows, freshAddonFlags, savedAddonFlags } from "./lib/addons";
 import { pickBanner, type LocalSourceInfo } from "./lib/localSource";
-import { changeDestination } from "./lib/destination";
+import { createDestinationFlow } from "./lib/destinationFlow";
 import { folderSwitchNotice } from "./lib/folderSwitch";
 import { minecraftBlocksInstall, planMatchesDestination } from "./lib/installGate";
 import { indexPackStates } from "./lib/libraryStatus";
@@ -349,28 +344,22 @@ export default function App() {
     setReloadToken((token) => token + 1);
   };
 
-  const runDestinationChange = <T,>(change: () => Promise<T>) =>
-    changeDestination(change, {
-      invalidate: invalidateInstall,
-      detect: async () => {
-        loadGeneration.current += 1;
-        setInstallReady(false);
-        setLoadedKey("");
-        return detect();
-      },
-      replan: async () => {
-        const next = await plan(selection);
-        setCurrentPlan(next);
-        return next;
-      },
-    });
+  const flow = createDestinationFlow({
+    invalidate: invalidateInstall,
+    detect: () => detect(),
+    replan: async () => {
+      loadGeneration.current += 1;
+      setInstallReady(false);
+      setLoadedKey("");
+      const next = await plan(selection);
+      setCurrentPlan(next);
+      return next;
+    },
+  });
 
   const startInstall = async (nextPlan = currentPlan, replace = replaceCollisions) => {
     if (detection?.needsFolderChoice) {
       go("pack");
-      return;
-    }
-    if (!installAllowed || !planMatchesDestination(nextPlan, detection, prefs.selectedPack)) {
       return;
     }
     if (detection && minecraftBlocksInstall(detection)) {
@@ -378,9 +367,27 @@ export default function App() {
       go("error");
       return;
     }
+    let runId: string | null;
+    try {
+      runId = await flow.install(nextPlan, detection, prefs.selectedPack, replace);
+    } catch (err) {
+      const payload = asErrorPayload(err);
+      if (payload.code === "E-CANCELLED") {
+        go("kit");
+        return;
+      }
+      setError(payload);
+      setReplaceCollisions(payload.code === "P-COLLISION");
+      go("error");
+      return;
+    }
+    if (runId === null) {
+      go("kit");
+      return;
+    }
     setProgressLog([]);
     setProgress({
-      runId: "",
+      runId,
       step: "prepare",
       status: "running",
       percent: 1,
@@ -392,12 +399,11 @@ export default function App() {
       setProgressLog((rows) => mergeProgress(rows, event));
     });
     try {
-      await runInstall(nextPlan, replace);
       setProgress((current) =>
         current
           ? { ...current, percent: 100, status: "done" }
           : {
-              runId: "",
+              runId,
               step: "done",
               status: "done",
               percent: 100,
@@ -449,7 +455,7 @@ export default function App() {
     const path = window.prompt("Game folder", detection?.gameDir ?? "") ?? "";
     if (!path) return;
     try {
-      const { detection: next } = await runDestinationChange(() => setGameDir(path));
+      const { detection: next } = await flow.setGameDir(path);
       setDetection(next);
       setPrefs(await getPrefs());
       if (minecraftBlocksInstall(next)) {
@@ -589,9 +595,9 @@ export default function App() {
           onOpen={(id) => {
             void (async () => {
               try {
-                invalidateInstall();
-                const next = await selectPack(id);
-                setPrefs(next);
+                const { result, detection: next } = await flow.selectPack(id);
+                setPrefs(result);
+                setDetection(next);
                 go("pack");
               } catch (err) {
                 setError(asErrorPayload(err));
@@ -602,10 +608,8 @@ export default function App() {
           onInstall={(id) => {
             void (async () => {
               try {
-                invalidateInstall();
-                const next = await selectPack(id);
-                setPrefs(next);
-                const fresh = await detect();
+                const { result, detection: fresh } = await flow.selectPack(id);
+                setPrefs(result);
                 setDetection(fresh);
                 go(fresh.needsFolderChoice ? "pack" : "scan");
               } catch (err) {
@@ -617,8 +621,10 @@ export default function App() {
           onPlay={(id) => {
             void (async () => {
               try {
-                invalidateInstall();
-                const next = await playPack(id, { selectPack, play });
+                const next = await playPack(id, {
+                  selectPack: (packId) => flow.selectPack(packId).then((opened) => opened.result),
+                  play,
+                });
                 setPrefs(next);
               } catch (err) {
                 setError(asErrorPayload(err));
@@ -665,7 +671,7 @@ export default function App() {
           installed={installed}
           canCopy={Boolean(prefs.lastGameDir) && detection.folderMode === "own"}
           onChoose={(choice) => {
-            void runDestinationChange(() => choosePackFolder(choice))
+            void flow.chooseFolder(choice)
               .then(({ result, detection: next }) => {
                 setPrefs(result);
                 setDetection(next);
@@ -825,7 +831,7 @@ export default function App() {
           prefs={prefs}
           snapshots={snapshots}
           onUseDefault={(enabled) => {
-            void runDestinationChange(() => setUseDefaultFolder(enabled))
+            void flow.useDefaultFolder(enabled)
               .then(({ result, detection: next }) => {
                 setPrefs(result);
                 setDetection(next);
@@ -836,7 +842,7 @@ export default function App() {
               });
           }}
           onChooseFolder={(choice) => {
-            void runDestinationChange(() => choosePackFolder(choice))
+            void flow.chooseFolder(choice)
               .then(({ result, detection: next }) => {
                 setPrefs(result);
                 setDetection(next);

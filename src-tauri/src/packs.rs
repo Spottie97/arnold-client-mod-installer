@@ -103,6 +103,25 @@ pub fn folder_owner_error(root: &Path, reason: impl Into<String>) -> AppError {
     }
 }
 
+pub fn folder_occupied_error(root: &Path, pack_id: &str, files: &[String]) -> AppError {
+    let shown: Vec<&str> = files.iter().take(5).map(String::as_str).collect();
+    let more = files.len().saturating_sub(shown.len());
+    let list = if more > 0 {
+        format!("{} and {more} more", shown.join(", "))
+    } else {
+        shown.join(", ")
+    };
+    AppError::Other {
+        code: "E-FOLDER-OCCUPIED".into(),
+        title: "This Minecraft folder already has Arnold mods we didn't set up".into(),
+        hint: "Nothing was moved or changed. To keep those mods safe, give this pack its own folder: choose \"Set up the pack folder fresh\", or \"Use a fresh pack folder\" in Settings. You can also pick a different Minecraft folder. If the mods came from Better Adventures+, open Better Adventures+ first so it can take them over. Or move the listed files out of the mods folder yourself and try again.".into(),
+        detail: format!(
+            "{pack_id} can't use {} yet. Arnold files with no installer record: {list}",
+            root.display()
+        ),
+    }
+}
+
 pub fn needs_newer_app(entry: &PackEntry) -> bool {
     entry
         .min_app_version

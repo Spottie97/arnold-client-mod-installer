@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Detection, InstallPlan, Prefs } from "../types";
-import { planMatchesDestination } from "./installGate";
+import type { Detection, InstallPlan } from "../types";
 import { changeDestination } from "./destination";
 
 const launcherRoot = "/home/sam/.minecraft";
@@ -81,95 +80,5 @@ describe("changeDestination", () => {
       ),
     ).rejects.toBe(payload);
     expect(order).toEqual(["invalidate", "change"]);
-  });
-
-  it("selection then default-folder toggle then install uses the new plan", async () => {
-    const calls: string[] = [];
-    const stale = plan("/own/pack-x");
-    const fresh = plan(launcherRoot);
-    const seen = detection(launcherRoot);
-
-    async function selectPack(id: string): Promise<Prefs> {
-      calls.push(`selectPack:${id}`);
-      return { tourDone: true, selectedPack: id, useDefaultFolder: false };
-    }
-    async function setUseDefaultFolder(enabled: boolean): Promise<Prefs> {
-      calls.push(`setUseDefaultFolder:${enabled}`);
-      return { tourDone: true, selectedPack: "pack-x", useDefaultFolder: enabled };
-    }
-
-    await selectPack("pack-x");
-    const { plan: next, detection: nextDetection } = await changeDestination(
-      () => setUseDefaultFolder(true),
-      {
-        invalidate: () => calls.push("invalidate"),
-        detect: async () => {
-          calls.push("detect");
-          return seen as Detection;
-        },
-        replan: async () => {
-          calls.push("replan");
-          return fresh;
-        },
-      },
-    );
-    expect(calls).toEqual([
-      "selectPack:pack-x",
-      "invalidate",
-      "setUseDefaultFolder:true",
-      "detect",
-      "replan",
-    ]);
-    expect(next?.packId).toBe("pack-x");
-    expect(next?.packDir).toBe(launcherRoot);
-    expect(planMatchesDestination(next, nextDetection, "pack-x")).toBe(true);
-    expect(planMatchesDestination(stale, nextDetection, "pack-x")).toBe(false);
-  });
-
-  it("selection then keep choice then install uses the new plan", async () => {
-    const calls: string[] = [];
-    const stale = plan("/own/pack-x");
-    const fresh = plan(launcherRoot);
-    const seen = detection(launcherRoot);
-
-    async function selectPack(id: string): Promise<Prefs> {
-      calls.push(`selectPack:${id}`);
-      return { tourDone: true, selectedPack: id };
-    }
-    async function choosePackFolder(choice: "keep" | "fresh"): Promise<Prefs> {
-      calls.push(`choosePackFolder:${choice}`);
-      return {
-        tourDone: true,
-        selectedPack: "pack-x",
-        packLocations: { "pack-x": choice === "keep" ? "defaultFolder" : "ownFolder" },
-      };
-    }
-
-    await selectPack("pack-x");
-    const { plan: next, detection: nextDetection } = await changeDestination(
-      () => choosePackFolder("keep"),
-      {
-        invalidate: () => calls.push("invalidate"),
-        detect: async () => {
-          calls.push("detect");
-          return seen as Detection;
-        },
-        replan: async () => {
-          calls.push("replan");
-          return fresh;
-        },
-      },
-    );
-    expect(calls).toEqual([
-      "selectPack:pack-x",
-      "invalidate",
-      "choosePackFolder:keep",
-      "detect",
-      "replan",
-    ]);
-    expect(next?.packId).toBe("pack-x");
-    expect(next?.packDir).toBe(launcherRoot);
-    expect(planMatchesDestination(next, nextDetection, "pack-x")).toBe(true);
-    expect(planMatchesDestination(stale, nextDetection, "pack-x")).toBe(false);
   });
 });

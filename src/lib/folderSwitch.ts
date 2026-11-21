@@ -21,7 +21,7 @@ export function folderSwitchNotice(
     text += ` ${report.flagged.length} file(s) that ${from} didn't install were left in place.`;
   }
   if (report.partialRestore) {
-    text += ` Some of ${to}'s saved files were kept aside because a different file was already there.`;
+    text += ` ${report.conflicts.length} of ${to}'s saved files were kept aside because a different file was already there. ${to} won't replace those files without asking.`;
   }
   const notice = text.trim();
   return notice.length > 0 ? notice : null;

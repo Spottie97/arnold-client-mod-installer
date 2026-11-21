@@ -74,6 +74,11 @@ pub struct SwitchReport {
     /// Where the outgoing pack's files were saved.
     pub stash_path: String,
     pub partial_restore: bool,
+    /// Saved-copy paths the incoming pack could not put back because a different file is there.
+    /// Untracked in the live state.
+    pub conflicts: Vec<String>,
+    /// Older saved copies that were renamed aside (never deleted).
+    pub saved_copies: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -98,6 +103,10 @@ pub enum FolderOwner {
     },
     Ambiguous {
         reason: String,
+    },
+    /// Arnold jars are present, but there is no active-pack.json and no state.json.
+    Occupied {
+        files: Vec<String>,
     },
 }
 
@@ -309,6 +318,7 @@ pub fn switch_shared_pack(
     let _snapshot = crate::backup::create_snapshot(root, &state, "before-pack-switch")?;
     let (move_rels, mut flagged) = managed_set(root, &state, to_manifest, from_id);
     let stash = stash_dir(root, from_id);
+    let mut saved_copies = Vec::new();
     if stash.exists() {
         let stamp = state::now_stamp();
         let replaced_name = format!("{from_id}.replaced-{stamp}");
@@ -319,9 +329,7 @@ pub fn switch_shared_pack(
                 AppError::Io(format!("saved copy of {from_id} has no parent directory"))
             })?;
         fs::rename(&stash, &replaced)?;
-        flagged.push(format!(
-            "Older saved copy of {from_id} kept at arnold-installer/packs/{replaced_name}"
-        ));
+        saved_copies.push(format!("arnold-installer/packs/{replaced_name}"));
     }
     fs::create_dir_all(&stash)?;
     for rel in &move_rels {
@@ -355,7 +363,12 @@ pub fn switch_shared_pack(
         )?;
     }
 
-    let (restored, partial_restore) = restore_incoming(root, to_id, &mut flagged)?;
+    let restore = restore_incoming(root, to_id)?;
+    let restored = restore.is_some();
+    let (conflicts, notes) = restore
+        .map(|item| (item.conflicts, item.notes))
+        .unwrap_or_default();
+    flagged.extend(notes);
     write_active_pack(root, to_id, Some(from_id), OwnerSource::Marker)?;
     Ok(SwitchReport {
         from: from_id.to_string(),
@@ -364,7 +377,9 @@ pub fn switch_shared_pack(
         flagged,
         legacy,
         stash_path: stash.display().to_string(),
-        partial_restore,
+        partial_restore: !conflicts.is_empty(),
+        conflicts,
+        saved_copies,
     })
 }
 
@@ -478,58 +493,118 @@ fn stash_profile(
     Ok(())
 }
 
-/// Restores `to_id`'s stash when one exists. Returns `(restored, partial)`.
-fn restore_incoming(
-    root: &Path,
-    to_id: &str,
-    flagged: &mut Vec<String>,
-) -> Result<(bool, bool), AppError> {
-    let to_stash = stash_dir(root, to_id);
-    if !to_stash.is_dir() {
-        return Ok((false, false));
-    }
-    let skipped = restore_stash(root, &to_stash, &profile_key(to_id))?;
-    let partial = !skipped.is_empty();
-    for rel in &skipped {
-        flagged.push(format!(
-            "Kept in saved copy of {to_id} (a different file is already in the folder): {rel}"
-        ));
-    }
-    Ok((true, partial))
+const STASH_STATE_REL: &str = "arnold-installer/state.json";
+const STASH_PROFILE_FILES: [&str; 3] = [
+    "profile-official.json",
+    "profile-tlauncher.json",
+    "profile-official-legacy.json",
+];
+
+struct RestoreResult {
+    conflicts: Vec<String>,
+    notes: Vec<String>,
 }
 
-fn restore_stash(root: &Path, stash: &Path, profile_key: &str) -> Result<Vec<String>, AppError> {
-    let mut skipped = Vec::new();
-    let mut restored_files = Vec::new();
-    restore_tree(stash, stash, root, &mut skipped, &mut restored_files)?;
-    for path in &restored_files {
-        fs::remove_file(path)?;
+/// Copies `to_id`'s saved copy into `root`. The saved copy is read only.
+fn restore_incoming(root: &Path, to_id: &str) -> Result<Option<RestoreResult>, AppError> {
+    let stash = stash_dir(root, to_id);
+    if !stash.is_dir() {
+        return Ok(None);
     }
-    take_profile(
-        stash,
+    let mut rels = Vec::new();
+    collect_stash_files(&stash, &stash, &mut rels)?;
+    rels.sort();
+    let mut conflicts = Vec::new();
+    let mut copies = Vec::new();
+    for rel in rels {
+        let dest = root.join(&rel);
+        let src = stash.join(&rel);
+        if !dest.exists() {
+            copies.push(rel);
+            continue;
+        }
+        let same = dest.is_file()
+            && matches!(
+                (hash_file(&dest), hash_file(&src)),
+                (Ok(left), Ok(right)) if left == right
+            );
+        if same {
+            continue;
+        }
+        conflicts.push(rel);
+    }
+    for rel in &copies {
+        let dest = root.join(rel);
+        if let Some(parent) = dest.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::copy(stash.join(rel), dest)?;
+    }
+    let mut notes = Vec::new();
+    if state::state_path(&stash).is_file() {
+        match state::load_state(&stash) {
+            Ok(Some(mut saved)) => {
+                saved.files.retain(|file| !conflicts.contains(&file.path));
+                if !state::state_path(root).is_file() {
+                    state::save_state(root, &saved)?;
+                } else {
+                    notes.push(format!(
+                        "{to_id}'s saved install record was left in its saved copy because this folder already has one"
+                    ));
+                }
+            }
+            _ => notes.push(format!(
+                "{to_id}'s saved install record couldn't be read; it was left in its saved copy"
+            )),
+        }
+    }
+    put_back_profile(
+        &stash,
         "profile-official.json",
         &root.join("launcher_profiles.json"),
-        profile_key,
+        &profile_key(to_id),
     )?;
-    take_profile(
-        stash,
+    put_back_profile(
+        &stash,
         "profile-tlauncher.json",
         &root.join(TLAUNCHER_PROFILES_FILE),
-        profile_key,
+        &profile_key(to_id),
     )?;
-    take_profile(
-        stash,
+    put_back_profile(
+        &stash,
         "profile-official-legacy.json",
         &root.join("launcher_profiles.json"),
         profiles::ARNOLD_PROFILE_KEY,
     )?;
-    if skipped.is_empty() {
-        remove_empty_dirs(stash)?;
-    }
-    Ok(skipped)
+    Ok(Some(RestoreResult { conflicts, notes }))
 }
 
-fn take_profile(stash: &Path, name: &str, live_file: &Path, key: &str) -> Result<(), AppError> {
+fn collect_stash_files(
+    stash_root: &Path,
+    dir: &Path,
+    out: &mut Vec<String>,
+) -> Result<(), AppError> {
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_dir() {
+            collect_stash_files(stash_root, &path, out)?;
+            continue;
+        }
+        let rel = path.strip_prefix(stash_root).unwrap_or(&path);
+        let rel_str = rel_to_string(rel);
+        if rel_str == STASH_STATE_REL || rel_str == "arnold-installer/state.json.tmp" {
+            continue;
+        }
+        if STASH_PROFILE_FILES.contains(&rel_str.as_str()) {
+            continue;
+        }
+        out.push(rel_str);
+    }
+    Ok(())
+}
+
+fn put_back_profile(stash: &Path, name: &str, live_file: &Path, key: &str) -> Result<(), AppError> {
     let path = stash.join(name);
     if !path.is_file() {
         return Ok(());
@@ -539,47 +614,6 @@ fn take_profile(stash: &Path, name: &str, live_file: &Path, key: &str) -> Result
         return Ok(());
     };
     profiles::restore_profile(live_file, key, entry)?;
-    fs::remove_file(&path)?;
-    Ok(())
-}
-
-fn restore_tree(
-    stash_root: &Path,
-    dir: &Path,
-    game_root: &Path,
-    skipped: &mut Vec<String>,
-    restored: &mut Vec<PathBuf>,
-) -> Result<(), AppError> {
-    for entry in fs::read_dir(dir)? {
-        let entry = entry?;
-        let path = entry.path();
-        if path.is_dir() {
-            restore_tree(stash_root, &path, game_root, skipped, restored)?;
-            continue;
-        }
-        let name = path
-            .file_name()
-            .and_then(|item| item.to_str())
-            .unwrap_or("");
-        if name == "profile-official.json"
-            || name == "profile-tlauncher.json"
-            || name == "profile-official-legacy.json"
-        {
-            continue;
-        }
-        let rel = path.strip_prefix(stash_root).unwrap_or(&path);
-        let rel_str = rel_to_string(rel);
-        let dest = game_root.join(rel);
-        if dest.exists() {
-            skipped.push(rel_str);
-            continue;
-        }
-        if let Some(parent) = dest.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        fs::copy(&path, &dest)?;
-        restored.push(path);
-    }
     Ok(())
 }
 
@@ -588,23 +622,6 @@ fn rel_to_string(rel: &Path) -> String {
         .map(|component| component.as_os_str().to_string_lossy())
         .collect::<Vec<_>>()
         .join("/")
-}
-
-fn remove_empty_dirs(dir: &Path) -> Result<(), AppError> {
-    if !dir.is_dir() {
-        return Ok(());
-    }
-    let children: Vec<_> = fs::read_dir(dir)?.collect();
-    for entry in children {
-        let path = entry?.path();
-        if path.is_dir() {
-            remove_empty_dirs(&path)?;
-        }
-    }
-    if fs::read_dir(dir)?.next().is_none() {
-        fs::remove_dir(dir)?;
-    }
-    Ok(())
 }
 
 pub fn read_active_pack(root: &Path) -> Option<String> {
@@ -673,7 +690,15 @@ pub fn resolve_folder_owner(root: &Path) -> FolderOwner {
         return FolderOwner::Marked { pack_id };
     }
     if !state::state_path(root).is_file() {
-        return FolderOwner::Empty;
+        let files: Vec<String> = crate::detect::arnold_jar_names(root)
+            .into_iter()
+            .map(|name| format!("mods/{name}"))
+            .collect();
+        return if files.is_empty() {
+            FolderOwner::Empty
+        } else {
+            FolderOwner::Occupied { files }
+        };
     }
     let reason = format!("state.json in {} can't be read", root.display());
     match state::load_state(root) {
@@ -718,6 +743,8 @@ pub fn require_owner(root: &Path, pack_id: &str) -> Result<(), AppError> {
     match resolve_folder_owner(root) {
         FolderOwner::Ambiguous { reason } => Err(packs::folder_owner_error(root, reason)),
         FolderOwner::Empty => Ok(()),
+        FolderOwner::Occupied { .. } if pack_id == BA_PLUS_PACK_ID => Ok(()),
+        FolderOwner::Occupied { files } => Err(packs::folder_occupied_error(root, pack_id, &files)),
         FolderOwner::Marked { pack_id: owner } | FolderOwner::Inferred { pack_id: owner, .. }
             if owner == pack_id =>
         {
@@ -815,6 +842,17 @@ pub fn enter_destination(
                 processes,
             )
         }
+        FolderOwner::Occupied { files } if pack_id == BA_PLUS_PACK_ID => Ok(DestinationEntry {
+            pack_id: pack_id.to_string(),
+            path,
+            mode,
+            owner_before: Some(FolderOwner::Occupied { files }),
+            switch: None,
+            adopted: false,
+        }),
+        FolderOwner::Occupied { files } => {
+            Err(packs::folder_occupied_error(&path, pack_id, &files))
+        }
         FolderOwner::Empty => {
             let to_stash = stash_dir(&path, pack_id);
             let mut switch = None;
@@ -822,17 +860,19 @@ pub fn enter_destination(
                 if crate::detect::game_running_with(processes) {
                     return Err(AppError::GameRunning);
                 }
-                let mut flagged = Vec::new();
-                let (restored, partial_restore) = restore_incoming(&path, pack_id, &mut flagged)?;
-                switch = Some(SwitchReport {
-                    from: String::new(),
-                    to: pack_id.to_string(),
-                    restored,
-                    flagged,
-                    legacy: false,
-                    stash_path: to_stash.display().to_string(),
-                    partial_restore,
-                });
+                if let Some(result) = restore_incoming(&path, pack_id)? {
+                    switch = Some(SwitchReport {
+                        from: String::new(),
+                        to: pack_id.to_string(),
+                        restored: true,
+                        flagged: result.notes,
+                        legacy: false,
+                        stash_path: to_stash.display().to_string(),
+                        partial_restore: !result.conflicts.is_empty(),
+                        conflicts: result.conflicts,
+                        saved_copies: Vec::new(),
+                    });
+                }
             }
             write_active_pack(&path, pack_id, None, OwnerSource::Empty)?;
             Ok(DestinationEntry {
@@ -1104,6 +1144,11 @@ mod tests {
                 .unwrap();
         assert_eq!(profiles["profiles"]["vanilla"]["name"], "Latest");
         assert!(profiles["profiles"].get("arnold-pack-pack-a").is_some());
+        assert!(back.conflicts.is_empty());
+        assert_eq!(
+            fs::read(stash_dir(root, "pack-a").join("mods/managed.jar")).unwrap(),
+            managed
+        );
         let active: serde_json::Value = serde_json::from_str(
             &fs::read_to_string(state::installer_dir(root).join("active-pack.json")).unwrap(),
         )
@@ -1393,6 +1438,34 @@ mod tests {
             }
             other => panic!("expected ambiguous, got {other:?}"),
         }
+
+        let jars_only = tmp.path().join("jars-only");
+        fs::create_dir_all(jars_only.join("mods")).unwrap();
+        fs::write(
+            jars_only.join("mods/arnold-snowfall-1.3.3.jar"),
+            b"leftover",
+        )
+        .unwrap();
+        assert_eq!(
+            resolve_folder_owner(&jars_only),
+            FolderOwner::Occupied {
+                files: vec!["mods/arnold-snowfall-1.3.3.jar".into()],
+            }
+        );
+
+        let sodium = tmp.path().join("sodium-only");
+        fs::create_dir_all(sodium.join("mods")).unwrap();
+        fs::write(sodium.join("mods/sodium.jar"), b"na").unwrap();
+        assert_eq!(resolve_folder_owner(&sodium), FolderOwner::Empty);
+
+        let stashed = tmp.path().join("stash-only");
+        fs::create_dir_all(stashed.join("arnold-installer/packs/pack-x/mods")).unwrap();
+        fs::write(
+            stashed.join("arnold-installer/packs/pack-x/mods/x.jar"),
+            b"x",
+        )
+        .unwrap();
+        assert_eq!(resolve_folder_owner(&stashed), FolderOwner::Empty);
     }
 
     #[test]
@@ -1428,6 +1501,8 @@ mod tests {
         assert!(entry.switch.unwrap().legacy);
         assert_ba_plus_stashed(root, &ba, &state.manifest_version);
 
+        let stash = stash_dir(root, BA_PLUS_PACK_ID);
+        let before_stash = tree_fingerprint(&stash);
         let entry = enter_at(
             root,
             &keep_prefs(BA_PLUS_PACK_ID),
@@ -1449,7 +1524,16 @@ mod tests {
         );
         assert_eq!(profiles["profiles"]["vanilla"]["name"], "Latest");
         assert_eq!(read_active_pack(root).as_deref(), Some(BA_PLUS_PACK_ID));
-        assert!(!stash_dir(root, BA_PLUS_PACK_ID).exists());
+        assert_eq!(tree_fingerprint(&stash), before_stash);
+        assert_eq!(fs::read(stash.join("mods/ba.jar")).unwrap(), ba);
+        assert_eq!(
+            state::load_state(&stash).unwrap().unwrap().manifest_version,
+            state.manifest_version
+        );
+        let legacy: serde_json::Value =
+            serde_json::from_slice(&fs::read(stash.join("profile-official-legacy.json")).unwrap())
+                .unwrap();
+        assert_eq!(legacy["name"], "Arnold");
     }
 
     #[test]
@@ -1561,10 +1645,15 @@ mod tests {
             &[],
         )
         .unwrap();
-        let flagged = entry.switch.unwrap().flagged;
-        assert!(flagged.iter().any(|row| {
-            row.contains("Older saved copy of pack-a") && row.contains(".replaced-")
-        }));
+        let report = entry.switch.unwrap();
+        assert!(report
+            .saved_copies
+            .iter()
+            .any(|row| row.contains("pack-a.replaced-")));
+        assert!(report
+            .flagged
+            .iter()
+            .all(|row| !row.contains("Older saved copy")));
         let packs = state::installer_dir(root).join("packs");
         let replaced = fs::read_dir(&packs)
             .unwrap()
@@ -1579,22 +1668,36 @@ mod tests {
         assert_eq!(fs::read(replaced.path().join("old.jar")).unwrap(), b"old");
     }
 
-    #[test]
-    fn restore_conflict_keeps_file_in_stash() {
-        let tmp = tempdir().unwrap();
-        let root = tmp.path();
-        let a_bytes = b"pack-a-jar";
+    fn marked_pack_a(root: &Path, bytes: &[u8]) {
         fs::create_dir_all(root.join("mods")).unwrap();
-        fs::write(root.join("mods/a.jar"), a_bytes).unwrap();
-        fs::write(root.join("mods/x.jar"), b"live").unwrap();
+        fs::write(root.join("mods/a.jar"), bytes).unwrap();
         let mut state = InstalledState::new("installer", "a-1");
         state.pack_id = Some("pack-a".into());
-        record_file(&mut state, "mods/a.jar", sha512_hex(a_bytes), "a");
+        record_file(&mut state, "mods/a.jar", sha512_hex(bytes), "a");
         save_state(root, &state).unwrap();
         write_active_pack(root, "pack-a", None, OwnerSource::Marker).unwrap();
+    }
+
+    fn stash_pack_x_files(root: &Path, files: &[(&str, &[u8])]) {
         let stash = stash_dir(root, "pack-x");
-        fs::create_dir_all(stash.join("mods")).unwrap();
-        fs::write(stash.join("mods/x.jar"), b"stash").unwrap();
+        let mut state = InstalledState::new("installer", "x-1");
+        state.pack_id = Some("pack-x".into());
+        for (rel, bytes) in files {
+            let dest = stash.join(rel);
+            fs::create_dir_all(dest.parent().unwrap()).unwrap();
+            fs::write(&dest, bytes).unwrap();
+            record_file(&mut state, *rel, sha512_hex(bytes), "x");
+        }
+        save_state(&stash, &state).unwrap();
+    }
+
+    #[test]
+    fn restore_conflict_untracks_the_users_file() {
+        let tmp = tempdir().unwrap();
+        let root = tmp.path();
+        marked_pack_a(root, b"pack-a-jar");
+        fs::write(root.join("mods/x.jar"), b"live").unwrap();
+        stash_pack_x_files(root, &[("mods/x.jar", b"stash"), ("mods/y.jar", b"y")]);
 
         let entry = enter_at(
             root,
@@ -1606,12 +1709,180 @@ mod tests {
         .unwrap();
         let report = entry.switch.unwrap();
         assert!(report.partial_restore);
-        assert!(report.flagged.iter().any(|row| row.contains("mods/x.jar")));
+        assert_eq!(report.conflicts, vec!["mods/x.jar".to_string()]);
+        assert!(report
+            .flagged
+            .iter()
+            .all(|row| { !(row.contains("mods/x.jar") && !row.contains("Not part of")) }));
         assert_eq!(fs::read(root.join("mods/x.jar")).unwrap(), b"live");
+        assert_eq!(fs::read(root.join("mods/y.jar")).unwrap(), b"y");
+        let live = state::load_state(root).unwrap().unwrap();
+        assert!(live.file_by_path("mods/y.jar").is_some());
+        assert!(live.file_by_path("mods/x.jar").is_none());
+        let stash = stash_dir(root, "pack-x");
+        assert_eq!(fs::read(stash.join("mods/x.jar")).unwrap(), b"stash");
+        let saved = state::load_state(&stash).unwrap().unwrap();
+        assert!(saved.file_by_path("mods/x.jar").is_some());
+    }
+
+    #[test]
+    fn restore_identical_file_stays_tracked() {
+        let tmp = tempdir().unwrap();
+        let root = tmp.path();
+        marked_pack_a(root, b"pack-a-jar");
+        fs::write(root.join("mods/x.jar"), b"stash").unwrap();
+        stash_pack_x_files(root, &[("mods/x.jar", b"stash"), ("mods/y.jar", b"y")]);
+
+        let entry = enter_at(
+            root,
+            &default_prefs("pack-x"),
+            "pack-x",
+            bundled_manifest(),
+            &[],
+        )
+        .unwrap();
+        let report = entry.switch.unwrap();
+        assert!(report.conflicts.is_empty());
+        assert!(!report.partial_restore);
+        let live = state::load_state(root).unwrap().unwrap();
+        assert!(live.file_by_path("mods/x.jar").is_some());
+    }
+
+    #[test]
+    fn restore_keeps_the_saved_copy() {
+        let tmp = tempdir().unwrap();
+        let root = tmp.path();
+        marked_pack_a(root, b"pack-a-jar");
+        stash_pack_x_files(root, &[("mods/x.jar", b"x-bytes")]);
+        let stash = stash_dir(root, "pack-x");
+        fs::write(stash.join("profile-official.json"), br#"{"name":"X"}"#).unwrap();
+        fs::write(stash.join("profile-tlauncher.json"), br#"{"name":"XT"}"#).unwrap();
+        let before = tree_fingerprint(&stash);
+
+        let entry = enter_at(
+            root,
+            &default_prefs("pack-x"),
+            "pack-x",
+            bundled_manifest(),
+            &[],
+        )
+        .unwrap();
+        assert!(entry.switch.unwrap().restored);
+        assert_eq!(tree_fingerprint(&stash), before);
+        let profiles: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(root.join("launcher_profiles.json")).unwrap())
+                .unwrap();
+        assert!(profiles["profiles"].get("arnold-pack-pack-x").is_some());
+    }
+
+    #[test]
+    fn restash_after_restore_renames_never_deletes() {
+        let tmp = tempdir().unwrap();
+        let root = tmp.path();
+        let original = b"pack-a-jar";
+        marked_pack_a(root, original);
+        let manifest = bundled_manifest();
+        enter_at(
+            root,
+            &default_prefs("pack-x"),
+            "pack-x",
+            manifest.clone(),
+            &[],
+        )
+        .unwrap();
+        assert!(stash_dir(root, "pack-a").join("mods/a.jar").is_file());
+        enter_at(
+            root,
+            &default_prefs("pack-a"),
+            "pack-a",
+            manifest.clone(),
+            &[],
+        )
+        .unwrap();
+        assert!(stash_dir(root, "pack-a").is_dir());
+        let third = enter_at(root, &default_prefs("pack-x"), "pack-x", manifest, &[]).unwrap();
+        let report = third.switch.unwrap();
+        assert_eq!(report.saved_copies.len(), 1);
+        assert!(report.saved_copies[0].contains("pack-a.replaced-"));
+        assert!(report
+            .flagged
+            .iter()
+            .all(|row| !row.contains("Older saved copy")));
+        let packs = state::installer_dir(root).join("packs");
+        let replaced: Vec<_> = fs::read_dir(&packs)
+            .unwrap()
+            .flatten()
+            .filter(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("pack-a.replaced-")
+            })
+            .collect();
+        assert_eq!(replaced.len(), 1);
         assert_eq!(
-            fs::read(stash_dir(root, "pack-x").join("mods/x.jar")).unwrap(),
-            b"stash"
+            fs::read(replaced[0].path().join("mods/a.jar")).unwrap(),
+            original
         );
+        assert!(replaced[0]
+            .path()
+            .join("arnold-installer/state.json")
+            .is_file());
+        assert_eq!(
+            fs::read(stash_dir(root, "pack-a").join("mods/a.jar")).unwrap(),
+            original
+        );
+    }
+
+    #[test]
+    fn occupied_folder_without_records_is_refused_and_unchanged() {
+        let tmp = tempdir().unwrap();
+        let root = tmp.path();
+        fs::create_dir_all(root.join("mods")).unwrap();
+        fs::create_dir_all(root.join("saves/w")).unwrap();
+        fs::write(root.join("mods/arnold-snowfall-1.3.3.jar"), b"leftover").unwrap();
+        fs::write(root.join("options.txt"), b"options").unwrap();
+        fs::write(root.join("saves/w/level.dat"), b"world").unwrap();
+        let before = tree_fingerprint(root);
+        for prefs in [keep_prefs("pack-x"), default_prefs("pack-x")] {
+            let err = enter_without_manifest(root, &prefs, "pack-x", &[]).unwrap_err();
+            let payload = err.to_payload();
+            assert_eq!(payload.code, "E-FOLDER-OCCUPIED");
+            assert!(payload.detail.contains("mods/arnold-snowfall-1.3.3.jar"));
+            assert!(payload.hint.contains("Nothing was moved or changed"));
+        }
+        assert_eq!(tree_fingerprint(root), before);
+        assert!(!state::installer_dir(root).exists());
+        assert!(read_active_pack(root).is_none());
+        let err = require_owner(root, "pack-x").unwrap_err();
+        assert_eq!(err.to_payload().code, "E-FOLDER-OCCUPIED");
+        assert!(shared_state_for(root, "pack-x").unwrap().is_none());
+    }
+
+    #[test]
+    fn occupied_folder_is_left_for_ba_plus_without_claiming() {
+        let tmp = tempdir().unwrap();
+        let root = tmp.path();
+        fs::create_dir_all(root.join("mods")).unwrap();
+        fs::write(root.join("mods/arnold-snowfall-1.3.3.jar"), b"leftover").unwrap();
+        let before = tree_fingerprint(root);
+        let entry =
+            enter_without_manifest(root, &default_prefs(BA_PLUS_PACK_ID), BA_PLUS_PACK_ID, &[])
+                .unwrap();
+        assert!(entry.switch.is_none());
+        assert!(!entry.adopted);
+        assert_eq!(
+            entry.owner_before,
+            Some(FolderOwner::Occupied {
+                files: vec!["mods/arnold-snowfall-1.3.3.jar".into()],
+            })
+        );
+        assert_eq!(tree_fingerprint(root), before);
+        assert!(read_active_pack(root).is_none());
+        require_owner(root, BA_PLUS_PACK_ID).unwrap();
+        let err =
+            enter_without_manifest(root, &default_prefs("pack-x"), "pack-x", &[]).unwrap_err();
+        assert_eq!(err.to_payload().code, "E-FOLDER-OCCUPIED");
     }
 
     #[test]

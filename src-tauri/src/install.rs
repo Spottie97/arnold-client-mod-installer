@@ -1162,16 +1162,17 @@ pub fn repair_tracked<F: Fetcher>(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
+pub(crate) mod test_support {
+    use std::fs;
+    use std::path::Path;
+
+    use super::{record_file, save_state, InstalledState};
     use crate::download::sha512_hex;
     use crate::fetch::MapFetcher;
     use crate::manifest::load_fixture_manifest;
-    use crate::plan::{build_plan, ensure_plan_current, PlanFile, Selection};
-    use std::sync::{Arc, Mutex};
-    use tempfile::tempdir;
+    use crate::plan::Selection;
 
-    fn test_manifest_and_fetcher() -> (crate::manifest::Manifest, MapFetcher, Vec<u8>) {
+    pub(crate) fn test_manifest_and_fetcher() -> (crate::manifest::Manifest, MapFetcher, Vec<u8>) {
         let mut manifest = load_fixture_manifest().unwrap();
         let mut fetcher = MapFetcher::default();
         for component in &mut manifest.components {
@@ -1189,13 +1190,13 @@ mod tests {
         (manifest, fetcher, loader_bytes)
     }
 
-    fn prepare_game(game: &Path) {
+    pub(crate) fn prepare_game(game: &Path) {
         fs::create_dir_all(game.join("versions/26.3")).unwrap();
         fs::write(game.join("versions/26.3/26.3.jar"), b"jar").unwrap();
         fs::create_dir_all(game.join("mods")).unwrap();
     }
 
-    fn basic_selection() -> Selection {
+    pub(crate) fn basic_selection() -> Selection {
         Selection {
             kit: "basic".into(),
             custom_components: vec![],
@@ -1205,6 +1206,52 @@ mod tests {
             quality: None,
         }
     }
+
+    pub(crate) fn legacy_shared_game(game: &Path) -> (Vec<u8>, Vec<u8>) {
+        let ba = b"ba-jar-bytes".to_vec();
+        let snow = b"ba-plus-snowfall-original".to_vec();
+        fs::write(game.join("mods/ba.jar"), &ba).unwrap();
+        fs::write(game.join("mods/arnold-snowfall-1.3.3.jar"), &snow).unwrap();
+        fs::write(game.join("mods/user.jar"), b"user-jar").unwrap();
+        fs::create_dir_all(game.join("saves/world")).unwrap();
+        fs::create_dir_all(game.join("screenshots")).unwrap();
+        fs::write(game.join("saves/world/level.dat"), b"world").unwrap();
+        fs::write(game.join("screenshots/shot.png"), b"shot").unwrap();
+        fs::write(game.join("options.txt"), b"options").unwrap();
+        fs::write(game.join("servers.dat"), b"servers").unwrap();
+        let mut state = InstalledState::new("installer", "ba-plus-1");
+        record_file(&mut state, "mods/ba.jar", sha512_hex(&ba), "ba-plus");
+        record_file(
+            &mut state,
+            "mods/arnold-snowfall-1.3.3.jar",
+            sha512_hex(&snow),
+            "snow",
+        );
+        save_state(game, &state).unwrap();
+        fs::write(
+            game.join("launcher_profiles.json"),
+            serde_json::json!({
+                "profiles": {
+                    "vanilla": {"name": "Latest"},
+                    crate::profiles::ARNOLD_PROFILE_KEY: {"name": "Arnold", "type": "custom"}
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+        (ba, snow)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::test_support::{basic_selection, prepare_game, test_manifest_and_fetcher};
+    use super::*;
+    use crate::download::sha512_hex;
+    use crate::fetch::MapFetcher;
+    use crate::plan::{build_plan, PlanFile, Selection};
+    use std::sync::{Arc, Mutex};
+    use tempfile::tempdir;
 
     fn basic_plan(manifest: &crate::manifest::Manifest) -> InstallPlan {
         build_plan(manifest, &basic_selection(), None, true).unwrap()
@@ -2418,277 +2465,5 @@ mod tests {
             .join(manifest_id)
             .join(format!("{manifest_id}.json"))
             .is_file());
-    }
-
-    fn legacy_shared_game(game: &Path) -> (Vec<u8>, Vec<u8>) {
-        let ba = b"ba-jar-bytes".to_vec();
-        let snow = b"ba-plus-snowfall-original".to_vec();
-        fs::write(game.join("mods/ba.jar"), &ba).unwrap();
-        fs::write(game.join("mods/arnold-snowfall-1.3.3.jar"), &snow).unwrap();
-        fs::write(game.join("mods/user.jar"), b"user-jar").unwrap();
-        fs::create_dir_all(game.join("saves/world")).unwrap();
-        fs::create_dir_all(game.join("screenshots")).unwrap();
-        fs::write(game.join("saves/world/level.dat"), b"world").unwrap();
-        fs::write(game.join("screenshots/shot.png"), b"shot").unwrap();
-        fs::write(game.join("options.txt"), b"options").unwrap();
-        fs::write(game.join("servers.dat"), b"servers").unwrap();
-        let mut state = InstalledState::new("installer", "ba-plus-1");
-        record_file(&mut state, "mods/ba.jar", sha512_hex(&ba), "ba-plus");
-        record_file(
-            &mut state,
-            "mods/arnold-snowfall-1.3.3.jar",
-            sha512_hex(&snow),
-            "snow",
-        );
-        save_state(game, &state).unwrap();
-        fs::write(
-            game.join("launcher_profiles.json"),
-            serde_json::json!({
-                "profiles": {
-                    "vanilla": {"name": "Latest"},
-                    crate::profiles::ARNOLD_PROFILE_KEY: {"name": "Arnold", "type": "custom"}
-                }
-            })
-            .to_string(),
-        )
-        .unwrap();
-        (ba, snow)
-    }
-
-    fn pack_x_default_prefs() -> crate::prefs::Prefs {
-        crate::prefs::Prefs {
-            selected_pack: Some("pack-x".into()),
-            use_default_folder: true,
-            ..crate::prefs::Prefs::default()
-        }
-    }
-
-    #[test]
-    fn legacy_folder_destination_change_then_install_keeps_ba_plus_stashed() {
-        let tmp = tempdir().unwrap();
-        let game = tmp.path().join("game");
-        prepare_game(&game);
-        let (ba, snow) = legacy_shared_game(&game);
-        let (manifest, fetcher, _) = test_manifest_and_fetcher();
-        crate::pack_dirs::enter_destination(
-            &pack_x_default_prefs(),
-            "pack-x",
-            &game,
-            &[],
-            || Ok(manifest.clone()),
-            &[],
-        )
-        .unwrap();
-        let installed = crate::pack_dirs::shared_state_for(&game, "pack-x").unwrap();
-        assert!(installed.is_none());
-        let mut plan = build_plan(&manifest, &basic_selection(), installed.as_ref(), true).unwrap();
-        plan.pack_id = "pack-x".into();
-        plan.pack_dir = game.to_string_lossy().into_owned();
-        assert!(
-            plan.remove.is_empty(),
-            "plan used the outgoing pack's removals"
-        );
-        assert!(
-            plan.update.is_empty(),
-            "plan used the outgoing pack's updates"
-        );
-        ensure_plan_current(
-            &plan,
-            "pack-x",
-            &game,
-            &manifest,
-            load_state(&game).unwrap().as_ref(),
-        )
-        .unwrap();
-        run_install(
-            &InstallTarget::same_folder(&game),
-            &plan,
-            &manifest,
-            &fetcher,
-            &AtomicBool::new(false),
-            false,
-            16.0,
-            &|_| {},
-        )
-        .unwrap();
-        crate::pack_dirs::write_active_pack(
-            &game,
-            "pack-x",
-            None,
-            crate::pack_dirs::OwnerSource::Marker,
-        )
-        .unwrap();
-        let stash = game
-            .join("arnold-installer/packs")
-            .join(crate::packs::BA_PLUS_PACK_ID);
-        assert_eq!(fs::read(stash.join("mods/ba.jar")).unwrap(), ba);
-        assert_eq!(
-            fs::read(stash.join("mods/arnold-snowfall-1.3.3.jar")).unwrap(),
-            snow
-        );
-        assert_eq!(
-            load_state(&stash).unwrap().unwrap().manifest_version,
-            "ba-plus-1"
-        );
-        assert_eq!(
-            load_state(&game).unwrap().unwrap().pack_id.as_deref(),
-            Some("pack-x")
-        );
-        assert_eq!(
-            crate::pack_dirs::read_active_pack(&game).as_deref(),
-            Some("pack-x")
-        );
-        assert_eq!(fs::read(game.join("mods/user.jar")).unwrap(), b"user-jar");
-        assert_eq!(
-            fs::read(game.join("saves/world/level.dat")).unwrap(),
-            b"world"
-        );
-        assert_eq!(
-            fs::read(game.join("screenshots/shot.png")).unwrap(),
-            b"shot"
-        );
-        assert_eq!(fs::read(game.join("options.txt")).unwrap(), b"options");
-    }
-
-    #[test]
-    fn marked_folder_destination_change_then_install_restores_incoming_state() {
-        let tmp = tempdir().unwrap();
-        let scratch = tmp.path().join("scratch");
-        let game = tmp.path().join("game");
-        prepare_game(&scratch);
-        prepare_game(&game);
-        let (manifest, fetcher, _) = test_manifest_and_fetcher();
-        let mut scratch_plan = basic_plan(&manifest);
-        scratch_plan.pack_id = "pack-x".into();
-        scratch_plan.pack_dir = scratch.to_string_lossy().into_owned();
-        run_install(
-            &InstallTarget::same_folder(&scratch),
-            &scratch_plan,
-            &manifest,
-            &fetcher,
-            &AtomicBool::new(false),
-            false,
-            16.0,
-            &|_| {},
-        )
-        .unwrap();
-        let scratch_state = load_state(&scratch).unwrap().unwrap();
-        assert_eq!(scratch_state.pack_id.as_deref(), Some("pack-x"));
-
-        let a_bytes = b"pack-a-only";
-        fs::write(game.join("mods/a-only.jar"), a_bytes).unwrap();
-        let mut a_state = InstalledState::new("installer", "a-1");
-        a_state.pack_id = Some("pack-a".into());
-        record_file(
-            &mut a_state,
-            "mods/a-only.jar",
-            sha512_hex(a_bytes),
-            "pack-a",
-        );
-        save_state(&game, &a_state).unwrap();
-        crate::pack_dirs::write_active_pack(
-            &game,
-            "pack-a",
-            None,
-            crate::pack_dirs::OwnerSource::Marker,
-        )
-        .unwrap();
-        let stash = game.join("arnold-installer/packs/pack-x");
-        for file in &scratch_state.files {
-            let from = scratch.join(&file.path);
-            let to = stash.join(&file.path);
-            if let Some(parent) = to.parent() {
-                fs::create_dir_all(parent).unwrap();
-            }
-            fs::copy(&from, &to).unwrap();
-        }
-        let state_dest = stash.join("arnold-installer/state.json");
-        fs::create_dir_all(state_dest.parent().unwrap()).unwrap();
-        fs::copy(crate::state::state_path(&scratch), &state_dest).unwrap();
-
-        crate::pack_dirs::enter_destination(
-            &pack_x_default_prefs(),
-            "pack-x",
-            &game,
-            &[],
-            || Ok(manifest.clone()),
-            &[],
-        )
-        .unwrap();
-        let installed = crate::pack_dirs::shared_state_for(&game, "pack-x")
-            .unwrap()
-            .unwrap();
-        let mut plan = build_plan(&manifest, &basic_selection(), Some(&installed), true).unwrap();
-        for file in &installed.files {
-            assert!(
-                plan.add.iter().all(|item| dest_rel(item) != file.path),
-                "{}",
-                file.path
-            );
-        }
-        plan.pack_id = "pack-x".into();
-        plan.pack_dir = game.to_string_lossy().into_owned();
-        ensure_plan_current(
-            &plan,
-            "pack-x",
-            &game,
-            &manifest,
-            load_state(&game).unwrap().as_ref(),
-        )
-        .unwrap();
-        run_install(
-            &InstallTarget::same_folder(&game),
-            &plan,
-            &manifest,
-            &fetcher,
-            &AtomicBool::new(false),
-            false,
-            16.0,
-            &|_| {},
-        )
-        .unwrap();
-        assert_eq!(
-            fs::read(game.join("arnold-installer/packs/pack-a/mods/a-only.jar")).unwrap(),
-            a_bytes
-        );
-        assert_eq!(
-            crate::pack_dirs::read_active_pack(&game).as_deref(),
-            Some("pack-x")
-        );
-    }
-
-    #[test]
-    fn plan_from_outgoing_state_is_rejected_after_transition() {
-        let tmp = tempdir().unwrap();
-        let game = tmp.path().join("game");
-        prepare_game(&game);
-        legacy_shared_game(&game);
-        let outgoing = load_state(&game).unwrap().unwrap();
-        let (manifest, _, _) = test_manifest_and_fetcher();
-        let mut plan = build_plan(&manifest, &basic_selection(), Some(&outgoing), true).unwrap();
-        plan.pack_id = "pack-x".into();
-        plan.pack_dir = game.to_string_lossy().into_owned();
-        assert!(
-            !plan.update.is_empty() || !plan.remove.is_empty(),
-            "fixture must differ from an empty install"
-        );
-        crate::pack_dirs::enter_destination(
-            &pack_x_default_prefs(),
-            "pack-x",
-            &game,
-            &[],
-            || Ok(manifest.clone()),
-            &[],
-        )
-        .unwrap();
-        let err = ensure_plan_current(
-            &plan,
-            "pack-x",
-            &game,
-            &manifest,
-            load_state(&game).unwrap().as_ref(),
-        )
-        .unwrap_err();
-        assert!(err.to_string().contains("does not match"), "{err}");
     }
 }

@@ -139,15 +139,25 @@ pub fn fabric_profile_present(game_dir: &Path, loader_id: &str) -> bool {
     false
 }
 
-pub fn looks_like_legacy_install(game_dir: &Path) -> bool {
-    let mods = game_dir.join("mods");
-    let Ok(entries) = std::fs::read_dir(mods) else {
-        return false;
+/// Jar names in `<game_dir>/mods` that look like Arnold builds (`arnold-*.jar`), sorted.
+pub fn arnold_jar_names(game_dir: &Path) -> Vec<String> {
+    let Ok(entries) = std::fs::read_dir(game_dir.join("mods")) else {
+        return Vec::new();
     };
-    entries.flatten().any(|entry| {
-        let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
-        name.starts_with("arnold-") && name.ends_with(".jar")
-    })
+    let mut names: Vec<String> = entries
+        .flatten()
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .filter(|name| {
+            let lower = name.to_ascii_lowercase();
+            lower.starts_with("arnold-") && lower.ends_with(".jar")
+        })
+        .collect();
+    names.sort();
+    names
+}
+
+pub fn looks_like_legacy_install(game_dir: &Path) -> bool {
+    !arnold_jar_names(game_dir).is_empty()
 }
 
 pub fn process_looks_like_minecraft(name: &str, cmd: &str) -> bool {

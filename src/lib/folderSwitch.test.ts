@@ -31,13 +31,24 @@ describe("folderSwitchNotice", () => {
       restored: true,
       flagged: ["Not part of pack-a: mods/user.jar left in place"],
       partialRestore: true,
+      conflicts: ["mods/x.jar"],
     };
     const text = folderSwitchNotice(entry, packName);
     expect(text).toContain("Pack X's saved mods were put back.");
     expect(text).toContain("1 file(s) that pack-a didn't install were left in place.");
-    expect(text).toContain(
-      "Some of Pack X's saved files were kept aside because a different file was already there.",
-    );
+    expect(text).toContain("1 of Pack X's saved files were kept aside");
+    expect(text).toContain("won't replace those files without asking");
+  });
+
+  it("does not mention saved copies that were kept", () => {
+    const entry = mockFolderSwitch("pack-a", "pack-x", false);
+    entry.switch = {
+      ...entry.switch!,
+      flagged: [],
+      savedCopies: ["arnold-installer/packs/pack-a.replaced-1"],
+    };
+    const text = folderSwitchNotice(entry, packName) ?? "";
+    expect(text).not.toContain("left in place");
   });
 
   it("stays quiet when the folder was only claimed for the same pack", () => {

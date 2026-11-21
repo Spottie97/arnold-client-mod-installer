@@ -256,6 +256,8 @@ export function mockFolderSwitch(from: string, to: string, legacy: boolean): Des
       legacy,
       stashPath: `arnold-installer/packs/${from}`,
       partialRestore: false,
+      conflicts: [],
+      savedCopies: [],
     },
     adopted: false,
   };

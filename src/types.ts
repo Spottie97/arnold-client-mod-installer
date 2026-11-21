@@ -282,7 +282,8 @@ export type FolderOwner =
   | { kind: "empty" }
   | { kind: "marked"; packId: string }
   | { kind: "inferred"; packId: string; source: OwnerSource }
-  | { kind: "ambiguous"; reason: string };
+  | { kind: "ambiguous"; reason: string }
+  | { kind: "occupied"; files: string[] };
 
 export interface SwitchReport {
   from: string;
@@ -292,6 +293,8 @@ export interface SwitchReport {
   legacy: boolean;
   stashPath: string;
   partialRestore: boolean;
+  conflicts: string[];
+  savedCopies: string[];
 }
 
 export interface DestinationEntry {

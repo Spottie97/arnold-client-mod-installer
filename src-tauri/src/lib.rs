@@ -1,6 +1,7 @@
 pub mod backup;
 pub mod commands;
 pub mod config;
+pub mod destination;
 pub mod detect;
 pub mod download;
 pub mod errors;
