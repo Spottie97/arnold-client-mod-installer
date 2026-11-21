@@ -499,6 +499,108 @@ const STASH_PROFILE_FILES: [&str; 3] = [
     "profile-tlauncher.json",
     "profile-official-legacy.json",
 ];
+const KEPT_ASIDE_REL: &str = "arnold-installer/kept-aside.json";
+
+/// A file the installer left in place because a saved copy could not be put back.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct KeptAside {
+    pub path: String,
+    pub pack_id: String,
+    pub sha512: String,
+    pub kept_at: String,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct KeptAsideFile {
+    schema: u32,
+    #[serde(default)]
+    files: Vec<KeptAside>,
+}
+
+fn kept_aside_unreadable(path: &Path) -> AppError {
+    AppError::State(format!(
+        "{} can't be read, so nothing was changed. It lists your own files that the installer must not replace. Fix or remove that file and try again.",
+        path.display()
+    ))
+}
+
+fn load_kept_aside(root: &Path) -> Result<KeptAsideFile, AppError> {
+    let path = root.join(KEPT_ASIDE_REL);
+    if !path.exists() {
+        return Ok(KeptAsideFile {
+            schema: 1,
+            files: Vec::new(),
+        });
+    }
+    let text = fs::read_to_string(&path).map_err(|_| kept_aside_unreadable(&path))?;
+    let record: KeptAsideFile =
+        serde_json::from_str(&text).map_err(|_| kept_aside_unreadable(&path))?;
+    if record.schema != 1 {
+        return Err(kept_aside_unreadable(&path));
+    }
+    Ok(record)
+}
+
+fn save_kept_aside(root: &Path, record: &KeptAsideFile) -> Result<(), AppError> {
+    let path = root.join(KEPT_ASIDE_REL);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let tmp = path.with_extension("json.tmp");
+    fs::write(&tmp, serde_json::to_vec_pretty(record)?)?;
+    fs::rename(tmp, path)?;
+    Ok(())
+}
+
+/// Paths of the user's files that no install may remove or replace without consent.
+pub fn kept_aside_paths(root: &Path) -> Result<Vec<String>, AppError> {
+    Ok(load_kept_aside(root)?
+        .files
+        .into_iter()
+        .map(|file| file.path)
+        .collect())
+}
+
+fn record_kept_aside(root: &Path, pack_id: &str, rels: &[String]) -> Result<(), AppError> {
+    if rels.is_empty() {
+        return Ok(());
+    }
+    let mut record = load_kept_aside(root)?;
+    for rel in rels {
+        let sha = hash_file(&root.join(rel)).unwrap_or_default();
+        let entry = KeptAside {
+            path: rel.clone(),
+            pack_id: pack_id.to_string(),
+            sha512: sha,
+            kept_at: state::now_stamp(),
+        };
+        if let Some(existing) = record.files.iter_mut().find(|item| item.path == *rel) {
+            *existing = entry;
+        } else {
+            record.files.push(entry);
+        }
+    }
+    record.schema = 1;
+    save_kept_aside(root, &record)
+}
+
+/// After a successful install, drop entries whose file is gone or is now tracked.
+/// Anything else stays protected. An empty list is written; the file is never deleted.
+pub fn prune_kept_aside(root: &Path, state: &InstalledState) -> Result<(), AppError> {
+    if !root.join(KEPT_ASIDE_REL).exists() {
+        return Ok(());
+    }
+    let mut record = load_kept_aside(root)?;
+    let before = record.files.len();
+    record
+        .files
+        .retain(|file| root.join(&file.path).exists() && state.file_by_path(&file.path).is_none());
+    if record.files.len() != before {
+        save_kept_aside(root, &record)?;
+    }
+    Ok(())
+}
 
 struct RestoreResult {
     conflicts: Vec<String>,
@@ -533,6 +635,7 @@ fn restore_incoming(root: &Path, to_id: &str) -> Result<Option<RestoreResult>, A
         }
         conflicts.push(rel);
     }
+    record_kept_aside(root, to_id, &conflicts)?;
     for rel in &copies {
         let dest = root.join(rel);
         if let Some(parent) = dest.parent() {
@@ -743,7 +846,6 @@ pub fn require_owner(root: &Path, pack_id: &str) -> Result<(), AppError> {
     match resolve_folder_owner(root) {
         FolderOwner::Ambiguous { reason } => Err(packs::folder_owner_error(root, reason)),
         FolderOwner::Empty => Ok(()),
-        FolderOwner::Occupied { .. } if pack_id == BA_PLUS_PACK_ID => Ok(()),
         FolderOwner::Occupied { files } => Err(packs::folder_occupied_error(root, pack_id, &files)),
         FolderOwner::Marked { pack_id: owner } | FolderOwner::Inferred { pack_id: owner, .. }
             if owner == pack_id =>
@@ -781,6 +883,7 @@ pub fn enter_destination(
     }
     let path = resolved.path;
     let mode = resolved.mode;
+    kept_aside_paths(&path)?;
     match resolve_folder_owner(&path) {
         FolderOwner::Ambiguous { reason } => Err(packs::folder_owner_error(&path, reason)),
         FolderOwner::Marked { pack_id: owner_id } if owner_id == pack_id => Ok(DestinationEntry {
@@ -842,14 +945,6 @@ pub fn enter_destination(
                 processes,
             )
         }
-        FolderOwner::Occupied { files } if pack_id == BA_PLUS_PACK_ID => Ok(DestinationEntry {
-            pack_id: pack_id.to_string(),
-            path,
-            mode,
-            owner_before: Some(FolderOwner::Occupied { files }),
-            switch: None,
-            adopted: false,
-        }),
         FolderOwner::Occupied { files } => {
             Err(packs::folder_occupied_error(&path, pack_id, &files))
         }
@@ -1698,6 +1793,8 @@ mod tests {
         marked_pack_a(root, b"pack-a-jar");
         fs::write(root.join("mods/x.jar"), b"live").unwrap();
         stash_pack_x_files(root, &[("mods/x.jar", b"stash"), ("mods/y.jar", b"y")]);
+        let stash = stash_dir(root, "pack-x");
+        let before_stash = tree_fingerprint(&stash);
 
         let entry = enter_at(
             root,
@@ -1723,6 +1820,17 @@ mod tests {
         assert_eq!(fs::read(stash.join("mods/x.jar")).unwrap(), b"stash");
         let saved = state::load_state(&stash).unwrap().unwrap();
         assert!(saved.file_by_path("mods/x.jar").is_some());
+        assert_eq!(
+            kept_aside_paths(root).unwrap(),
+            vec!["mods/x.jar".to_string()]
+        );
+        let sidecar: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(root.join("arnold-installer/kept-aside.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(sidecar["files"][0]["packId"], "pack-x");
+        assert_eq!(sidecar["files"][0]["sha512"], sha512_hex(b"live"));
+        assert_eq!(tree_fingerprint(&stash), before_stash);
     }
 
     #[test]
@@ -1746,6 +1854,7 @@ mod tests {
         assert!(!report.partial_restore);
         let live = state::load_state(root).unwrap().unwrap();
         assert!(live.file_by_path("mods/x.jar").is_some());
+        assert!(!root.join("arnold-installer/kept-aside.json").exists());
     }
 
     #[test]
@@ -1850,6 +1959,10 @@ mod tests {
             assert_eq!(payload.code, "E-FOLDER-OCCUPIED");
             assert!(payload.detail.contains("mods/arnold-snowfall-1.3.3.jar"));
             assert!(payload.hint.contains("Nothing was moved or changed"));
+            assert!(!payload.hint.contains("Adopt into this installer"));
+            assert!(payload
+                .hint
+                .contains("open Better Adventures+ and adopt them first"));
         }
         assert_eq!(tree_fingerprint(root), before);
         assert!(!state::installer_dir(root).exists());
@@ -1860,29 +1973,114 @@ mod tests {
     }
 
     #[test]
-    fn occupied_folder_is_left_for_ba_plus_without_claiming() {
+    fn occupied_folder_is_refused_for_ba_plus_too() {
         let tmp = tempdir().unwrap();
         let root = tmp.path();
         fs::create_dir_all(root.join("mods")).unwrap();
+        fs::write(
+            root.join("mods/arnold-snowfall-1.3.2.jar"),
+            b"arbitrary-user-bytes",
+        )
+        .unwrap();
         fs::write(root.join("mods/arnold-snowfall-1.3.3.jar"), b"leftover").unwrap();
+        fs::write(root.join("options.txt"), b"options").unwrap();
         let before = tree_fingerprint(root);
+        for prefs in [default_prefs(BA_PLUS_PACK_ID), keep_prefs(BA_PLUS_PACK_ID)] {
+            let err = enter_without_manifest(root, &prefs, BA_PLUS_PACK_ID, &[]).unwrap_err();
+            let payload = err.to_payload();
+            assert_eq!(payload.code, "E-FOLDER-OCCUPIED");
+            assert!(payload.hint.contains("Adopt into this installer"));
+            assert!(payload.hint.contains("Nothing was moved or changed"));
+            assert!(payload.detail.contains("mods/arnold-snowfall-1.3.2.jar"));
+            let owner = require_owner(root, BA_PLUS_PACK_ID).unwrap_err();
+            assert_eq!(owner.to_payload().code, "E-FOLDER-OCCUPIED");
+        }
+        assert_eq!(tree_fingerprint(root), before);
+        assert!(!state::installer_dir(root).exists());
+        assert!(read_active_pack(root).is_none());
+        assert!(shared_state_for(root, BA_PLUS_PACK_ID).unwrap().is_none());
+    }
+
+    #[test]
+    fn legacy_state_folder_still_enters_for_ba_plus() {
+        let tmp = tempdir().unwrap();
+        let root = tmp.path();
+        let bytes = b"legacy-ba-snow";
+        fs::create_dir_all(root.join("mods")).unwrap();
+        fs::write(root.join("mods/arnold-snowfall-1.3.2.jar"), bytes).unwrap();
+        let mut state = InstalledState::new("installer", "2.3.x");
+        record_file(
+            &mut state,
+            "mods/arnold-snowfall-1.3.2.jar",
+            sha512_hex(bytes),
+            "snow",
+        );
+        assert!(state.pack_id.is_none());
+        save_state(root, &state).unwrap();
         let entry =
             enter_without_manifest(root, &default_prefs(BA_PLUS_PACK_ID), BA_PLUS_PACK_ID, &[])
                 .unwrap();
-        assert!(entry.switch.is_none());
-        assert!(!entry.adopted);
+        assert!(entry.adopted);
         assert_eq!(
             entry.owner_before,
-            Some(FolderOwner::Occupied {
-                files: vec!["mods/arnold-snowfall-1.3.3.jar".into()],
+            Some(FolderOwner::Inferred {
+                pack_id: BA_PLUS_PACK_ID.into(),
+                source: OwnerSource::LegacyBaPlus,
             })
         );
-        assert_eq!(tree_fingerprint(root), before);
-        assert!(read_active_pack(root).is_none());
-        require_owner(root, BA_PLUS_PACK_ID).unwrap();
+        assert_eq!(read_active_pack(root).as_deref(), Some(BA_PLUS_PACK_ID));
+        assert_eq!(
+            fs::read(root.join("mods/arnold-snowfall-1.3.2.jar")).unwrap(),
+            bytes
+        );
+    }
+
+    #[test]
+    fn unreadable_kept_aside_blocks_entry_and_changes_nothing() {
+        let tmp = tempdir().unwrap();
+        let root = tmp.path();
+        marked_pack_a(root, b"pack-a-jar");
+        fs::write(root.join("arnold-installer/kept-aside.json"), b"{not json").unwrap();
+        stash_pack_x_files(root, &[("mods/x.jar", b"x")]);
+        let before = tree_fingerprint(root);
         let err =
             enter_without_manifest(root, &default_prefs("pack-x"), "pack-x", &[]).unwrap_err();
-        assert_eq!(err.to_payload().code, "E-FOLDER-OCCUPIED");
+        assert_eq!(err.to_payload().code, "E-STATE");
+        assert!(err.to_string().contains("kept-aside.json"), "{err}");
+        assert_eq!(tree_fingerprint(root), before);
+        assert_eq!(read_active_pack(root).as_deref(), Some("pack-a"));
+    }
+
+    #[test]
+    fn prune_kept_aside_drops_gone_and_tracked_only() {
+        let tmp = tempdir().unwrap();
+        let root = tmp.path();
+        fs::create_dir_all(root.join("mods")).unwrap();
+        fs::write(root.join("mods/now-tracked.jar"), b"tracked").unwrap();
+        fs::write(root.join("mods/still-yours.jar"), b"yours").unwrap();
+        record_kept_aside(
+            root,
+            "pack-x",
+            &[
+                "mods/gone.jar".into(),
+                "mods/now-tracked.jar".into(),
+                "mods/still-yours.jar".into(),
+            ],
+        )
+        .unwrap();
+        let mut state = InstalledState::new("installer", "1");
+        record_file(
+            &mut state,
+            "mods/now-tracked.jar",
+            sha512_hex(b"tracked"),
+            "x",
+        );
+        prune_kept_aside(root, &state).unwrap();
+        assert_eq!(
+            kept_aside_paths(root).unwrap(),
+            vec!["mods/still-yours.jar".to_string()]
+        );
+        assert!(root.join("arnold-installer/kept-aside.json").is_file());
     }
 
     #[test]

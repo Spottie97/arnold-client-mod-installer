@@ -1,11 +1,16 @@
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
-import type { Detection, InstallPlan, PackLocation, Prefs, Selection } from "../types";
+import { listen } from "@tauri-apps/api/event";
+import type { Detection, ImportOffer, InstallPlan, PackLocation, Prefs, ProgressEvent, Selection } from "../types";
 import * as api from "./api";
 import { createDestinationFlow } from "./destinationFlow";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
+vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn() }));
+
+let progressHandler: ((event: { payload: ProgressEvent }) => void) | null = null;
+let unlisten = vi.fn();
 
 const ROOT = "/home/sam/.minecraft";
 const SELECTION: Selection = {
@@ -23,12 +28,20 @@ interface Folder {
   stashes: string[];
 }
 
+interface PendingInstall {
+  resolve: (value: string) => void;
+  reject: (reason?: unknown) => void;
+}
+
 interface Backend {
   prefs: Prefs;
   root: string;
   folders: Record<string, Folder>;
   calls: string[];
   installed: InstallPlan | null;
+  holdInstall: boolean;
+  pending: PendingInstall | null;
+  legacyOffer: ImportOffer | null;
 }
 
 function folderOf(folders: Record<string, Folder>, path: string): Folder {
@@ -136,7 +149,17 @@ function fakeBackend(seed: Pick<Backend, "prefs" | "root" | "folders">): Backend
     folders: cloneFolders(seed.folders),
     calls: [],
     installed: null,
+    holdInstall: false,
+    pending: null,
+    legacyOffer: null,
   };
+  unlisten = vi.fn();
+  progressHandler = null;
+  vi.mocked(listen).mockImplementation((async (_name: string, cb: (event: { payload: ProgressEvent }) => void) => {
+    backend.calls.push("listen");
+    progressHandler = cb;
+    return unlisten;
+  }) as unknown as typeof listen);
   const handle = (cmd: string, args: Record<string, unknown>) => {
     if (cmd === "select_pack") {
       backend.calls.push(cmd);
@@ -195,8 +218,38 @@ function fakeBackend(seed: Pick<Backend, "prefs" | "root" | "folders">): Backend
           detail: `${plan.packDir} vs ${dir}`,
         };
       }
+      if (backend.holdInstall) {
+        return new Promise<string>((resolve, reject) => {
+          backend.pending = { resolve, reject };
+        });
+      }
       backend.installed = plan;
       return "run-1";
+    }
+    if (cmd === "cancel") {
+      backend.calls.push(cmd);
+      if (backend.pending) {
+        backend.pending.reject({ code: "E-CANCELLED", title: "Cancelled", hint: "", detail: "" });
+      }
+      return null;
+    }
+    if (cmd === "detect_legacy") {
+      backend.calls.push(cmd);
+      return backend.legacyOffer;
+    }
+    if (cmd === "confirm_import") {
+      backend.calls.push(cmd);
+      const folder = folderOf(backend.folders, backend.root);
+      folder.owner = "better-adventures-plus";
+      folder.arnoldJars = [];
+      return {
+        schema: 1,
+        source: "imported",
+        manifestVersion: "2.3.x",
+        components: [],
+        files: [],
+        updatedAt: "now",
+      };
     }
     throw new Error(`unexpected command ${cmd}`);
   };
@@ -212,6 +265,8 @@ function flowFor() {
     replan: () => api.plan(SELECTION),
   });
 }
+
+const noHooks = { onStart: () => undefined, onProgress: () => undefined };
 
 function barePlan(packDir: string): InstallPlan {
   return {
@@ -250,7 +305,7 @@ describe("destinationFlow", () => {
     const flow = flowFor();
     await flow.selectPack("pack-x");
     const out = await flow.useDefaultFolder(true);
-    const runId = await flow.install(out.plan!, out.detection, "pack-x", false);
+    const runId = await flow.install(out.plan!, out.detection, "pack-x", false, noHooks);
     expect(runId).toBe("run-1");
     expect(backend.calls).toEqual([
       "select_pack",
@@ -258,6 +313,7 @@ describe("destinationFlow", () => {
       "set_use_default_folder",
       "detect",
       "plan",
+      "listen",
       "install",
     ]);
     expect(backend.installed?.packDir).toBe(ROOT);
@@ -274,7 +330,7 @@ describe("destinationFlow", () => {
     const flow = flowFor();
     await flow.selectPack("pack-x");
     const out = await flow.chooseFolder("keep");
-    const runId = await flow.install(out.plan!, out.detection, "pack-x", false);
+    const runId = await flow.install(out.plan!, out.detection, "pack-x", false, noHooks);
     expect(runId).toBe("run-1");
     expect(backend.calls).toEqual([
       "select_pack",
@@ -282,6 +338,7 @@ describe("destinationFlow", () => {
       "choose_pack_folder",
       "detect",
       "plan",
+      "listen",
       "install",
     ]);
     expect(backend.installed?.packDir).toBe(ROOT);
@@ -299,7 +356,7 @@ describe("destinationFlow", () => {
     const flow = flowFor();
     await flow.selectPack("pack-x");
     const out = await flow.setGameDir(nextRoot);
-    const runId = await flow.install(out.plan!, out.detection, "pack-x", false);
+    const runId = await flow.install(out.plan!, out.detection, "pack-x", false, noHooks);
     expect(runId).toBe("run-1");
     expect(backend.installed?.packDir).toBe(nextRoot);
     expect(out.plan?.packDir).toBe(nextRoot);
@@ -335,10 +392,129 @@ describe("destinationFlow", () => {
     });
     const flow = flowFor();
     const detection = detectionOf(backend);
-    const runId = await flow.install(barePlan("/before/the/change"), detection, "pack-x", false);
+    const onStart = vi.fn();
+    const runId = await flow.install(barePlan("/before/the/change"), detection, "pack-x", false, {
+      onStart,
+      onProgress: () => undefined,
+    });
     expect(runId).toBeNull();
     expect(backend.calls).not.toContain("install");
+    expect(backend.calls).not.toContain("listen");
+    expect(onStart).not.toHaveBeenCalled();
+    expect(listen).not.toHaveBeenCalled();
     expect(backend.installed).toBeNull();
+  });
+
+  it("progress is live and the screen opens before the install resolves", async () => {
+    const backend = fakeBackend({
+      prefs: { tourDone: true, selectedPack: "pack-x", useDefaultFolder: true },
+      root: ROOT,
+      folders: { [ROOT]: { owner: "pack-x", arnoldJars: [], stashes: [] } },
+    });
+    backend.holdInstall = true;
+    const flow = flowFor();
+    const onStart = vi.fn();
+    const events: ProgressEvent[] = [];
+    const pending = flow.install(planOf(backend), detectionOf(backend), "pack-x", false, {
+      onStart,
+      onProgress: (event) => events.push(event),
+    });
+    await vi.waitFor(() => expect(backend.calls).toContain("install"));
+    expect(backend.calls).toEqual(["listen", "install"]);
+    expect(onStart).toHaveBeenCalledOnce();
+    expect(backend.pending).not.toBeNull();
+    progressHandler?.({
+      payload: {
+        runId: "run-1",
+        step: "download",
+        status: "running",
+        percent: 30,
+        message: "Downloading",
+      },
+    });
+    expect(events).toHaveLength(1);
+    expect(backend.pending).not.toBeNull();
+    backend.pending?.resolve("run-1");
+    await expect(pending).resolves.toBe("run-1");
+    expect(unlisten).toHaveBeenCalledOnce();
+  });
+
+  it("cancel works while the install is pending", async () => {
+    const backend = fakeBackend({
+      prefs: { tourDone: true, selectedPack: "pack-x", useDefaultFolder: true },
+      root: ROOT,
+      folders: { [ROOT]: { owner: "pack-x", arnoldJars: [], stashes: [] } },
+    });
+    backend.holdInstall = true;
+    const flow = flowFor();
+    const pending = flow.install(planOf(backend), detectionOf(backend), "pack-x", false, noHooks);
+    const rejected = expect(pending).rejects.toMatchObject({ code: "E-CANCELLED" });
+    await vi.waitFor(() => expect(backend.calls).toContain("install"));
+    await api.cancelInstall();
+    expect(backend.calls.indexOf("cancel")).toBeGreaterThan(backend.calls.indexOf("install"));
+    await rejected;
+    expect(unlisten).toHaveBeenCalledOnce();
+  });
+
+  it("BA+ refusal offers the import, other packs do not", async () => {
+    const backend = fakeBackend({
+      prefs: { tourDone: true, selectedPack: "better-adventures-plus", useDefaultFolder: true },
+      root: ROOT,
+      folders: { [ROOT]: { owner: null, arnoldJars: [], stashes: [] } },
+    });
+    const flow = flowFor();
+    await expect(
+      flow.occupiedImportOffer({ code: "E-FOLDER-OCCUPIED" }, "pack-x"),
+    ).resolves.toBeNull();
+    expect(backend.calls).not.toContain("detect_legacy");
+    const offer: ImportOffer = {
+      found: true,
+      alreadyAdopted: false,
+      jars: [
+        {
+          path: "mods/arnold-snowfall-1.3.2.jar",
+          fileName: "arnold-snowfall-1.3.2.jar",
+          sha512: "abc",
+          knownBuild: false,
+          tracked: false,
+        },
+      ],
+      backups: [],
+    };
+    backend.legacyOffer = offer;
+    await expect(
+      flow.occupiedImportOffer({ code: "E-FOLDER-OCCUPIED" }, "better-adventures-plus"),
+    ).resolves.toEqual(offer);
+    await expect(
+      flow.occupiedImportOffer({ code: "E-STATE" }, "better-adventures-plus"),
+    ).resolves.toBeNull();
+    backend.legacyOffer = { ...offer, alreadyAdopted: true };
+    await expect(
+      flow.occupiedImportOffer({ code: "E-FOLDER-OCCUPIED" }, "better-adventures-plus"),
+    ).resolves.toBeNull();
+  });
+
+  it("adopting then retrying keep enters the folder", async () => {
+    const backend = fakeBackend({
+      prefs: { tourDone: true, selectedPack: "better-adventures-plus", useDefaultFolder: false },
+      root: ROOT,
+      folders: {
+        [ROOT]: {
+          owner: null,
+          arnoldJars: ["mods/arnold-snowfall-1.3.2.jar"],
+          stashes: [],
+        },
+      },
+    });
+    const flow = flowFor();
+    await expect(flow.chooseFolder("keep")).rejects.toMatchObject({ code: "E-FOLDER-OCCUPIED" });
+    await flow.adoptThen(() => flow.chooseFolder("keep"));
+    const confirm = backend.calls.indexOf("confirm_import");
+    const firstChoose = backend.calls.indexOf("choose_pack_folder");
+    const secondChoose = backend.calls.indexOf("choose_pack_folder", confirm);
+    expect(confirm).toBeGreaterThan(firstChoose);
+    expect(secondChoose).toBeGreaterThan(confirm);
+    expect(backend.folders[ROOT].owner).toBe("better-adventures-plus");
   });
 
   it("App routes destination commands through destinationFlow", () => {
@@ -356,5 +532,18 @@ describe("destinationFlow", () => {
     ]) {
       expect(names).not.toMatch(new RegExp(`\\b${forbidden}\\b`));
     }
+    const start = source.indexOf("const startInstall");
+    const repair = source.indexOf("const startRepair");
+    const slice = source.slice(start, repair);
+    expect(slice).toContain("onStart:");
+    expect(slice).not.toContain("listenProgress(");
+    const onStart = slice.indexOf("onStart:");
+    const progress = slice.indexOf('go("progress")');
+    const onProgress = slice.indexOf("onProgress:");
+    expect(progress).toBeGreaterThan(onStart);
+    expect(progress).toBeLessThan(onProgress);
+    expect(slice.match(/go\("progress"\)/g)).toEqual(['go("progress")']);
+    expect(source).toContain("occupiedImportOffer(");
+    expect(source).toContain("adoptThen(");
   });
 });

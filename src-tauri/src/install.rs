@@ -141,12 +141,80 @@ fn list_dir_files(dir: &Path) -> Result<Vec<String>, AppError> {
 struct PendingReplace {
     rel: String,
     action: ReplaceAction,
+    kept_aside: bool,
+}
+
+fn kept_aside_detail(rel: &str) -> String {
+    format!(
+        "{rel} is your own file. It was kept aside when this pack's saved copy was put back, so the installer won't remove or replace it unless you confirm."
+    )
+}
+
+fn refuse_unconfirmed_collisions(
+    game_dir: &Path,
+    plan: &InstallPlan,
+    existing: Option<&InstalledState>,
+    kept_aside: &[String],
+    replacements: &[PendingReplace],
+    replace_collisions: bool,
+) -> Result<(), AppError> {
+    if replace_collisions {
+        return Ok(());
+    }
+    if let Some(kept) = replacements
+        .iter()
+        .find(|item| item.action == ReplaceAction::Ask && item.kept_aside)
+    {
+        return Err(AppError::Collision {
+            path: kept.rel.clone(),
+            detail: kept_aside_detail(&kept.rel),
+        });
+    }
+    let asks: Vec<String> = replacements
+        .iter()
+        .filter(|item| item.action == ReplaceAction::Ask)
+        .map(|item| item.rel.clone())
+        .collect();
+    if let Some(path) = asks.first() {
+        return Err(AppError::Collision {
+            path: path.clone(),
+            detail: format!(
+                "Unknown Arnold-looking file(s) {}. Tracked files and known checksums are replaced automatically; this one was left for you to confirm.",
+                asks.join(", ")
+            ),
+        });
+    }
+    for file in plan.add.iter().chain(plan.update.iter()) {
+        let rel = dest_rel(file);
+        let dest = game_dir.join(&rel);
+        if !dest.is_file() {
+            continue;
+        }
+        let actual = hash_file(&dest)?;
+        if actual == file.sha512 {
+            continue;
+        }
+        let tracked = existing.is_some_and(|state| state.file_by_path(&rel).is_some());
+        let kept = kept_aside.iter().any(|path| path == &rel);
+        if !tracked || kept {
+            return Err(AppError::Collision {
+                path: rel,
+                detail: if kept {
+                    kept_aside_detail(&rel)
+                } else {
+                    "A different file is already in that slot".into()
+                },
+            });
+        }
+    }
+    Ok(())
 }
 
 fn collect_replacements(
     game_dir: &Path,
     plan: &InstallPlan,
     state: Option<&InstalledState>,
+    kept_aside: &[String],
 ) -> Result<Vec<PendingReplace>, AppError> {
     let mut out = Vec::new();
     let dests: Vec<String> = plan
@@ -177,14 +245,16 @@ fn collect_replacements(
             let hash = hash_file(&path).ok();
             let tracked = state.is_some_and(|s| s.file_by_path(&rel).is_some());
             let known_name = file.component_id == "snow" && is_known_legacy_snow_jar(&name);
+            let kept = kept_aside.iter().any(|item| item == &rel);
+            let action = if kept {
+                ReplaceAction::Ask
+            } else {
+                decide_legacy_replace(tracked, hash.as_deref(), &file.known_sha512, known_name)
+            };
             out.push(PendingReplace {
                 rel,
-                action: decide_legacy_replace(
-                    tracked,
-                    hash.as_deref(),
-                    &file.known_sha512,
-                    known_name,
-                ),
+                action,
+                kept_aside: kept,
             });
         }
     }
@@ -681,6 +751,8 @@ pub fn run_install<F: Fetcher>(
     let snapshot_id: RefCell<Option<String>> = RefCell::new(None);
     let created_new: RefCell<Vec<String>> = RefCell::new(Vec::new());
     let prior_state: RefCell<Option<InstalledState>> = RefCell::new(None);
+    // A kept-aside refusal or an unreadable sidecar returns before any write.
+    let quiet_refusal = RefCell::new(false);
 
     let result = (|| -> Result<String, AppError> {
         cancelled(cancel)?;
@@ -700,6 +772,36 @@ pub fn run_install<F: Fetcher>(
                         path: root.display().to_string(),
                     });
                 }
+            }
+        }
+
+        let existing = load_state(game_dir)?;
+        *prior_state.borrow_mut() = existing.clone();
+        let kept_aside = match crate::pack_dirs::kept_aside_paths(game_dir) {
+            Ok(paths) => paths,
+            Err(err) => {
+                *quiet_refusal.borrow_mut() = true;
+                return Err(err);
+            }
+        };
+        // Refuse a protected file before logs, staging, or downloads so the
+        // folder is unchanged. Other collisions stay until after optional skips.
+        let preflight = collect_replacements(game_dir, plan, existing.as_ref(), &kept_aside)?;
+        if let Err(err) = refuse_unconfirmed_collisions(
+            game_dir,
+            plan,
+            existing.as_ref(),
+            &kept_aside,
+            &preflight,
+            replace_collisions,
+        ) {
+            let defer = matches!(
+                &err,
+                AppError::Collision { detail, .. } if !detail.contains("kept aside")
+            );
+            if !defer {
+                *quiet_refusal.borrow_mut() = true;
+                return Err(err);
             }
         }
 
@@ -849,43 +951,15 @@ pub fn run_install<F: Fetcher>(
         let plan = filtered.as_ref().unwrap_or(plan);
 
         cancelled(cancel)?;
-        let existing = load_state(game_dir)?;
-        *prior_state.borrow_mut() = existing.clone();
-        let replacements = collect_replacements(game_dir, plan, existing.as_ref())?;
-        let asks: Vec<_> = replacements
-            .iter()
-            .filter(|r| r.action == ReplaceAction::Ask)
-            .map(|r| r.rel.clone())
-            .collect();
-        if !asks.is_empty() && !replace_collisions {
-            return Err(AppError::Collision {
-                path: asks[0].clone(),
-                detail: format!(
-                    "Unknown Arnold-looking file(s) {}. Tracked files and known checksums are replaced automatically; this one was left for you to confirm.",
-                    asks.join(", ")
-                ),
-            });
-        }
-
-        for file in plan.add.iter().chain(plan.update.iter()) {
-            let rel = dest_rel(file);
-            let dest = game_dir.join(&rel);
-            if dest.is_file() {
-                let actual = hash_file(&dest)?;
-                if actual == file.sha512 {
-                    continue;
-                }
-                let tracked = existing
-                    .as_ref()
-                    .is_some_and(|s| s.file_by_path(&rel).is_some());
-                if !tracked && !replace_collisions {
-                    return Err(AppError::Collision {
-                        path: rel,
-                        detail: "A different file is already in that slot".into(),
-                    });
-                }
-            }
-        }
+        let replacements = collect_replacements(game_dir, plan, existing.as_ref(), &kept_aside)?;
+        refuse_unconfirmed_collisions(
+            game_dir,
+            plan,
+            existing.as_ref(),
+            &kept_aside,
+            &replacements,
+            replace_collisions,
+        )?;
 
         emit_log("snapshot", "Saving a restore point", 72, "running", None);
         let mut snap_state = existing
@@ -1050,36 +1124,38 @@ pub fn run_install<F: Fetcher>(
         let mut new_state = build_new_state(manifest, plan, recorded, existing.as_ref(), &dropped);
         record_quality_files(&mut new_state, quality_written, plan.quality);
         save_state(game_dir, &new_state)?;
+        let _ = crate::pack_dirs::prune_kept_aside(game_dir, &new_state);
         emit_log("done", &done_message, 100, "done", None);
         let _ = fs::remove_dir_all(&staging);
         Ok(run_id.clone())
     })();
 
-    if let Err(err) = &result {
-        if matches!(err, AppError::Cancelled) {
-            emit_log("rollback", "Cancelled — restoring", 100, "cancelled", None);
-        } else {
-            emit_log("error", &err.to_string(), 100, "error", None);
-        }
-        if let Some(id) = snapshot_id.borrow().clone() {
-            let current = load_state(game_dir)
-                .ok()
-                .flatten()
-                .unwrap_or_else(|| InstalledState::new("installer", &manifest.manifest_version));
-            let _ = rollback(game_dir, &id, &current);
-            match prior_state.borrow().as_ref() {
-                Some(orig) => {
-                    let _ = save_state(game_dir, orig);
+    if !*quiet_refusal.borrow() {
+        if let Err(err) = &result {
+            if matches!(err, AppError::Cancelled) {
+                emit_log("rollback", "Cancelled — restoring", 100, "cancelled", None);
+            } else {
+                emit_log("error", &err.to_string(), 100, "error", None);
+            }
+            if let Some(id) = snapshot_id.borrow().clone() {
+                let current = load_state(game_dir).ok().flatten().unwrap_or_else(|| {
+                    InstalledState::new("installer", &manifest.manifest_version)
+                });
+                let _ = rollback(game_dir, &id, &current);
+                match prior_state.borrow().as_ref() {
+                    Some(orig) => {
+                        let _ = save_state(game_dir, orig);
+                    }
+                    None => {
+                        let _ = fs::remove_file(crate::state::state_path(game_dir));
+                    }
                 }
-                None => {
-                    let _ = fs::remove_file(crate::state::state_path(game_dir));
+                for rel in created_new.borrow().iter() {
+                    let _ = fs::remove_file(game_dir.join(rel));
                 }
             }
-            for rel in created_new.borrow().iter() {
-                let _ = fs::remove_file(game_dir.join(rel));
-            }
+            let _ = fs::remove_dir_all(installer_dir(game_dir).join("staging").join(&run_id));
         }
-        let _ = fs::remove_dir_all(installer_dir(game_dir).join("staging").join(&run_id));
     }
     result
 }
@@ -1255,6 +1331,24 @@ mod tests {
 
     fn basic_plan(manifest: &crate::manifest::Manifest) -> InstallPlan {
         build_plan(manifest, &basic_selection(), None, true).unwrap()
+    }
+
+    #[test]
+    fn kept_aside_legacy_name_asks_instead_of_replacing() {
+        let tmp = tempdir().unwrap();
+        let game = tmp.path();
+        prepare_game(game);
+        fs::write(game.join("mods/arnold-snowfall-1.3.2.jar"), b"players-own").unwrap();
+        let (manifest, _, _) = test_manifest_and_fetcher();
+        let plan = basic_plan(&manifest);
+        let rel = "mods/arnold-snowfall-1.3.2.jar";
+        let plain = collect_replacements(game, &plan, None, &[]).unwrap();
+        let found = plain.iter().find(|item| item.rel == rel).unwrap();
+        assert_eq!(found.action, ReplaceAction::Replace);
+        let protected = collect_replacements(game, &plan, None, &[rel.to_string()]).unwrap();
+        let kept = protected.iter().find(|item| item.rel == rel).unwrap();
+        assert_eq!(kept.action, ReplaceAction::Ask);
+        assert!(kept.kept_aside);
     }
 
     #[test]
@@ -1674,7 +1768,7 @@ mod tests {
         fs::write(game.join("mods/FreshAnimations_v1.10.4.zip"), b"decoy").unwrap();
         let (manifest, _, _) = test_manifest_and_fetcher();
         let plan = custom_pack_plan(&manifest, &["freshanimations"]);
-        let found = collect_replacements(game, &plan, None).unwrap();
+        let found = collect_replacements(game, &plan, None, &[]).unwrap();
         let asks: Vec<&PendingReplace> = found
             .iter()
             .filter(|item| item.action == ReplaceAction::Ask)

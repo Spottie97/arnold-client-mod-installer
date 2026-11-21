@@ -213,6 +213,39 @@ pub fn owned_pack_dir(
     Ok(resolved.path)
 }
 
+/// Folder an explicit 2.3.x import may write state.json into. Read only.
+/// Only Better Adventures+ may adopt a shared folder that has Arnold jars but no installer record.
+pub fn import_dir_at(
+    prefs: &Prefs,
+    selected: &str,
+    launcher_root: &Path,
+    search_roots: &[PathBuf],
+) -> Result<PathBuf, AppError> {
+    let resolved = pack_dirs::resolve_pack_dir(prefs, selected, launcher_root, search_roots);
+    let (dir, shared) = match resolved.needs_choice {
+        Some(choice) => (choice.root, true),
+        None => {
+            let shared = resolved.mode == "default";
+            (resolved.path, shared)
+        }
+    };
+    if !shared {
+        return Ok(dir);
+    }
+    match pack_dirs::resolve_folder_owner(&dir) {
+        pack_dirs::FolderOwner::Occupied { files } => {
+            if selected == packs::BA_PLUS_PACK_ID {
+                Ok(dir)
+            } else {
+                Err(packs::folder_occupied_error(&dir, selected, &files))
+            }
+        }
+        _ => Err(AppError::State(
+            "there is nothing to adopt here: this folder already has an installer record, or no Arnold jars".into(),
+        )),
+    }
+}
+
 /// Folder reads and plans describe.
 pub fn plan_dir_at(
     prefs: &Prefs,
@@ -339,16 +372,20 @@ mod tests {
     use tempfile::tempdir;
 
     use super::{
-        apply_change, incoming_state_at, install_at, plan_at, AppError, Change, Ctx, FolderChoice,
-        InstallPlan, Manifest, PackLocation, Prefs,
+        apply_change, import_dir_at, incoming_state_at, install_at, plan_at, AppError, Change, Ctx,
+        FolderChoice, InstallPlan, Manifest, PackLocation, Prefs,
     };
+    use crate::backup::{list_snapshots, snapshots_dir};
     use crate::download::sha512_hex;
     use crate::fetch::MapFetcher;
+    use crate::import::adopt_import;
     use crate::install::test_support::{
         basic_selection, legacy_shared_game, prepare_game, test_manifest_and_fetcher,
     };
     use crate::install::{dest_rel, run_install, InstallTarget};
-    use crate::pack_dirs::{read_active_pack, write_active_pack, OwnerSource};
+    use crate::pack_dirs::{
+        kept_aside_paths, read_active_pack, write_active_pack, FolderOwner, OwnerSource,
+    };
     use crate::packs::BA_PLUS_PACK_ID;
     use crate::plan::{build_plan, ensure_plan_current};
     use crate::state::{load_state, record_file, save_state, state_path, InstalledState};
@@ -785,47 +822,58 @@ mod tests {
         prepare_game(&game);
         prepare_game(&elsewhere);
         fs::write(game.join("mods/arnold-snowfall-1.3.3.jar"), b"leftover").unwrap();
+        fs::write(
+            game.join("mods/arnold-snowfall-1.3.2.jar"),
+            b"arbitrary-user-bytes",
+        )
+        .unwrap();
         let (manifest, _, _) = test_manifest_and_fetcher();
         let before = tree_fingerprint(&game);
-        let plain = Prefs {
-            selected_pack: Some("pack-x".into()),
-            ..Prefs::default()
-        };
-        occupied(apply_change(
-            &plain,
-            "pack-x",
-            &ctx(&game),
-            Change::ChooseFolder(FolderChoice::Keep),
-            no_loader,
-        ));
-        occupied(apply_change(
-            &plain,
-            "pack-x",
-            &ctx(&game),
-            Change::UseDefaultFolder(true),
-            no_loader,
-        ));
-        occupied(apply_change(
-            &shared_prefs("pack-x"),
-            "pack-x",
-            &ctx(&elsewhere),
-            Change::SetGameDir(game.clone()),
-            no_loader,
-        ));
-        let plan = build_plan(&manifest, &basic_selection(), None, true).unwrap();
-        let err = install_at(
-            &plan,
-            &keep_prefs("pack-x"),
-            "pack-x",
-            &ctx(&game),
-            &manifest,
-            no_loader,
-            |_| panic!("install must not run"),
-        )
-        .unwrap_err();
-        assert_eq!(err.code(), "E-FOLDER-OCCUPIED");
+        for pack in ["pack-x", BA_PLUS_PACK_ID] {
+            let plain = Prefs {
+                selected_pack: Some(pack.into()),
+                ..Prefs::default()
+            };
+            occupied(apply_change(
+                &plain,
+                pack,
+                &ctx(&game),
+                Change::ChooseFolder(FolderChoice::Keep),
+                no_loader,
+            ));
+            occupied(apply_change(
+                &plain,
+                pack,
+                &ctx(&game),
+                Change::UseDefaultFolder(true),
+                no_loader,
+            ));
+            occupied(apply_change(
+                &shared_prefs(pack),
+                pack,
+                &ctx(&elsewhere),
+                Change::SetGameDir(game.clone()),
+                no_loader,
+            ));
+            let plan = build_plan(&manifest, &basic_selection(), None, true).unwrap();
+            let err = install_at(
+                &plan,
+                &keep_prefs(pack),
+                pack,
+                &ctx(&game),
+                &manifest,
+                no_loader,
+                |_| panic!("install must not run"),
+            )
+            .unwrap_err();
+            assert_eq!(err.code(), "E-FOLDER-OCCUPIED");
+        }
         assert_eq!(tree_fingerprint(&game), before);
         assert!(!game.join("arnold-installer").exists());
+        assert_eq!(
+            fs::read(game.join("mods/arnold-snowfall-1.3.2.jar")).unwrap(),
+            b"arbitrary-user-bytes"
+        );
     }
 
     #[test]
@@ -854,6 +902,7 @@ mod tests {
         let report = switched.entry.as_ref().unwrap().switch.as_ref().unwrap();
         assert!(report.partial_restore);
         assert_eq!(report.conflicts, vec![rel.clone()]);
+        assert_eq!(kept_aside_paths(&game).unwrap(), vec![rel.clone()]);
         let live = incoming_state_at(&switched.prefs, "pack-x", &game, &[])
             .unwrap()
             .unwrap();
@@ -890,6 +939,7 @@ mod tests {
         .unwrap_err();
         assert_eq!(err.code(), "P-COLLISION");
         assert_eq!(fs::read(game.join(&rel)).unwrap(), b"players-own-file");
+        assert_eq!(kept_aside_paths(&game).unwrap(), vec![rel.clone()]);
         install_at(
             &plan,
             &switched.prefs,
@@ -901,6 +951,197 @@ mod tests {
         )
         .unwrap();
         assert_eq!(fs::read(game.join(&rel)).unwrap(), b"blob-v2");
+        assert!(kept_aside_paths(&game).unwrap().is_empty());
+    }
+
+    #[test]
+    fn occupied_folder_import_is_the_only_way_in_for_ba_plus() {
+        let tmp = tempdir().unwrap();
+        let game = tmp.path().join("game");
+        prepare_game(&game);
+        fs::write(
+            game.join("mods/arnold-snowfall-1.3.2.jar"),
+            b"arbitrary-user-bytes",
+        )
+        .unwrap();
+        let (manifest, fetcher, _) = test_manifest_and_fetcher();
+        let pack_x = Prefs {
+            selected_pack: Some("pack-x".into()),
+            ..Prefs::default()
+        };
+        let before = tree_fingerprint(&game);
+        let blocked = import_dir_at(&pack_x, "pack-x", &game, &[]).unwrap_err();
+        assert_eq!(blocked.code(), "E-FOLDER-OCCUPIED");
+        assert_eq!(tree_fingerprint(&game), before);
+        let prefs = Prefs {
+            selected_pack: Some(BA_PLUS_PACK_ID.into()),
+            ..Prefs::default()
+        };
+        assert_eq!(
+            import_dir_at(&prefs, BA_PLUS_PACK_ID, &game, &[]).unwrap(),
+            game
+        );
+        let adopted = adopt_import(&game, &manifest, true).unwrap();
+        assert!(adopted.pack_id.is_none());
+        assert!(adopted
+            .file_by_path("mods/arnold-snowfall-1.3.2.jar")
+            .is_some());
+        let outcome = apply_change(
+            &prefs,
+            BA_PLUS_PACK_ID,
+            &ctx(&game),
+            Change::ChooseFolder(FolderChoice::Keep),
+            no_loader,
+        )
+        .unwrap();
+        let entry = outcome.entry.as_ref().unwrap();
+        assert!(entry.adopted);
+        assert_eq!(
+            entry.owner_before,
+            Some(FolderOwner::Inferred {
+                pack_id: BA_PLUS_PACK_ID.into(),
+                source: OwnerSource::LegacyBaPlus,
+            })
+        );
+        assert_eq!(read_active_pack(&game).as_deref(), Some(BA_PLUS_PACK_ID));
+        let plan = plan_at(
+            &manifest,
+            &basic_selection(),
+            &outcome.prefs,
+            BA_PLUS_PACK_ID,
+            &game,
+            &[],
+            true,
+        )
+        .unwrap();
+        install_at(
+            &plan,
+            &outcome.prefs,
+            BA_PLUS_PACK_ID,
+            &ctx(&game),
+            &manifest,
+            no_loader,
+            run_with(&plan, &manifest, &fetcher, false),
+        )
+        .unwrap();
+        assert_eq!(
+            fs::read(game.join("mods/arnold-snowfall-1.3.3.jar")).unwrap(),
+            b"blob-arnold-snowfall-1.3.3.jar"
+        );
+        assert!(!game.join("mods/arnold-snowfall-1.3.2.jar").exists());
+        let snaps = list_snapshots(&game).unwrap();
+        let newest = snaps.last().unwrap();
+        assert_eq!(
+            fs::read(
+                snapshots_dir(&game)
+                    .join(&newest.id)
+                    .join("mods/arnold-snowfall-1.3.2.jar")
+            )
+            .unwrap(),
+            b"arbitrary-user-bytes"
+        );
+        let again = import_dir_at(&outcome.prefs, BA_PLUS_PACK_ID, &game, &[]).unwrap_err();
+        assert_eq!(again.code(), "E-STATE");
+    }
+
+    #[test]
+    fn kept_aside_legacy_file_survives_a_new_filename_without_consent() {
+        let tmp = tempdir().unwrap();
+        let scratch = tmp.path().join("scratch");
+        let game = tmp.path().join("game");
+        prepare_game(&game);
+        let (manifest, fetcher, _) = test_manifest_and_fetcher();
+        stash_real_install(&scratch, &game, "pack-x", &manifest, &fetcher);
+        let stash = game.join("arnold-installer/packs/pack-x");
+        fs::rename(
+            stash.join("mods/arnold-snowfall-1.3.3.jar"),
+            stash.join("mods/arnold-snowfall-1.3.2.jar"),
+        )
+        .unwrap();
+        let mut saved = load_state(&stash).unwrap().unwrap();
+        for file in &mut saved.files {
+            if file.path == "mods/arnold-snowfall-1.3.3.jar" {
+                file.path = "mods/arnold-snowfall-1.3.2.jar".into();
+            }
+        }
+        save_state(&stash, &saved).unwrap();
+        mark_pack_a(&game, b"pack-a-only");
+        fs::write(
+            game.join("mods/arnold-snowfall-1.3.2.jar"),
+            b"players-own-snowfall",
+        )
+        .unwrap();
+        let switched = apply_change(
+            &shared_prefs("pack-a"),
+            "pack-a",
+            &ctx(&game),
+            Change::SelectPack("pack-x".into()),
+            loader(&manifest),
+        )
+        .unwrap();
+        let report = switched.entry.as_ref().unwrap().switch.as_ref().unwrap();
+        let rel = "mods/arnold-snowfall-1.3.2.jar";
+        assert_eq!(report.conflicts, vec![rel.to_string()]);
+        assert_eq!(kept_aside_paths(&game).unwrap(), vec![rel.to_string()]);
+        let live = incoming_state_at(&switched.prefs, "pack-x", &game, &[])
+            .unwrap()
+            .unwrap();
+        assert!(live.file_by_path(rel).is_none());
+        let plan = plan_at(
+            &manifest,
+            &basic_selection(),
+            &switched.prefs,
+            "pack-x",
+            &game,
+            &[],
+            true,
+        )
+        .unwrap();
+        assert!(plan
+            .add
+            .iter()
+            .any(|file| dest_rel(file) == "mods/arnold-snowfall-1.3.3.jar"));
+        let before = tree_fingerprint(&game);
+        let live_before = load_state(&game).unwrap();
+        let err = install_at(
+            &plan,
+            &switched.prefs,
+            "pack-x",
+            &ctx(&game),
+            &manifest,
+            no_loader,
+            run_with(&plan, &manifest, &fetcher, false),
+        )
+        .unwrap_err();
+        let payload = err.to_payload();
+        assert_eq!(payload.code, "P-COLLISION");
+        assert!(payload.detail.contains("kept aside"), "{}", payload.detail);
+        assert_eq!(fs::read(game.join(rel)).unwrap(), b"players-own-snowfall");
+        assert!(!game.join("mods/arnold-snowfall-1.3.3.jar").exists());
+        assert_eq!(tree_fingerprint(&game), before);
+        assert_eq!(load_state(&game).unwrap(), live_before);
+        install_at(
+            &plan,
+            &switched.prefs,
+            "pack-x",
+            &ctx(&game),
+            &manifest,
+            no_loader,
+            run_with(&plan, &manifest, &fetcher, true),
+        )
+        .unwrap();
+        assert_eq!(
+            fs::read(game.join("mods/arnold-snowfall-1.3.3.jar")).unwrap(),
+            b"blob-arnold-snowfall-1.3.3.jar"
+        );
+        assert!(!game.join(rel).exists());
+        let snaps = list_snapshots(&game).unwrap();
+        let newest = snaps.last().unwrap();
+        assert_eq!(
+            fs::read(snapshots_dir(&game).join(&newest.id).join(rel)).unwrap(),
+            b"players-own-snowfall"
+        );
+        assert!(kept_aside_paths(&game).unwrap().is_empty());
     }
 
     #[test]
@@ -1011,6 +1252,7 @@ mod tests {
             ("pub fn switch_shared_pack(", "Change::SwitchShared"),
             ("pub async fn install(", "destination::install_at"),
             ("pub async fn repair(", "destination::prepare_destination"),
+            ("pub fn confirm_import(", "destination::import_dir_at"),
         ];
         for (signature, needle) in checks {
             let start = source

@@ -134,6 +134,7 @@ export default function App() {
   const [error, setError] = useState<ErrorPayload | null>(null);
   const [tourStep, setTourStep] = useState<number | null>(null);
   const [importOffer, setImportOffer] = useState<ImportOffer | null>(null);
+  const [importRetry, setImportRetry] = useState<(() => Promise<void>) | null>(null);
   const [replaceCollisions, setReplaceCollisions] = useState(false);
   const [library, setLibrary] = useState<PackIndexLoad | null>(null);
   const [prefs, setPrefs] = useState<Prefs>({ tourDone: false, useDefaultFolder: false });
@@ -357,6 +358,15 @@ export default function App() {
     },
   });
 
+  const routeOccupied = async (err: unknown, retry: () => Promise<void>): Promise<boolean> => {
+    const offer = await flow.occupiedImportOffer(err, prefs.selectedPack ?? detection?.packId);
+    if (!offer) return false;
+    setImportOffer(offer);
+    setImportRetry(() => retry);
+    go("import");
+    return true;
+  };
+
   const startInstall = async (nextPlan = currentPlan, replace = replaceCollisions) => {
     if (detection?.needsFolderChoice) {
       go("pack");
@@ -369,11 +379,35 @@ export default function App() {
     }
     let runId: string | null;
     try {
-      runId = await flow.install(nextPlan, detection, prefs.selectedPack, replace);
+      runId = await flow.install(nextPlan, detection, prefs.selectedPack, replace, {
+        onStart: () => {
+          setProgressLog([]);
+          setProgress({
+            runId: "",
+            step: "prepare",
+            status: "running",
+            percent: 1,
+            message: "Starting install",
+          });
+          go("progress");
+        },
+        onProgress: (event) => {
+          setProgress(event);
+          setProgressLog((rows) => mergeProgress(rows, event));
+        },
+      });
     } catch (err) {
       const payload = asErrorPayload(err);
       if (payload.code === "E-CANCELLED") {
         go("kit");
+        return;
+      }
+      if (
+        await routeOccupied(err, async () => {
+          invalidateInstall();
+          go("kit");
+        })
+      ) {
         return;
       }
       setError(payload);
@@ -385,19 +419,6 @@ export default function App() {
       go("kit");
       return;
     }
-    setProgressLog([]);
-    setProgress({
-      runId,
-      step: "prepare",
-      status: "running",
-      percent: 1,
-      message: "Starting install",
-    });
-    go("progress");
-    const stop = await listenProgress((event) => {
-      setProgress(event);
-      setProgressLog((rows) => mergeProgress(rows, event));
-    });
     try {
       setProgress((current) =>
         current
@@ -428,8 +449,6 @@ export default function App() {
       setError(payload);
       setReplaceCollisions(payload.code === "P-COLLISION");
       go("error");
-    } finally {
-      stop();
     }
   };
 
@@ -671,15 +690,16 @@ export default function App() {
           installed={installed}
           canCopy={Boolean(prefs.lastGameDir) && detection.folderMode === "own"}
           onChoose={(choice) => {
-            void flow.chooseFolder(choice)
-              .then(({ result, detection: next }) => {
+            const apply = () =>
+              flow.chooseFolder(choice).then(({ result, detection: next }) => {
                 setPrefs(result);
                 setDetection(next);
-              })
-              .catch((err: unknown) => {
-                setError(asErrorPayload(err));
-                go("error");
               });
+            void apply().catch(async (err: unknown) => {
+              if (await routeOccupied(err, apply)) return;
+              setError(asErrorPayload(err));
+              go("error");
+            });
           }}
           onCopy={(item) => copyFromOldFolder(item)}
         />
@@ -812,12 +832,27 @@ export default function App() {
             }
           }
           onConfirm={() => {
-            void confirmImport().then((state) => {
-              setInstalled(state);
-              go("welcome");
-            });
+            void (async () => {
+              try {
+                const retry = importRetry;
+                setImportRetry(null);
+                if (retry) {
+                  await flow.adoptThen(retry);
+                } else {
+                  setInstalled(await confirmImport());
+                  go("welcome");
+                }
+                setInstalled(await listInstalled());
+              } catch (err) {
+                setError(asErrorPayload(err));
+                go("error");
+              }
+            })();
           }}
-          onSkip={() => go("welcome")}
+          onSkip={() => {
+            setImportRetry(null);
+            go("welcome");
+          }}
         />
       );
       break;
@@ -831,26 +866,28 @@ export default function App() {
           prefs={prefs}
           snapshots={snapshots}
           onUseDefault={(enabled) => {
-            void flow.useDefaultFolder(enabled)
-              .then(({ result, detection: next }) => {
+            const apply = () =>
+              flow.useDefaultFolder(enabled).then(({ result, detection: next }) => {
                 setPrefs(result);
                 setDetection(next);
-              })
-              .catch((err: unknown) => {
-                setError(asErrorPayload(err));
-                go("error");
               });
+            void apply().catch(async (err: unknown) => {
+              if (await routeOccupied(err, apply)) return;
+              setError(asErrorPayload(err));
+              go("error");
+            });
           }}
           onChooseFolder={(choice) => {
-            void flow.chooseFolder(choice)
-              .then(({ result, detection: next }) => {
+            const apply = () =>
+              flow.chooseFolder(choice).then(({ result, detection: next }) => {
                 setPrefs(result);
                 setDetection(next);
-              })
-              .catch((err: unknown) => {
-                setError(asErrorPayload(err));
-                go("error");
               });
+            void apply().catch(async (err: unknown) => {
+              if (await routeOccupied(err, apply)) return;
+              setError(asErrorPayload(err));
+              go("error");
+            });
           }}
           onPickGameDir={() => void chooseFolder()}
           onLauncherWrite={(which, enabled) => {

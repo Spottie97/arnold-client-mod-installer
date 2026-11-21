@@ -772,7 +772,14 @@ pub fn detect_legacy(state: State<AppState>) -> Result<ImportOffer, ErrorPayload
 
 #[tauri::command]
 pub fn confirm_import(state: State<AppState>) -> Result<InstalledState, ErrorPayload> {
-    let game = pack_dir_of(&state).map_err(|e| e.to_payload())?;
+    let _running = begin_install(&state).map_err(|e| e.to_payload())?;
+    let game = destination::import_dir_at(
+        &load_prefs().unwrap_or_default(),
+        &selected_pack_id(&state),
+        &launcher_root_of(&state),
+        &default_candidates(),
+    )
+    .map_err(|e| e.to_payload())?;
     let manifest = manifest_of(&state).map_err(|e| e.to_payload())?;
     adopt_import(&game, &manifest, true).map_err(|e| e.to_payload())
 }

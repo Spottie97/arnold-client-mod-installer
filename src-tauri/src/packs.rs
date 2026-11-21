@@ -111,10 +111,15 @@ pub fn folder_occupied_error(root: &Path, pack_id: &str, files: &[String]) -> Ap
     } else {
         shown.join(", ")
     };
+    let hint = if pack_id == BA_PLUS_PACK_ID {
+        "Nothing was moved or changed. If these are from an older Better Adventures+ install, choose \"Adopt into this installer\" when the installer offers it, then pick this folder again. Otherwise give Better Adventures+ its own folder: choose \"Set up the pack folder fresh\", or \"Use a fresh pack folder\" in Settings. Or move the listed files out of the mods folder yourself and try again."
+    } else {
+        "Nothing was moved or changed. To keep those mods safe, give this pack its own folder: choose \"Set up the pack folder fresh\", or \"Use a fresh pack folder\" in Settings. You can also pick a different Minecraft folder. If the mods came from an older Better Adventures+ install, open Better Adventures+ and adopt them first. Or move the listed files out of the mods folder yourself and try again."
+    };
     AppError::Other {
         code: "E-FOLDER-OCCUPIED".into(),
         title: "This Minecraft folder already has Arnold mods we didn't set up".into(),
-        hint: "Nothing was moved or changed. To keep those mods safe, give this pack its own folder: choose \"Set up the pack folder fresh\", or \"Use a fresh pack folder\" in Settings. You can also pick a different Minecraft folder. If the mods came from Better Adventures+, open Better Adventures+ first so it can take them over. Or move the listed files out of the mods folder yourself and try again.".into(),
+        hint: hint.into(),
         detail: format!(
             "{pack_id} can't use {} yet. Arnold files with no installer record: {list}",
             root.display()
