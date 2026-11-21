@@ -197,14 +197,12 @@ fn refuse_unconfirmed_collisions(
         let tracked = existing.is_some_and(|state| state.file_by_path(&rel).is_some());
         let kept = kept_aside.iter().any(|path| path == &rel);
         if !tracked || kept {
-            return Err(AppError::Collision {
-                path: rel,
-                detail: if kept {
-                    kept_aside_detail(&rel)
-                } else {
-                    "A different file is already in that slot".into()
-                },
-            });
+            let detail = if kept {
+                kept_aside_detail(&rel)
+            } else {
+                "A different file is already in that slot".into()
+            };
+            return Err(AppError::Collision { path: rel, detail });
         }
     }
     Ok(())

@@ -484,18 +484,16 @@ pub fn load_pack_manifest<F: Fetcher>(
         Ok(bytes) => match accept_pack_bytes(&bytes, fetcher, entry, key) {
             Ok((manifest, signature)) => {
                 let _ = write_manifest_cache(&pack_cache, &bytes, &signature);
-                return ManifestLoad {
+                ManifestLoad {
                     manifest,
                     source: "remote".into(),
                     offline: false,
                     message: None,
                     local_source: fetcher.local_root().is_some(),
                     local_source_dir: fetcher.local_root().map(|path| path.display().to_string()),
-                };
+                }
             }
-            Err(err) => {
-                return error_load(err);
-            }
+            Err(err) => error_load(err),
         },
         Err(remote_err) => {
             if let Some(load) = cached_pack_manifest(&pack_cache, entry, key, &remote_err) {

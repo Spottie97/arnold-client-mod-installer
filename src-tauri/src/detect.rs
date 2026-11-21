@@ -228,7 +228,7 @@ pub fn detect_at(
         .is_some_and(|dir| fabric_profile_present(dir, loader_id));
     let imported = selected.as_deref().is_some_and(looks_like_legacy_install);
     Detection {
-        game_dir: selected,
+        game_dir: selected.clone(),
         candidates: existing,
         minecraft_version: minecraft.to_string(),
         minecraft_version_installed,
@@ -241,7 +241,7 @@ pub fn detect_at(
         imported_from_legacy: imported,
         pack_id: String::new(),
         pack_dir: None,
-        launcher_root: selected.clone().unwrap_or_default(),
+        launcher_root: selected.unwrap_or_default(),
         folder_mode: "own".into(),
         needs_folder_choice: None,
         launchers: crate::launcher::LauncherReport::default(),
@@ -450,10 +450,10 @@ mod tests {
             "26.3",
             "fabric-loader-0.20.1-26.3",
             &[],
-            &[official.clone()],
+            std::slice::from_ref(&official),
         );
         assert!(!detection.minecraft_version_installed);
-        apply_chosen_vanilla(&mut detection, &[custom.clone()], true);
+        apply_chosen_vanilla(&mut detection, std::slice::from_ref(&custom), true);
         assert!(detection.require_vanilla);
         assert!(detection.minecraft_version_installed);
 
@@ -461,7 +461,13 @@ mod tests {
         assert!(!detection.minecraft_version_installed);
         assert_eq!(detection.game_dir.as_deref(), Some(official.as_path()));
 
-        let mut optional = detect_at(Some(&official), "26.3", "fabric", &[], &[official.clone()]);
+        let mut optional = detect_at(
+            Some(&official),
+            "26.3",
+            "fabric",
+            &[],
+            std::slice::from_ref(&official),
+        );
         apply_chosen_vanilla(&mut optional, &[], false);
         assert!(!optional.require_vanilla);
         assert!(!optional.minecraft_version_installed);

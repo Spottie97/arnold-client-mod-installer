@@ -421,12 +421,11 @@ fn managed_set(
         if !path.is_file() {
             continue;
         }
-        match state.file_by_path(&rel) {
-            Some(tracked) => match hash_file(&path) {
+        if let Some(tracked) = state.file_by_path(&rel) {
+            match hash_file(&path) {
                 Ok(actual) if actual == tracked.sha512 => move_rels.push(rel),
                 _ => flagged.push(format!("Not part of {from_id}: {rel} left in place")),
-            },
-            None => {}
+            }
         }
     }
     for folder in ["mods", "resourcepacks", "shaderpacks"] {
@@ -982,6 +981,7 @@ pub fn enter_destination(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn finish_switch(
     path: &Path,
     mode: String,
@@ -1083,8 +1083,10 @@ mod tests {
             Some("arnold-packs")
         );
 
-        let mut shared = Prefs::default();
-        shared.use_default_folder = true;
+        let shared = Prefs {
+            use_default_folder: true,
+            ..Default::default()
+        };
         let shared_dir = resolve_pack_dir(&shared, "better-adventures-plus", &root, &[]);
         assert_eq!(shared_dir.path, root);
         assert!(shared_dir.needs_choice.is_none());
@@ -1810,7 +1812,7 @@ mod tests {
         assert!(report
             .flagged
             .iter()
-            .all(|row| { !(row.contains("mods/x.jar") && !row.contains("Not part of")) }));
+            .all(|row| { !row.contains("mods/x.jar") || row.contains("Not part of") }));
         assert_eq!(fs::read(root.join("mods/x.jar")).unwrap(), b"live");
         assert_eq!(fs::read(root.join("mods/y.jar")).unwrap(), b"y");
         let live = state::load_state(root).unwrap().unwrap();

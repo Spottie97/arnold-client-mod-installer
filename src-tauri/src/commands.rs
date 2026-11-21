@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -386,7 +386,7 @@ fn begin_install(state: &AppState) -> Result<InstallRunGuard<'_>, AppError> {
     })
 }
 
-fn install_target_for(state: &AppState, pack_dir: &PathBuf, pack_name: &str) -> InstallTarget {
+fn install_target_for(state: &AppState, pack_dir: &Path, pack_name: &str) -> InstallTarget {
     let prefs = load_prefs().unwrap_or_default();
     let report = probe_launchers();
     let dest = profile_destinations(&report, &prefs.launchers, pack_dir);
@@ -396,7 +396,7 @@ fn install_target_for(state: &AppState, pack_dir: &PathBuf, pack_name: &str) -> 
         && kept
         && dest
             .official
-            .as_ref()
+            .as_deref()
             .is_some_and(crate::profiles::legacy_profile_key_present);
     let mut roots = dest.vanilla_roots.clone();
     if roots.is_empty() {
@@ -404,11 +404,11 @@ fn install_target_for(state: &AppState, pack_dir: &PathBuf, pack_name: &str) -> 
             roots.push(official.clone());
         }
         if dest.also_pack_dir {
-            roots.push(pack_dir.clone());
+            roots.push(pack_dir.to_path_buf());
         }
     }
     InstallTarget {
-        pack_dir: pack_dir.clone(),
+        pack_dir: pack_dir.to_path_buf(),
         launcher_roots: roots,
         profiles: crate::profiles::ProfileTargets {
             official: dest.official,
@@ -419,7 +419,7 @@ fn install_target_for(state: &AppState, pack_dir: &PathBuf, pack_name: &str) -> 
             key: pack_dirs::profile_key(&id),
             name: pack_dirs::profile_name(pack_name),
             version_id: String::new(),
-            game_dir: pack_dir.clone(),
+            game_dir: pack_dir.to_path_buf(),
             java_args: String::new(),
             update_legacy_in_place: update_legacy,
         },

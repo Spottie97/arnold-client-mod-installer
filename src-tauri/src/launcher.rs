@@ -942,8 +942,10 @@ mod tests {
             assert!(dest.also_pack_dir);
         }
 
-        let mut prefs = LauncherPrefs::default();
-        prefs.play = Some(LauncherKind::TLauncher);
+        let prefs = LauncherPrefs {
+            play: Some(LauncherKind::TLauncher),
+            ..Default::default()
+        };
         let both = report_from_world(&world(HostOs::Windows, true, true, true));
         assert_eq!(
             choose_play_target(&both, &prefs),
@@ -1014,9 +1016,11 @@ mod tests {
         let mut both = report_from_world(&world(HostOs::Windows, true, true, true));
         both.official_root = PathBuf::from("/games/official");
         both.tlauncher.as_mut().unwrap().game_dir = PathBuf::from("/games/custom");
-        let mut prefs = LauncherPrefs::default();
-        prefs.write_official = Some(false);
-        prefs.write_tlauncher = Some(true);
+        let mut prefs = LauncherPrefs {
+            write_official: Some(false),
+            write_tlauncher: Some(true),
+            ..Default::default()
+        };
         let dest = profile_destinations(&both, &prefs, Path::new("/packs/ba"));
         assert!(dest.official.is_none());
         assert_eq!(dest.vanilla_roots, vec![PathBuf::from("/games/custom")]);
