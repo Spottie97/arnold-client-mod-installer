@@ -446,12 +446,35 @@ pub fn select_windows_gpu(
     best.map(|(_, info)| info)
 }
 
+/// Apple Silicon reports no VRAM line; the GPU shares system memory.
+pub fn is_apple_silicon_gpu(name: &str) -> bool {
+    let n = name.trim();
+    n.starts_with("Apple M") || n.eq_ignore_ascii_case("Apple GPU")
+}
+
+/// GPU-usable share of unified memory. macOS lets the GPU wire roughly
+/// 2/3 of RAM up to 36 GB and 3/4 above.
+pub fn unified_vram_gb(ram_gb: f64) -> f64 {
+    let share = if ram_gb <= 36.0 { 2.0 / 3.0 } else { 0.75 };
+    ((ram_gb * share) * 10.0).round() / 10.0
+}
+
+/// VRAM to feed `recommend`. Unchanged except for Apple Silicon reporting 0.
+pub fn effective_vram_gb(gpu: &GpuInfo, ram_gb: f64) -> f64 {
+    if gpu.vram_gb <= 0.0 && is_apple_silicon_gpu(&gpu.name) {
+        unified_vram_gb(ram_gb)
+    } else {
+        gpu.vram_gb
+    }
+}
+
 /// Parse `system_profiler SPDisplaysDataType` text.
 pub fn parse_system_profiler(output: &str) -> Option<GpuInfo> {
     let mut best: Option<GpuInfo> = None;
     let mut name = String::new();
     let mut vram_gb = 0.0;
     let mut dedicated = false;
+    let mut bus_seen = false;
 
     let flush = |best: &mut Option<GpuInfo>, name: &mut String, vram_gb: f64, dedicated: bool| {
         if name.is_empty() {
@@ -475,19 +498,25 @@ pub fn parse_system_profiler(output: &str) -> Option<GpuInfo> {
             name = model.trim().to_string();
             vram_gb = 0.0;
             dedicated = false;
+            bus_seen = false;
             continue;
         }
         if name.is_empty() {
             continue;
         }
         if let Some(bus) = trimmed.strip_prefix("Bus:") {
+            bus_seen = true;
             dedicated = bus.trim().eq_ignore_ascii_case("PCIe");
         }
         if let Some(rest) = trimmed
             .strip_prefix("VRAM (Total):")
             .or_else(|| trimmed.strip_prefix("VRAM (Dynamic, Max):"))
         {
-            dedicated = dedicated || trimmed.contains("Total");
+            // "Total" means dedicated only when this chipset had no Bus line.
+            // A Built-In iGPU can still report `VRAM (Total)`.
+            if !bus_seen {
+                dedicated = dedicated || trimmed.contains("Total");
+            }
             vram_gb = parse_vram_token(rest.trim()).unwrap_or(vram_gb);
         }
     }
@@ -781,6 +810,29 @@ fn probe_linux_sysfs() -> Option<GpuInfo> {
 }
 
 #[cfg(test)]
+pub(crate) const APPLE_M2_PRO: &str = r#"
+Graphics/Displays:
+
+    Apple M2 Pro:
+
+      Chipset Model: Apple M2 Pro
+      Type: GPU
+      Bus: Built-In
+      Total Number of Cores: 19
+      Vendor: Apple (0x106b)
+      Metal Support: Metal 3
+      Displays:
+        Color LCD:
+          Display Type: Built-in Liquid Retina XDR Display
+          Resolution: 3024 x 1964 Retina
+          Main Display: Yes
+          Mirror: Off
+          Online: Yes
+          Automatically Adjust Brightness: Yes
+          Connection Type: Internal
+"#;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -823,33 +875,169 @@ mod tests {
         assert!(gpu.vram_gb >= 11.0);
     }
 
-    #[test]
-    fn parses_system_profiler_discrete_and_apple() {
-        let discrete = r#"
-    AMD Radeon Pro 5500M:
-      Chipset Model: AMD Radeon Pro 5500M
-      Bus: PCIe
-      VRAM (Total): 8 GB
+    const APPLE_M1_EXTERNAL: &str = r#"
+Graphics/Displays:
+
+    Apple M1:
+
+      Chipset Model: Apple M1
+      Type: GPU
+      Bus: Built-In
+      Total Number of Cores: 8
+      Vendor: Apple (0x106b)
+      Metal Support: Metal 3
+      Displays:
+        Color LCD:
+          Display Type: Built-in Liquid Retina Display
+          Resolution: 2560 x 1600 Retina
+          Main Display: Yes
+          Mirror: Off
+          Online: Yes
+          Automatically Adjust Brightness: Yes
+          Connection Type: Internal
+        DELL U2720Q:
+          Resolution: 3840 x 2160 (2160p/4K UHD 1 - Ultra High Definition)
+          Mirror: Off
+          Online: Yes
+          Connection Type: DisplayPort
+"#;
+
+    const INTEL_MBP_2019: &str = r#"
+Graphics/Displays:
+
     Intel UHD Graphics 630:
+
       Chipset Model: Intel UHD Graphics 630
+      Type: GPU
       Bus: Built-In
       VRAM (Dynamic, Max): 1536 MB
-"#;
-        let gpu = parse_system_profiler(discrete).unwrap();
-        assert!(gpu.name.contains("5500M"));
-        assert_eq!(gpu.vram_gb, 8.0);
-        assert!(gpu.dedicated);
+      Vendor: Intel
+      Device ID: 0x3e9b
+      Revision ID: 0x0002
+      Automatic Graphics Switching: Supported
+      gMux Version: 5.0.0
+      Metal Support: Metal 3
 
-        let apple = r#"
-    Apple M1:
-      Chipset Model: Apple M1
-      Bus: Built-In
-      VRAM (Dynamic, Max): 8192 MB
+    AMD Radeon Pro 5500M:
+
+      Chipset Model: AMD Radeon Pro 5500M
+      Type: GPU
+      Bus: PCIe
+      PCIe Lane Width: x16
+      VRAM (Total): 4 GB
+      Vendor: AMD (0x1002)
+      Device ID: 0x7340
+      Revision ID: 0x0040
+      ROM Revision: 113-D3220E-190
+      Automatic Graphics Switching: Supported
+      gMux Version: 5.0.0
+      Metal Support: Metal 3
+      Displays:
+        Color LCD:
+          Display Type: Built-In Retina LCD
+          Resolution: 3072 x 1920 Retina
 "#;
-        let m1 = parse_system_profiler(apple).unwrap();
+
+    const INTEL_AIR_2020: &str = r#"
+Graphics/Displays:
+
+    Intel Iris Plus Graphics:
+
+      Chipset Model: Intel Iris Plus Graphics
+      Type: GPU
+      Bus: Built-In
+      VRAM (Dynamic, Max): 1536 MB
+      Vendor: Intel
+      Device ID: 0x8a51
+      Metal Support: Metal 3
+"#;
+
+    const INTEL_HD_4000: &str = r#"
+Graphics/Displays:
+
+    Intel HD Graphics 4000:
+
+      Chipset Model: Intel HD Graphics 4000
+      Type: GPU
+      Bus: Built-In
+      VRAM (Total): 1536 MB
+      Vendor: Intel
+"#;
+
+    fn hardware_for(gpu: &GpuInfo, ram_gb: f64) -> crate::scan::Hardware {
+        crate::scan::Hardware {
+            cpu: "test".into(),
+            cores: 8,
+            ram_gb,
+            gpu: gpu.name.clone(),
+            vram_gb: gpu.vram_gb,
+            dedicated_gpu: gpu.dedicated,
+        }
+    }
+
+    #[test]
+    fn parses_realistic_system_profiler_fixtures() {
+        let m2 = parse_system_profiler(APPLE_M2_PRO).unwrap();
+        assert_eq!(m2.name, "Apple M2 Pro");
+        assert_eq!(m2.vram_gb, 0.0);
+        assert!(!m2.dedicated);
+        assert_eq!(effective_vram_gb(&m2, 16.0), 10.7);
+        assert!(effective_vram_gb(&m2, 16.0) > 0.0);
+
+        let m1 = parse_system_profiler(APPLE_M1_EXTERNAL).unwrap();
         assert_eq!(m1.name, "Apple M1");
-        assert_eq!(m1.vram_gb, 8.0);
+        assert_eq!(m1.vram_gb, 0.0);
         assert!(!m1.dedicated);
+        assert_eq!(effective_vram_gb(&m1, 8.0), 5.3);
+        assert!(!m1.name.contains("DELL"));
+
+        let mbp = parse_system_profiler(INTEL_MBP_2019).unwrap();
+        assert_eq!(mbp.name, "AMD Radeon Pro 5500M");
+        assert_eq!(mbp.vram_gb, 4.0);
+        assert!(mbp.dedicated);
+        assert_eq!(
+            crate::quality::recommend_quality(&hardware_for(&mbp, 16.0)),
+            crate::quality::QualityLevel::Ultra
+        );
+        assert_eq!(
+            crate::quality::recommend_quality(&hardware_for(&mbp, 8.0)),
+            crate::quality::QualityLevel::Normal
+        );
+
+        let air = parse_system_profiler(INTEL_AIR_2020).unwrap();
+        assert_eq!(air.name, "Intel Iris Plus Graphics");
+        assert_eq!(air.vram_gb, 1.5);
+        assert!(!air.dedicated);
+        assert_eq!(effective_vram_gb(&air, 8.0), 1.5);
+        assert_eq!(
+            crate::quality::recommend_quality(&hardware_for(&air, 8.0)),
+            crate::quality::QualityLevel::Lite
+        );
+
+        let hd4000 = parse_system_profiler(INTEL_HD_4000).unwrap();
+        assert_eq!(hd4000.name, "Intel HD Graphics 4000");
+        assert_eq!(hd4000.vram_gb, 1.5);
+        assert!(!hd4000.dedicated);
+    }
+
+    #[test]
+    fn unified_vram_and_non_apple_zero_stay_put() {
+        assert_eq!(unified_vram_gb(64.0), 48.0);
+        assert!(!is_apple_silicon_gpu("AMD Radeon Pro 5500M"));
+        assert!(is_apple_silicon_gpu("Apple M2 Pro"));
+        assert!(is_apple_silicon_gpu("Apple GPU"));
+        let discrete = GpuInfo {
+            name: "AMD Radeon Pro 5500M".into(),
+            vram_gb: 0.0,
+            dedicated: true,
+        };
+        assert_eq!(effective_vram_gb(&discrete, 16.0), 0.0);
+
+        let no_bus =
+            parse_system_profiler("Chipset Model: AMD Radeon Pro 5500M\nVRAM (Total): 4 GB\n")
+                .unwrap();
+        assert_eq!(no_bus.vram_gb, 4.0);
+        assert!(no_bus.dedicated);
     }
 
     /// 15.984 GiB. A 16 GB card's QWORD is often a hair under 16; one-decimal GiB rounding is 16.0.

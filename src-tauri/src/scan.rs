@@ -133,12 +133,14 @@ pub fn probe_hardware() -> Hardware {
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| "Unknown CPU".into());
     let gpu = probe_gpu();
+    let ram_gb_rounded = (ram_gb * 10.0).round() / 10.0;
+    let vram_gb = crate::gpu::effective_vram_gb(&gpu, ram_gb_rounded);
     Hardware {
         cpu,
         cores,
-        ram_gb: (ram_gb * 10.0).round() / 10.0,
+        ram_gb: ram_gb_rounded,
         gpu: gpu.name,
-        vram_gb: gpu.vram_gb,
+        vram_gb,
         dedicated_gpu: gpu.dedicated,
     }
 }
@@ -256,5 +258,24 @@ mod tests {
         assert_eq!(old.quality, QualityLevel::Ultra);
         assert_eq!(recommend_quality(&capped), QualityLevel::Ultra);
         assert!(old.reasons.iter().any(|reason| reason.contains("4 GB")));
+    }
+
+    #[test]
+    fn apple_silicon_is_not_potato() {
+        let gpu = crate::gpu::parse_system_profiler(crate::gpu::APPLE_M2_PRO).unwrap();
+        let ram_gb = (16.0_f64 * 10.0).round() / 10.0;
+        let hw = Hardware {
+            cpu: "Apple M2 Pro".into(),
+            cores: 12,
+            ram_gb,
+            gpu: gpu.name.clone(),
+            vram_gb: crate::gpu::effective_vram_gb(&gpu, ram_gb),
+            dedicated_gpu: gpu.dedicated,
+        };
+        assert!(!hw.dedicated_gpu);
+        assert_eq!(recommend_quality(&hw), QualityLevel::Lite);
+        let manifest = load_fixture_manifest().unwrap();
+        let got = recommend(&hw, manifest.recommend.as_ref());
+        assert_eq!(got.kit, "basic");
     }
 }

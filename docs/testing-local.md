@@ -30,6 +30,46 @@ A test build always shows:
 
 The workflow only uploads that artifact. It does not create a release or a tag.
 
+## Get the Mac test build
+
+1. Open the pull request (or run **macOS public build** / **macOS local-source test build** by hand).
+2. Download `arnold-client-mods-macos-universal` (public) or
+   `arnold-client-mods-macos-universal-local-source` (test build).
+   Both run on Apple Silicon and Intel Macs.
+3. Inside: `Arnold Client Mods_3.2.0_universal.dmg` and
+   `Arnold-Client-Mods-macos-universal.app.zip`.
+
+These builds are **not signed or notarized** (there is no Apple Developer ID yet), so
+macOS Gatekeeper blocks the first launch. Do one of:
+
+- Finder → right-click **Arnold Client Mods** → **Open** → **Open**.
+- macOS 15 or newer, if there is no Open button: try to open it once, then
+  **System Settings → Privacy & Security → Open Anyway**.
+- Terminal:
+  `xattr -dr com.apple.quarantine "/Applications/Arnold Client Mods.app"`
+  (use the real path if the app is not in Applications).
+
+### Local-source on a Mac
+
+Copy the app out of the dmg into a normal folder, put the signed tester folder
+beside it, and clear quarantine so macOS does not run it from a hidden copy:
+
+    ~/ArnoldTest/Arnold Client Mods.app
+    ~/ArnoldTest/mods-2026.11.7/manifest.json
+    ~/ArnoldTest/mods-2026.11.7/manifest.json.sig
+
+    xattr -dr com.apple.quarantine ~/ArnoldTest/"Arnold Client Mods.app"
+
+If the folder is not found, the app asks for it. You can also run
+`open -a ~/ArnoldTest/"Arnold Client Mods.app" --args --local-source ~/ArnoldTest/mods-2026.11.7`.
+
+### Where it installs on a Mac
+
+`~/Library/Application Support/minecraft` (the same folder the Minecraft Launcher uses):
+`mods/`, `shaderpacks/`, `resourcepacks/`, `config/`, and `arnold-installer/`
+(state, `snapshots/`, `logs/`). Close the Minecraft Launcher before installing so it does
+not overwrite `launcher_profiles.json`.
+
 ## Build it on Windows
 
 From a checkout, with Node 22 and the stable Rust toolchain:
@@ -94,6 +134,8 @@ looks for a subfolder that contains both `manifest.json` and
 
 1. In the exe's own directory.
 2. In the parent of that directory.
+
+On a Mac, a `.app` also looks in the folder that contains the app.
 
 Names starting with `mods-` win. If several match, the newest name is used.
 The chosen path is shown under the `TEST BUILD - local source` banner, and the

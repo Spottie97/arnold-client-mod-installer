@@ -83,3 +83,28 @@ jobs:
             echo "Missing required updater secrets. Do not tag an app release until Reinhardt adds them."
             exit 1
           fi
+
+  macos:
+    name: macOS test (cargo + npm)
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable # rust-toolchain.toml (1.90.0) wins
+        with:
+          components: clippy
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: clippy (macOS cfg paths)
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+      - name: clippy (macOS, local-source)
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --features local-source -- -D warnings
+      - name: test
+        run: cargo test --manifest-path src-tauri/Cargo.toml --bins --lib --tests
+      - name: test (local-source)
+        run: cargo test --manifest-path src-tauri/Cargo.toml --bins --lib --tests --features local-source

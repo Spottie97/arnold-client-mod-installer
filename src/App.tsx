@@ -560,7 +560,7 @@ export default function App() {
         <ErrorScreen
           error={
             error ??
-            missingMinecraftError(detection.gameDir ?? "C:\\Users\\Sam\\AppData\\Roaming\\.minecraft")
+            missingMinecraftError(detection.gameDir ?? "(no game folder)")
           }
           logPath={logPath}
           logError={logError}

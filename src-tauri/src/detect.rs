@@ -218,6 +218,10 @@ pub fn require_minecraft(detection: &Detection) -> Result<(), AppError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::backup::snapshots_dir;
+    use crate::log::logs_dir;
+    use crate::manifest::FileDest;
+    use crate::state::{installer_dir, state_path};
     use std::fs;
     use tempfile::tempdir;
 
@@ -322,5 +326,65 @@ mod tests {
             name: "javaw".into(),
             cmd: "C:\\\\Program Files\\\\Java\\\\javaw.exe .minecraft\\\\natives".into(),
         }]));
+        assert!(process_looks_like_minecraft(
+            "java",
+            "/Users/sam/Library/Application Support/minecraft/runtime/java-runtime-delta/mac-os-arm64/java-runtime-delta/jre.bundle/Contents/Home/bin/java -XstartOnFirstThread -cp ... net.minecraft.client.main.Main"
+        ));
+    }
+
+    #[test]
+    fn game_paths_resolve_under_detected_dir_per_os() {
+        for (home, os, expected) in [
+            (
+                "/Users/sam",
+                HostOs::Macos,
+                "/Users/sam/Library/Application Support/minecraft",
+            ),
+            (
+                "C:/Users/Sam",
+                HostOs::Windows,
+                "C:/Users/Sam/AppData/Roaming/.minecraft",
+            ),
+            ("/home/sam", HostOs::Linux, "/home/sam/.minecraft"),
+        ] {
+            let game = candidate_dirs(Path::new(home), os)[0].clone();
+            assert_eq!(game, PathBuf::from(expected));
+            for dest in [
+                FileDest::Mods,
+                FileDest::Shaderpacks,
+                FileDest::Resourcepacks,
+            ] {
+                assert_eq!(
+                    game.join(dest.folder()),
+                    PathBuf::from(expected).join(dest.folder())
+                );
+            }
+            assert_eq!(game.join("config"), PathBuf::from(expected).join("config"));
+            assert_eq!(
+                installer_dir(&game),
+                PathBuf::from(expected).join("arnold-installer")
+            );
+            assert_eq!(
+                snapshots_dir(&game),
+                PathBuf::from(expected).join("arnold-installer/snapshots")
+            );
+            assert!(state_path(&game).starts_with(installer_dir(&game)));
+            assert!(logs_dir(&game).starts_with(installer_dir(&game)));
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn default_candidates_live_on_macos() {
+        let home = dirs::home_dir().expect("home dir");
+        let expected = home
+            .join("Library")
+            .join("Application Support")
+            .join("minecraft");
+        let candidates = default_candidates();
+        assert_eq!(candidates[0], expected);
+        assert!(candidates
+            .iter()
+            .all(|path| !path.to_string_lossy().contains("AppData")));
     }
 }

@@ -38,6 +38,7 @@ pub fn explorer_select_arg(path: &Path) -> OsString {
     arg
 }
 
+#[allow(clippy::needless_return)] // cfg ladder
 pub fn reveal_path(path: &Path) -> Result<(), AppError> {
     if path.as_os_str().is_empty() || !path.exists() {
         return Err(reveal_error(&format!(
