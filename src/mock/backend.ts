@@ -12,7 +12,6 @@ import type {
   Selection,
   SnapshotMeta,
 } from "../types";
-import { snowLiteForQuality } from "../lib/quality";
 import { formatMb } from "../lib/format";
 import { APP_VERSION } from "../lib/version";
 
@@ -108,7 +107,6 @@ export function mockDetection(overrides: Partial<Detection> = {}): Detection {
 export function mockRecommendation(): Recommendation {
   return {
     kit: "full",
-    snowLite: false,
     quality: "ultra",
     recommendOcean: true,
     reasons: [
@@ -135,7 +133,6 @@ export function mockInstalled(): InstalledState {
       { id: "sodium", version: "0.9.2", name: "Sodium" },
       { id: "deck", version: "0.11.1", name: "Arnold Deck" },
       { id: "ships", version: "0.10.1", name: "Arnold Ships" },
-      { id: "snow", version: "0.8.0", name: "Arnold Snow" },
     ],
     files: [],
     updatedAt: "1 November 2026 18:40",
@@ -156,9 +153,7 @@ export function mockSnapshots(): SnapshotMeta[] {
 
 export function mockPlan(sel: Selection): InstallPlan {
   const ids = resolveSelection(sel);
-  const quality: QualityLevel =
-    sel.quality ?? (sel.snowLite || sel.kit === "basic" ? "lite" : "normal");
-  const snowLite = snowLiteForQuality(quality);
+  const quality: QualityLevel = sel.quality ?? "normal";
   const add = ids.flatMap((id) => {
     const component = manifest.components.find((c) => c.id === id);
     if (!component) return [];
@@ -200,11 +195,10 @@ export function mockPlan(sel: Selection): InstallPlan {
       },
     ],
     remove: [],
-    configs: ids.includes("snow")
-      ? [{ componentId: "snow", file: "config/arnold-snow-client.properties", snowLite }]
+    configs: ids.includes("ships")
+      ? [{ componentId: "ships", file: "config/arnold-ships-client.properties" }]
       : [],
     loader: null,
-    snowLite,
     quality,
     kit: sel.kit,
     components: ids,
@@ -298,8 +292,7 @@ export function kitSizeLabel(
     customComponents: [],
     ocean,
     addons,
-    snowLite: kit === "basic",
-    quality: kit === "basic" ? "lite" : "normal",
+    quality: "normal",
   };
   if (kit === "custom") return "—";
   return `${formatMb(mockPlan(sel).bytes)}`;
@@ -317,7 +310,7 @@ export async function playMockInstall(
     { message: "Arnold Ships client 0.10.3 SHA-512 verified · replaced 0.10.2", ms: 450 },
     { message: "Iris 1.11.7 — verifying SHA-512…", ms: 700 },
     { message: "Complementary Reimagined r5.9.3 — 41%", ms: 800 },
-    { message: "Wakes 0.7.3 · Particle Rain 4.0.3 · Snow config", ms: 500 },
+    { message: "Wakes 0.7.3 · Particle Rain 4.0.3", ms: 500 },
   ];
   for (let i = 0; i < rows.length; i += 1) {
     if (signal.cancelled) return "cancelled";

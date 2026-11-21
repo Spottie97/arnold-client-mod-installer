@@ -19,7 +19,6 @@ pub struct Hardware {
 #[serde(rename_all = "camelCase")]
 pub struct Recommendation {
     pub kit: String,
-    pub snow_lite: bool,
     pub quality: QualityLevel,
     pub recommend_ocean: bool,
     pub reasons: Vec<String>,
@@ -57,12 +56,6 @@ fn default_recommend() -> RecommendConfig {
             ram_gb: Some(16.0),
             cores: Some(4),
         }),
-        mid_snow_full: Some(HardwareThresholds {
-            dedicated_gpu: Some(true),
-            vram_gb: Some(2.0),
-            ram_gb: Some(8.0),
-            cores: Some(4),
-        }),
         warn_ram_below_gb: Some(8.0),
     }
 }
@@ -86,15 +79,12 @@ pub fn recommend(hw: &Hardware, rec: Option<&RecommendConfig>) -> Recommendation
     reasons.push(format!("{} GB RAM", trim_num(hw.ram_gb)));
     reasons.push(format!("{} cores", hw.cores));
 
-    let (kit, snow_lite) = if rec.full.as_ref().is_some_and(|t| meets(hw, t)) {
+    let kit = if rec.full.as_ref().is_some_and(|t| meets(hw, t)) {
         reasons.push("Shaders: yes".into());
-        ("full".to_string(), false)
-    } else if rec.mid_snow_full.as_ref().is_some_and(|t| meets(hw, t)) {
-        reasons.push("Shaders: no — this PC is happier on Sodium alone".into());
-        ("basic".to_string(), false)
+        "full".to_string()
     } else {
-        reasons.push("Shaders: no — lighter snow keeps FPS up".into());
-        ("basic".to_string(), true)
+        reasons.push("Shaders: no — this PC is happier on Sodium alone".into());
+        "basic".to_string()
     };
     let quality = recommend_quality(hw);
     reasons.push(format!("Quality: {}", quality.as_str()));
@@ -102,7 +92,6 @@ pub fn recommend(hw: &Hardware, rec: Option<&RecommendConfig>) -> Recommendation
 
     Recommendation {
         kit,
-        snow_lite,
         quality,
         recommend_ocean: quality.recommend_ocean(),
         reasons,
@@ -178,11 +167,13 @@ mod tests {
                 "{}",
                 path.display()
             );
-            assert_eq!(
-                got.snow_lite,
-                v["expectSnowLite"].as_bool().unwrap(),
-                "{}",
-                path.display()
+            assert!(
+                got.reasons
+                    .iter()
+                    .all(|reason| !reason.to_ascii_lowercase().contains("snow")),
+                "{} reasons mention snow: {:?}",
+                path.display(),
+                got.reasons
             );
             seen += 1;
         }
@@ -242,7 +233,6 @@ mod tests {
         };
         let rec = recommend(&hw, manifest.recommend.as_ref());
         assert_eq!(rec.kit, "full");
-        assert!(!rec.snow_lite);
         assert!(rec.recommend_ocean);
         assert_eq!(rec.quality, QualityLevel::Ultra);
         assert_eq!(recommend_quality(&hw), QualityLevel::Ultra);
@@ -254,7 +244,6 @@ mod tests {
         };
         let old = recommend(&capped, manifest.recommend.as_ref());
         assert_eq!(old.kit, "full");
-        assert!(!old.snow_lite);
         assert_eq!(old.quality, QualityLevel::Ultra);
         assert_eq!(recommend_quality(&capped), QualityLevel::Ultra);
         assert!(old.reasons.iter().any(|reason| reason.contains("4 GB")));

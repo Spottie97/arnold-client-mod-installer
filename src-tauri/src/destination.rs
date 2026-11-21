@@ -1092,10 +1092,7 @@ mod tests {
             run_with(&plan, &manifest, &fetcher, false),
         )
         .unwrap();
-        assert_eq!(
-            fs::read(game.join("mods/arnold-snowfall-1.3.3.jar")).unwrap(),
-            b"blob-arnold-snowfall-1.3.3.jar"
-        );
+        assert!(!game.join("mods/arnold-snowfall-1.3.3.jar").exists());
         assert!(!game.join("mods/arnold-snowfall-1.3.2.jar").exists());
         let snaps = list_snapshots(&game).unwrap();
         let newest = snaps.last().unwrap();
@@ -1122,21 +1119,21 @@ mod tests {
         stash_real_install(&scratch, &game, "pack-x", &manifest, &fetcher);
         let stash = game.join("arnold-installer/packs/pack-x");
         fs::rename(
-            stash.join("mods/arnold-snowfall-1.3.3.jar"),
-            stash.join("mods/arnold-snowfall-1.3.2.jar"),
+            stash.join("mods/arnold-ships-client-0.10.3.jar"),
+            stash.join("mods/arnold-ships-client-0.10.2.jar"),
         )
         .unwrap();
         let mut saved = load_state(&stash).unwrap().unwrap();
         for file in &mut saved.files {
-            if file.path == "mods/arnold-snowfall-1.3.3.jar" {
-                file.path = "mods/arnold-snowfall-1.3.2.jar".into();
+            if file.path == "mods/arnold-ships-client-0.10.3.jar" {
+                file.path = "mods/arnold-ships-client-0.10.2.jar".into();
             }
         }
         save_state(&stash, &saved).unwrap();
         mark_pack_a(&game, b"pack-a-only");
         fs::write(
-            game.join("mods/arnold-snowfall-1.3.2.jar"),
-            b"players-own-snowfall",
+            game.join("mods/arnold-ships-client-0.10.2.jar"),
+            b"players-own-ships",
         )
         .unwrap();
         let switched = apply_change(
@@ -1148,7 +1145,7 @@ mod tests {
         )
         .unwrap();
         let report = switched.entry.as_ref().unwrap().switch.as_ref().unwrap();
-        let rel = "mods/arnold-snowfall-1.3.2.jar";
+        let rel = "mods/arnold-ships-client-0.10.2.jar";
         assert_eq!(report.conflicts, vec![rel.to_string()]);
         assert_eq!(kept_aside_paths(&game).unwrap(), vec![rel.to_string()]);
         let live = incoming_state_at(&switched.prefs, "pack-x", &game, &[])
@@ -1168,7 +1165,7 @@ mod tests {
         assert!(plan
             .add
             .iter()
-            .any(|file| dest_rel(file) == "mods/arnold-snowfall-1.3.3.jar"));
+            .any(|file| dest_rel(file) == "mods/arnold-ships-client-0.10.3.jar"));
         let before = tree_fingerprint(&game);
         let live_before = load_state(&game).unwrap();
         let err = install_at(
@@ -1184,8 +1181,8 @@ mod tests {
         let payload = err.to_payload();
         assert_eq!(payload.code, "P-COLLISION");
         assert!(payload.detail.contains("kept aside"), "{}", payload.detail);
-        assert_eq!(fs::read(game.join(rel)).unwrap(), b"players-own-snowfall");
-        assert!(!game.join("mods/arnold-snowfall-1.3.3.jar").exists());
+        assert_eq!(fs::read(game.join(rel)).unwrap(), b"players-own-ships");
+        assert!(!game.join("mods/arnold-ships-client-0.10.3.jar").exists());
         assert_eq!(tree_fingerprint(&game), before);
         assert_eq!(load_state(&game).unwrap(), live_before);
         install_at(
@@ -1199,15 +1196,15 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            fs::read(game.join("mods/arnold-snowfall-1.3.3.jar")).unwrap(),
-            b"blob-arnold-snowfall-1.3.3.jar"
+            fs::read(game.join("mods/arnold-ships-client-0.10.3.jar")).unwrap(),
+            b"blob-arnold-ships-client-0.10.3.jar"
         );
         assert!(!game.join(rel).exists());
         let snaps = list_snapshots(&game).unwrap();
         let newest = snaps.last().unwrap();
         assert_eq!(
             fs::read(snapshots_dir(&game).join(&newest.id).join(rel)).unwrap(),
-            b"players-own-snowfall"
+            b"players-own-ships"
         );
         assert!(kept_aside_paths(&game).unwrap().is_empty());
     }

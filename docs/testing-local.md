@@ -105,12 +105,9 @@ npm run dev:local
 Put the Arnold jars and settings in one folder, for example
 `D:\minecraft-mods\release-mods-2026.11.2\`:
 
-- `arnold-snowfall-1.3.3.jar`
 - `arnold-ships-client-0.10.3.jar`
 - `arnold-deck-client-0.11.1.jar`
 - `arnold-ships-client.properties`
-- `arnold-snow-client.properties` (`quality=normal`, `fpsTarget=60`, `adaptiveFps=true`)
-- `arnold-snow-client.lite.properties` (starts with `# arnold-installer-lite`, `quality=lite`)
 
 Sodium / Iris / Complementary can stay on Modrinth. Files that are actually in
 the folder are read from disk; missing names keep their signed HTTPS URLs.

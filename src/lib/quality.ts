@@ -19,10 +19,6 @@ export function qualityLabel(level: QualityLevel): string {
   return qualityRow(undefined, level).label;
 }
 
-export function snowLiteForQuality(level: QualityLevel): boolean {
-  return level === "potato" || level === "lite";
-}
-
 export function fallbackQualityTable(): QualityTable {
   return {
     potato: {

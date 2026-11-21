@@ -41,7 +41,7 @@ import { minecraftBlocksInstall, planMatchesDestination } from "./lib/installGat
 import { indexPackStates } from "./lib/libraryStatus";
 import { playPack } from "./lib/playPack";
 import { mergeProgress } from "./lib/progress";
-import { parseQuality, qualityLabel, snowLiteForQuality } from "./lib/quality";
+import { parseQuality, qualityLabel } from "./lib/quality";
 import { packSubtitle } from "./lib/version";
 import { TOUR_TIPS } from "./lib/tour";
 import { updateBadges } from "./lib/updates";
@@ -103,7 +103,6 @@ function emptyPlan(): InstallPlan {
     remove: [],
     configs: [],
     loader: null,
-    snowLite: false,
     quality: "normal",
     kit: "recommended",
     components: [],
@@ -125,8 +124,7 @@ export default function App() {
   const [kit, setKit] = useState("recommended");
   const [ocean, setOcean] = useState(true);
   const [addonFlags, setAddonFlags] = useState<Record<string, boolean>>({});
-  const [customIds, setCustomIds] = useState<string[]>(["deck", "ships", "snow", "sodium", "base"]);
-  const [snowLite, setSnowLite] = useState(false);
+  const [customIds, setCustomIds] = useState<string[]>(["deck", "ships", "sodium", "base"]);
   const [quality, setQualityLevel] = useState<QualityLevel>("normal");
   const [currentPlan, setCurrentPlan] = useState<InstallPlan>(emptyPlan());
   const [installReady, setInstallReady] = useState(false);
@@ -198,7 +196,6 @@ export default function App() {
         setKit(r.kit === "full" ? "recommended" : r.kit);
         const nextQuality = parseQuality(inst?.quality) ?? r.quality;
         setQualityLevel(nextQuality);
-        setSnowLite(snowLiteForQuality(nextQuality));
         setOcean(r.recommendOcean);
         setAddonFlags(
           freshAddonFlags(
@@ -234,10 +231,9 @@ export default function App() {
       customComponents: customIds,
       ocean,
       addons: addonFlags,
-      snowLite,
       quality,
     }),
-    [kit, customIds, ocean, addonFlags, snowLite, quality],
+    [kit, customIds, ocean, addonFlags, quality],
   );
 
   const installContext = useMemo(
@@ -718,10 +714,7 @@ export default function App() {
           recommendation={recommendation}
           detection={detection}
           quality={quality}
-          onQuality={(next) => {
-            setQualityLevel(next);
-            setSnowLite(snowLiteForQuality(next));
-          }}
+          onQuality={setQualityLevel}
           onRescan={() => {
             void scanHardware().then(setRecommendation);
           }}
@@ -738,10 +731,7 @@ export default function App() {
           plan={currentPlan}
           table={manifest.qualityPresets}
           onSelect={setKit}
-          onQuality={(next) => {
-            setQualityLevel(next);
-            setSnowLite(snowLiteForQuality(next));
-          }}
+          onQuality={setQualityLevel}
           onAddon={onAddon}
           onOptions={() => {
             setKit(kit === "custom" ? "custom" : kit);
@@ -755,7 +745,6 @@ export default function App() {
         <Custom
           manifest={manifest}
           selected={currentPlan.components}
-          snowLite={snowLite}
           plan={currentPlan}
           quality={quality}
           addons={rows}
@@ -766,7 +755,6 @@ export default function App() {
             setKit("custom");
           }}
           onAddon={onAddon}
-          onSnowLite={setSnowLite}
         />
       );
       break;
@@ -918,10 +906,8 @@ export default function App() {
           onOpenFolder={() => {
             if (detection.packDir) void revealPath(detection.packDir);
           }}
-          onSnowLite={setSnowLite}
           onQuality={(next) => {
             setQualityLevel(next);
-            setSnowLite(snowLiteForQuality(next));
             void setQuality(next)
               .then((state) => {
                 if (state) setInstalled(state);

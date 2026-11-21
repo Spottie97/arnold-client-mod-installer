@@ -210,8 +210,6 @@ pub fn collect_sha512sums(
     if let Some(dir) = assets {
         for extra in [
             "arnold-ships-client.properties",
-            "arnold-snow-client.properties",
-            "arnold-snow-client.lite.properties",
             "SHA512SUMS.txt",
             "manifest.json",
         ] {
@@ -346,10 +344,10 @@ mod tests {
     fn from_folder_writes_test_signed_manifest() {
         let tmp = tempdir().unwrap();
         let dir = tmp.path();
-        fs::write(dir.join("arnold-snowfall-1.3.3.jar"), b"snow-bytes").unwrap();
+        fs::write(dir.join("arnold-ships-client-0.10.3.jar"), b"ship-bytes").unwrap();
         fs::write(
-            dir.join("arnold-snow-client.properties"),
-            "quality=normal\nfpsTarget=60\nadaptiveFps=true\n",
+            dir.join("arnold-ships-client.properties"),
+            "particles=1.0\nwaterMask=true\n",
         )
         .unwrap();
         let input = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../fixtures/manifest.v3.json");
@@ -358,17 +356,18 @@ mod tests {
         assert!(dir.join("manifest.json").is_file());
         assert!(dir.join("manifest.json.sig").is_file());
         let sums = fs::read_to_string(dir.join("SHA512SUMS.txt")).unwrap();
-        assert!(sums.contains("arnold-snowfall-1.3.3.jar"), "{sums}");
+        assert!(sums.contains("arnold-ships-client-0.10.3.jar"), "{sums}");
+        assert!(!sums.contains("arnold-snowfall"), "{sums}");
         let loaded = load_local_manifest(dir, TEST_MANIFEST_PUBLIC_KEY_HEX).unwrap();
         assert_eq!(loaded.source, "local");
-        let snow = loaded
+        let ships = loaded
             .manifest
             .components
             .iter()
-            .find(|c| c.id == "snow")
+            .find(|c| c.id == "ships")
             .unwrap();
-        assert_eq!(snow.files[0].size, 10);
-        assert!(snow.files[0].url.starts_with("file:"));
+        assert_eq!(ships.files[0].size, 10);
+        assert!(ships.files[0].url.starts_with("file:"));
     }
 
     #[test]

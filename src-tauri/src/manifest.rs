@@ -127,7 +127,6 @@ pub fn active_manifest_public_key() -> Result<&'static str, AppError> {
 }
 
 pub const MANIFEST_SCHEMA: u32 = 3;
-pub const SNOW_LITE_PRESET: &str = "snow.lite";
 pub const REMOTE_MANIFEST_URL: &str =
     "https://github.com/Spottie97/arnold-client-mod-installer/releases/latest/download/manifest.json";
 pub const REMOTE_MANIFEST_SIG_URL: &str =
@@ -149,7 +148,7 @@ pub struct Manifest {
     pub addons: BTreeMap<String, Addon>,
     #[serde(default)]
     pub recommend: Option<RecommendConfig>,
-    /// Per-level Sodium / Iris / Complementary / snow / ships knobs.
+    /// Per-level Sodium / Iris / Complementary / ships knobs.
     /// Arnold can ship new particle values later without an installer rebuild.
     #[serde(default)]
     pub quality_presets: Option<QualityTable>,
@@ -320,8 +319,6 @@ pub struct PendingInfo {
 pub struct Kit {
     pub name: String,
     pub components: Vec<String>,
-    #[serde(default)]
-    pub snow_lite: bool,
     pub description: String,
 }
 
@@ -339,8 +336,6 @@ pub struct Addon {
 pub struct RecommendConfig {
     #[serde(default)]
     pub full: Option<HardwareThresholds>,
-    #[serde(default)]
-    pub mid_snow_full: Option<HardwareThresholds>,
     #[serde(default, rename = "warnRamBelowGB")]
     pub warn_ram_below_gb: Option<f64>,
 }
@@ -686,10 +681,7 @@ pub fn component_by_id<'a>(manifest: &'a Manifest, id: &str) -> Option<&'a Compo
 }
 
 pub fn lite_preset(config: &ModConfig) -> Option<&ConfigPreset> {
-    config
-        .presets
-        .get(SNOW_LITE_PRESET)
-        .or_else(|| config.presets.get("lite"))
+    config.presets.get("lite")
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -1109,15 +1101,14 @@ mod tests {
                 );
             }
         }
-        // deck, ships, snow, Diet+, plus the rehosted BA+ cosmetics:
+        // deck, ships, Diet+, plus the rehosted BA+ cosmetics:
         // unboundthirdperson, planeadvancements, audiohotkeys, weatherglass.
-        assert_eq!(github_files, 8);
+        assert_eq!(github_files, 7);
         assert_eq!(
             github_ids,
             [
                 "deck",
                 "ships",
-                "snow",
                 "dietplus",
                 "unboundthirdperson",
                 "planeadvancements",
@@ -1437,10 +1428,10 @@ mod tests {
             by_id("hardcorerevival").requires,
             vec!["base".to_string(), "balm".to_string()]
         );
-        assert_eq!(manifest.components.len(), 129);
-        assert_eq!(manifest.kits["basic"].components.len(), 72);
-        assert_eq!(manifest.kits["full"].components.len(), 123);
-        assert_eq!(manifest.kits["recommended"].components.len(), 123);
+        assert_eq!(manifest.components.len(), 128);
+        assert_eq!(manifest.kits["basic"].components.len(), 71);
+        assert_eq!(manifest.kits["full"].components.len(), 122);
+        assert_eq!(manifest.kits["recommended"].components.len(), 122);
     }
 
     #[test]
@@ -1876,7 +1867,7 @@ mod tests {
     #[test]
     fn kit_missing_deck_fails() {
         let mut v = valid_json();
-        v["kits"]["basic"]["components"] = serde_json::json!(["base", "sodium", "ships", "snow"]);
+        v["kits"]["basic"]["components"] = serde_json::json!(["base", "sodium", "ships"]);
         let err = parse_manifest(&serde_json::to_vec(&v).unwrap()).unwrap_err();
         assert!(err.to_string().contains("deck"));
     }
@@ -1953,35 +1944,45 @@ mod tests {
         assert!(!table.lite.ships.hd_models);
         assert_eq!(table.normal.ships.particles, 1.0);
         assert_eq!(table.ultra.ships.particles, 1.6);
-        assert_eq!(table.normal.snow.fps_target, 60);
-        assert!(table.normal.snow.adaptive_fps);
     }
 
     #[test]
-    fn snow_lite_preset_id_is_snow_dot_lite() {
+    fn manifest_has_no_snowfall_component_and_kits_omit_snow() {
         let manifest = load_fixture_manifest().unwrap();
-        let snow = component_by_id(&manifest, "snow").unwrap();
-        let preset = lite_preset(snow.config.as_ref().unwrap()).unwrap();
-        assert!(snow
-            .config
-            .as_ref()
-            .unwrap()
-            .presets
-            .contains_key(SNOW_LITE_PRESET));
-        assert_eq!(preset.marker.as_deref(), Some("# arnold-installer-lite"));
-        assert_eq!(
-            snow.config
-                .as_ref()
-                .unwrap()
-                .settings
-                .get("quality")
-                .and_then(|s| s.default.as_str()),
-            Some("normal")
-        );
-        assert_eq!(
-            preset.overrides.get("quality").and_then(|v| v.as_str()),
-            Some("lite")
-        );
+        assert_eq!(manifest.components.len(), 128);
+        assert!(component_by_id(&manifest, "snow").is_none());
+        assert!(component_by_id(&manifest, "bettersnowcoverage").is_some());
+        assert!(component_by_id(&manifest, "weatherglass").is_some());
+        assert!(!manifest.components.iter().any(|component| {
+            (component.id.contains("snow") && component.id != "bettersnowcoverage")
+                || component
+                    .files
+                    .iter()
+                    .any(|file| file.file.contains("snowfall") || file.file.contains("arnold-snow"))
+        }));
+        let counts = [("basic", 71), ("recommended", 122), ("full", 122)];
+        for (kit_id, count) in counts {
+            let kit = manifest.kits.get(kit_id).unwrap();
+            assert_eq!(kit.components.len(), count, "{kit_id}");
+            assert!(!kit.components.iter().any(|id| id == "snow"), "{kit_id}");
+        }
+        assert!(manifest.kits["full"]
+            .components
+            .iter()
+            .any(|id| id == "bettersnowcoverage"));
+        assert!(manifest.kits["full"]
+            .components
+            .iter()
+            .any(|id| id == "weatherglass"));
+        assert!(manifest.kits["basic"]
+            .components
+            .iter()
+            .all(|id| id != "bettersnowcoverage"));
+        assert!(manifest.recommend.as_ref().is_some());
+        let raw = BUNDLED_MANIFEST_JSON;
+        assert!(!raw.contains("\"midSnowFull\""));
+        assert!(!raw.contains("\"snow.lite\""));
+        assert!(!raw.contains("arnold-snowfall"));
     }
 
     #[test]

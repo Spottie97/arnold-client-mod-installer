@@ -6,6 +6,5 @@
   "gpu": "NVIDIA GeForce GTX 1060",
   "vramGB": 6,
   "dedicatedGpu": true,
-  "expectKit": "basic",
-  "expectSnowLite": true
+  "expectKit": "basic"
 }

@@ -18,7 +18,6 @@ const SELECTION: Selection = {
   customComponents: [],
   ocean: false,
   addons: {},
-  snowLite: true,
   quality: null,
 };
 
@@ -95,7 +94,6 @@ function planOf(backend: Backend): InstallPlan {
     remove: [],
     configs: [],
     loader: null,
-    snowLite: false,
     quality: "normal",
     kit: "basic",
     components: [],
@@ -292,7 +290,6 @@ function barePlan(packDir: string): InstallPlan {
     remove: [],
     configs: [],
     loader: null,
-    snowLite: false,
     quality: "normal",
     kit: "basic",
     components: [],

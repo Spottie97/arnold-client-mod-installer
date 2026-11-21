@@ -15,7 +15,6 @@ function selection(overrides: Partial<Selection> = {}): Selection {
     kit: "full",
     customComponents: [],
     ocean: true,
-    snowLite: false,
     quality: "normal",
     ...overrides,
   };
@@ -49,7 +48,7 @@ describe("The Architect addon stays off", () => {
     expect(freshAddonFlags(flipped, {}).architect).toBe(false);
     expect(freshAddonFlags(flipped, null).architect).toBe(true);
     expect(freshAddonFlags(manifest, null).architect).toBe(false);
-    const installed = savedAddonFlags(manifest, ["base", "sodium", "deck", "ships", "snow"]);
+    const installed = savedAddonFlags(manifest, ["base", "sodium", "deck", "ships"]);
     expect(freshAddonFlags(manifest, installed).architect).toBe(false);
     const optedIn = savedAddonFlags(manifest, ["base", "architect", "litematica", "malilib"]);
     expect(freshAddonFlags(manifest, optedIn).architect).toBe(true);
