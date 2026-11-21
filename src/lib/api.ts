@@ -14,6 +14,7 @@ import type {
   Selection,
   SnapshotMeta,
 } from "../types";
+import { APP_VERSION } from "./version";
 import {
   mockDetection,
   mockInstalled,
@@ -161,7 +162,7 @@ export async function revealPath(path: string): Promise<void> {
 
 export async function copyDiagnostics(): Promise<string> {
   if (!isTauri()) {
-    return "Arnold Client Mods diagnostics\napp: 3.0.0\n";
+    return `Arnold Client Mods diagnostics\napp: ${APP_VERSION}\n`;
   }
   return invoke<string>("copy_diagnostics");
 }

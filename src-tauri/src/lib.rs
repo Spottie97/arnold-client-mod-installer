@@ -18,6 +18,7 @@ pub mod manifest;
 pub mod plan;
 pub mod prefs;
 pub mod process;
+pub mod progress;
 pub mod quality;
 pub mod release_tool;
 pub mod scan;

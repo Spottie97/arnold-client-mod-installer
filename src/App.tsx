@@ -30,6 +30,7 @@ import {
 } from "./lib/api";
 import { addonRows, freshAddonFlags, savedAddonFlags } from "./lib/addons";
 import { pickBanner, type LocalSourceInfo } from "./lib/localSource";
+import { mergeProgress } from "./lib/progress";
 import { parseQuality, snowLiteForQuality } from "./lib/quality";
 import { TOUR_TIPS } from "./lib/tour";
 import { updateBadges } from "./lib/updates";
@@ -251,10 +252,21 @@ export default function App() {
     go("progress");
     const stop = await listenProgress((event) => {
       setProgress(event);
-      setProgressLog((rows) => [...rows, event]);
+      setProgressLog((rows) => mergeProgress(rows, event));
     });
     try {
       await runInstall(nextPlan, replace);
+      setProgress((current) =>
+        current
+          ? { ...current, percent: 100, status: "done" }
+          : {
+              runId: "",
+              step: "done",
+              status: "done",
+              percent: 100,
+              message: "Install finished",
+            },
+      );
       const [inst, snaps] = await Promise.all([listInstalled(), listSnapshots()]);
       setInstalled(inst);
       setSnapshots(snaps);
@@ -298,7 +310,7 @@ export default function App() {
     go("progress");
     const stop = await listenProgress((event) => {
       setProgress(event);
-      setProgressLog((rows) => [...rows, event]);
+      setProgressLog((rows) => mergeProgress(rows, event));
     });
     try {
       await repairInstall();

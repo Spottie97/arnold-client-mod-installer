@@ -132,6 +132,9 @@ also change the folder later.
 - A jar whose SHA-512 does not match the signed list is discarded
   (`E-HASH-MISMATCH`).
 - A `file://` path that leaves the folder is rejected (`E-URL-NOT-ALLOWED`).
+- Diagnostics show `manifestSource: local` and `manifest: 2026.11.7` when the folder is in use,
+  and `manifestSource: bundled` when no folder is chosen (install stays blocked).
+  The public installer always uses the live signed list and ignores this folder.
 
 ## What this is not
 

@@ -13,6 +13,7 @@ import type {
 } from "../types";
 import { snowLiteForQuality } from "../lib/quality";
 import { formatMb } from "../lib/format";
+import { APP_VERSION } from "../lib/version";
 
 const manifest = fixture as unknown as Manifest;
 
@@ -200,7 +201,7 @@ export function missingMinecraftError(gameDir: string): ErrorPayload {
     code: "E-MC-MISSING",
     title: "Minecraft 26.3 isn't installed yet",
     hint: "Open the Minecraft Launcher, press Play once on Latest release (26.3), close the game, then press Try again.",
-    detail: `detected: versions/26.3/26.3.jar not found in ${gameDir}\nmanifest 2026.11.7 (signature ok) · app 3.0.0 · Windows 11 23H2`,
+    detail: `detected: versions/26.3/26.3.jar not found in ${gameDir}\nmanifest 2026.11.7 (signature ok) · app ${APP_VERSION} · Windows 11 23H2`,
   };
 }
 
