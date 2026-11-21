@@ -36,6 +36,18 @@ pub struct Detection {
     pub fabric: FabricStatus,
     pub game_running: bool,
     pub imported_from_legacy: bool,
+    #[serde(default)]
+    pub pack_id: String,
+    #[serde(default)]
+    pub pack_dir: Option<PathBuf>,
+    #[serde(default)]
+    pub launcher_root: PathBuf,
+    #[serde(default)]
+    pub folder_mode: String,
+    #[serde(default)]
+    pub needs_folder_choice: Option<crate::pack_dirs::LegacyInstall>,
+    #[serde(default)]
+    pub launchers: crate::launcher::LauncherReport,
 }
 
 pub fn current_os() -> HostOs {
@@ -197,6 +209,12 @@ pub fn detect_at(
         },
         game_running: game_running_with(processes),
         imported_from_legacy: imported,
+        pack_id: String::new(),
+        pack_dir: None,
+        launcher_root: selected.clone().unwrap_or_default(),
+        folder_mode: "own".into(),
+        needs_folder_choice: None,
+        launchers: crate::launcher::LauncherReport::default(),
     }
 }
 

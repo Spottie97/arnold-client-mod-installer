@@ -65,10 +65,22 @@ If the folder is not found, the app asks for it. You can also run
 
 ### Where it installs on a Mac
 
-`~/Library/Application Support/minecraft` (the same folder the Minecraft Launcher uses):
-`mods/`, `shaderpacks/`, `resourcepacks/`, `config/`, and `arnold-installer/`
-(state, `snapshots/`, `logs/`). Close the Minecraft Launcher before installing so it does
+The default is a pack folder, `~/Library/Application Support/arnold-packs/better-adventures-plus`
+(`%AppData%\arnold-packs\better-adventures-plus` on Windows,
+`~/.local/share/arnold-packs/better-adventures-plus` on Linux). The Minecraft folder is used
+only when the player chooses it. Close the Minecraft Launcher before installing so it does
 not overwrite `launcher_profiles.json`.
+
+### A signed pack index
+
+A folder with `manifest.json` and `manifest.json.sig` still works. To test more than one
+pack, add `packs.json` and sign it with the test key:
+
+```bash
+cargo run --bin release-manifest -- --in <dir>/packs.json --sign-as-is --test-key
+```
+
+That writes `<dir>/packs.json.sig`. Relative `manifestUrl` values must stay inside the folder.
 
 ## Build it on Windows
 

@@ -1,5 +1,6 @@
 export type Screen =
   | "welcome"
+  | "pack"
   | "scan"
   | "kit"
   | "custom"
@@ -124,6 +125,78 @@ export interface Detection {
   fabric: { installed: boolean; profileId?: string | null; willInstall: boolean };
   gameRunning: boolean;
   importedFromLegacy: boolean;
+  packId?: string;
+  packDir?: string | null;
+  launcherRoot?: string;
+  folderMode?: string;
+  needsFolderChoice?: LegacyInstall | null;
+  launchers?: LauncherReport;
+}
+
+export interface LegacyInstall {
+  root: string;
+  manifestVersion?: string | null;
+  kit?: string | null;
+}
+
+export type LauncherKind = "official" | "tLauncher";
+
+export type FoundLauncher =
+  | "windowsStore"
+  | "macApp"
+  | "linuxNative"
+  | "linuxFlatpak"
+  | { windowsClassic: string };
+
+export interface TLauncherFound {
+  openTarget?: string | null;
+  gameDir: string;
+  verified: boolean;
+}
+
+export interface LauncherReport {
+  official?: FoundLauncher | null;
+  officialRoot: string;
+  tlauncher?: TLauncherFound | null;
+  playDefault?: LauncherKind | null;
+}
+
+export interface LauncherPrefs {
+  writeOfficial?: boolean | null;
+  writeTlauncher?: boolean | null;
+  play?: LauncherKind | null;
+}
+
+export interface PackEntry {
+  id: string;
+  name: string;
+  minecraft: string;
+  displayVersion?: string | null;
+  manifestUrl: string;
+  manifestSigUrl: string;
+  manifestSha512?: string | null;
+  art?: string | null;
+  minAppVersion?: string | null;
+}
+
+export interface PackIndexLoad {
+  index: {
+    kind: string;
+    schema: number;
+    indexVersion: string;
+    minAppVersion: string;
+    packs: PackEntry[];
+  };
+  source: string;
+  message?: string | null;
+}
+
+export type PackLocation = "ownFolder" | "defaultFolder";
+
+export interface CopyReport {
+  item: string;
+  copied: string[];
+  skipped: string[];
 }
 
 export interface Hardware {
@@ -237,6 +310,10 @@ export interface ImportOffer {
 export interface Prefs {
   lastGameDir?: string | null;
   tourDone: boolean;
+  selectedPack?: string | null;
+  useDefaultFolder?: boolean;
+  packLocations?: Record<string, PackLocation>;
+  launchers?: LauncherPrefs;
 }
 
 export interface UpdateBadge {

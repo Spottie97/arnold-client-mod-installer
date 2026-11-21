@@ -15,9 +15,12 @@ mod legacy_v3;
 pub mod local_source;
 pub mod log;
 pub mod manifest;
+pub mod pack_dirs;
+pub mod packs;
 pub mod plan;
 pub mod prefs;
 pub mod process;
+pub mod profiles;
 pub mod progress;
 pub mod quality;
 pub mod release_tool;
@@ -70,6 +73,16 @@ pub fn run() {
             commands::detect_launcher,
             commands::open_launcher,
             commands::finish,
+            commands::list_packs,
+            commands::select_pack,
+            commands::choose_pack_folder,
+            commands::copy_from_old_folder,
+            commands::set_use_default_folder,
+            commands::switch_shared_pack,
+            commands::detect_launchers,
+            commands::set_launcher_prefs,
+            commands::play,
+            commands::open_credit_link,
             commands::detect_legacy,
             commands::confirm_import,
             commands::get_prefs,

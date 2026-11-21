@@ -1,12 +1,16 @@
 import type { LocalSourceInfo } from "./localSource";
 import type {
+  CopyReport,
   Detection,
   ErrorPayload,
   ImportOffer,
   InstallPlan,
   InstalledState,
+  LauncherPrefs,
+  LauncherReport,
   Manifest,
   ManifestLoad,
+  PackIndexLoad,
   Prefs,
   ProgressEvent,
   QualityLevel,
@@ -19,6 +23,7 @@ import {
   mockDetection,
   mockInstalled,
   mockManifest,
+  mockPackIndex,
   mockPlan,
   mockRecommendation,
   mockSnapshots,
@@ -97,7 +102,7 @@ export async function listInstalled(): Promise<InstalledState | null> {
   try {
     return await invoke<InstalledState | null>("list_installed");
   } catch {
-    return mockInstalled();
+    return null;
   }
 }
 
@@ -167,8 +172,11 @@ export async function copyDiagnostics(): Promise<string> {
   return invoke<string>("copy_diagnostics");
 }
 
-export const LAUNCHER_NOTE =
-  "Open Minecraft and choose the 'Arnold – Fabric 26.3' profile.";
+export function launcherNote(packName: string, launcherLabel: string): string {
+  return `Open ${launcherLabel} and choose the 'Arnold — ${packName}' profile.`;
+}
+
+export const LAUNCHER_NOTE = launcherNote("Better Adventures+", "Minecraft Launcher");
 
 export interface LauncherAvailability {
   available: boolean;
@@ -225,8 +233,64 @@ export async function confirmImport(): Promise<InstalledState> {
   return invoke<InstalledState>("confirm_import");
 }
 
+export async function listPacks(): Promise<PackIndexLoad> {
+  if (!isTauri()) return mockPackIndex();
+  return invoke<PackIndexLoad>("list_packs");
+}
+
+export async function selectPack(id: string): Promise<Prefs> {
+  if (!isTauri()) return { lastGameDir: null, tourDone: true, selectedPack: id };
+  return invoke<Prefs>("select_pack", { id });
+}
+
+export async function choosePackFolder(choice: "keep" | "fresh"): Promise<Prefs> {
+  if (!isTauri()) {
+    return {
+      lastGameDir: null,
+      tourDone: true,
+      packLocations: { "better-adventures-plus": choice === "keep" ? "defaultFolder" : "ownFolder" },
+    };
+  }
+  return invoke<Prefs>("choose_pack_folder", { choice });
+}
+
+export async function copyFromOldFolder(item: "options" | "servers" | "saves"): Promise<CopyReport> {
+  if (!isTauri()) return { item, copied: [item], skipped: [] };
+  return invoke<CopyReport>("copy_from_old_folder", { item });
+}
+
+export async function setUseDefaultFolder(enabled: boolean): Promise<Prefs> {
+  if (!isTauri()) return { lastGameDir: null, tourDone: true, useDefaultFolder: enabled };
+  return invoke<Prefs>("set_use_default_folder", { enabled });
+}
+
+export async function setLauncherPrefs(launchers: LauncherPrefs): Promise<Prefs> {
+  if (!isTauri()) return { lastGameDir: null, tourDone: true, launchers };
+  return invoke<Prefs>("set_launcher_prefs", { prefs: launchers });
+}
+
+export async function detectLaunchers(): Promise<LauncherReport> {
+  if (!isTauri()) return mockDetection().launchers as LauncherReport;
+  return invoke<LauncherReport>("detect_launchers");
+}
+
+export async function play(): Promise<LauncherOpenResult> {
+  if (!isTauri()) return { opened: false, note: LAUNCHER_NOTE };
+  return invoke<LauncherOpenResult>("play");
+}
+
+export async function openCreditLink(which: "matcha-source" | "cc-by-nc-sa-4"): Promise<void> {
+  if (!isTauri()) return;
+  await invoke("open_credit_link", { which });
+}
+
+export async function rollback(snapshotId: string): Promise<InstalledState> {
+  if (!isTauri()) return mockInstalled();
+  return invoke<InstalledState>("rollback", { snapshotId });
+}
+
 export async function getPrefs(): Promise<Prefs> {
-  if (!isTauri()) return { lastGameDir: null, tourDone: false };
+  if (!isTauri()) return { lastGameDir: null, tourDone: false, useDefaultFolder: false };
   try {
     return await invoke<Prefs>("get_prefs");
   } catch {

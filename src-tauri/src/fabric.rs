@@ -66,7 +66,9 @@ pub fn arnold_profile_present(game_dir: &Path) -> bool {
     let Ok(text) = fs::read_to_string(path) else {
         return false;
     };
-    text.contains(ARNOLD_PROFILE_NAME) || text.contains(ARNOLD_PROFILE_KEY)
+    text.contains(ARNOLD_PROFILE_NAME)
+        || text.contains(ARNOLD_PROFILE_KEY)
+        || text.contains("arnold-pack-")
 }
 
 pub fn install_loader<F: Fetcher>(

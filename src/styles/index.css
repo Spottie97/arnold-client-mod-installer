@@ -30,6 +30,8 @@ body {
 .font-heading {
   font-family: var(--font-heading);
   letter-spacing: 0.01em;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "clig" 0, "dlig" 0, "hlig" 0, "calt" 0;
 }
 
 .pill {
@@ -37,11 +39,11 @@ body {
 }
 
 .btn-primary {
-  @apply inline-flex items-center justify-center gap-2 rounded-full bg-primary px-5 py-2.5 font-heading text-base text-bg transition-colors hover:bg-primary-hover disabled:opacity-50;
+  @apply inline-flex items-center justify-center gap-2 rounded-full bg-primary px-5 py-2.5 font-body text-base font-semibold text-bg transition-colors hover:bg-primary-hover disabled:opacity-50;
 }
 
 .btn-secondary {
-  @apply inline-flex items-center justify-center gap-2 rounded-full bg-[#2a2833] px-5 py-2.5 font-heading text-base text-text transition-colors hover:bg-[#353240] disabled:opacity-50;
+  @apply inline-flex items-center justify-center gap-2 rounded-full bg-[#2a2833] px-5 py-2.5 font-body text-base font-semibold text-text transition-colors hover:bg-[#353240] disabled:opacity-50;
 }
 
 .btn-primary:focus-visible,

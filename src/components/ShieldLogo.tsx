@@ -1,11 +1,14 @@
-export function ShieldLogo({ size = 36 }: { size?: number }) {
+import avalon from "../assets/brand/avalon-icon.png";
+
+export function ShieldLogo({ size = 40 }: { size?: number }) {
   return (
-    <div
-      className="flex shrink-0 items-center justify-center rounded-[10px] bg-arnold font-heading text-white"
-      style={{ width: size, height: size, fontSize: size * 0.58 }}
-      aria-hidden
-    >
-      A
-    </div>
+    <img
+      src={avalon}
+      alt=""
+      width={size}
+      height={size}
+      className="shrink-0 rounded-full object-contain"
+      style={{ width: size, height: size }}
+    />
   );
 }

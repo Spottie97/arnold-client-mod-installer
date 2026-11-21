@@ -84,6 +84,21 @@ export function mockDetection(overrides: Partial<Detection> = {}): Detection {
     },
     gameRunning: false,
     importedFromLegacy: true,
+    packId: "better-adventures-plus",
+    packDir: "C:\\Users\\Sam\\AppData\\Roaming\\arnold-packs\\better-adventures-plus",
+    launcherRoot: "C:\\Users\\Sam\\AppData\\Roaming\\.minecraft",
+    folderMode: "own",
+    needsFolderChoice: null,
+    launchers: {
+      official: "windowsStore",
+      officialRoot: "C:\\Users\\Sam\\AppData\\Roaming\\.minecraft",
+      tlauncher: {
+        openTarget: "C:\\Users\\Sam\\AppData\\Roaming\\.minecraft\\TLauncher.exe",
+        gameDir: "C:\\Users\\Sam\\AppData\\Roaming\\.minecraft",
+        verified: false,
+      },
+      playDefault: "official",
+    },
     ...overrides,
   };
 }
@@ -206,19 +221,44 @@ export function missingMinecraftError(gameDir: string): ErrorPayload {
   };
 }
 
-export function kitBlurb(kit: string, rec: Recommendation): string {
+export function kitBlurb(kit: string, _rec: Recommendation): string {
   switch (kit) {
     case "recommended":
-      return `Full kit: ${rec.hardware.gpu} · ${rec.hardware.vramGb} GB VRAM · ${rec.hardware.ramGb} GB RAM · ${rec.hardware.cores} cores`;
+      return "The usual Better Adventures+ list for this machine, including resource packs.";
     case "basic":
-      return "Better Adventures+ server mods, ships, smooth decks, lighter snow, Sodium and client performance mods. Runs on almost any PC.";
+      return "The lighter set. Server-required mods and performance, sized to run on almost any PC.";
     case "full":
-      return "Everything in Basic plus the Better Adventures+ client mods, Iris + Complementary and Miniature shaders, full snow, ships.";
+      return "The complete list: every client mod and resource pack in this pack.";
     case "custom":
-      return "Pick each mod yourself. Requirements are added for you.";
+      return "Locked items stay on. Everything else can be turned off.";
     default:
       return "";
   }
+}
+
+export function mockPackIndex() {
+  return {
+    index: {
+      kind: "arnold-pack-index",
+      schema: 1,
+      indexVersion: "2026.11.21",
+      minAppVersion: "3.2.0",
+      packs: [
+        {
+          id: "better-adventures-plus",
+          name: "Better Adventures+",
+          minecraft: "26.3",
+          displayVersion: "2026.11.7",
+          manifestUrl: "https://example.invalid/manifest.json",
+          manifestSigUrl: "https://example.invalid/manifest.json.sig",
+          art: "matcha-flavoured",
+          minAppVersion: "3.2.0",
+        },
+      ],
+    },
+    source: "builtin",
+    message: null,
+  };
 }
 
 export function kitSizeLabel(

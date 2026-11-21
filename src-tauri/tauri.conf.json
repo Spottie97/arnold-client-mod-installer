@@ -44,7 +44,7 @@
       "icons/icon.ico"
     ],
     "category": "Utility",
-    "shortDescription": "Optional looks and effects for the Arnold server",
+    "shortDescription": "For the Arnold server · Minecraft 26.3",
     "longDescription": "Installs optional client mods for Minecraft 26.3 on the Arnold server. Downloads are limited to Modrinth CDN and this project's GitHub Releases. No game-server addresses are stored in the app."
   }
 }

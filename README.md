@@ -32,7 +32,7 @@ Not sure? The installer scans your PC and recommends a kit.
 1. Download the latest release for your system from **[Releases](../../releases)**.
 2. Close Minecraft, then run the installer.
 3. Choose a kit and press **Install**.
-4. Open the Minecraft launcher and pick the **Arnold – Fabric 26.3** profile. If the installer can see the launcher it offers a button for that and closes itself once the launcher has started. Otherwise it tells you the profile name. Finish closes the installer.
+4. Open the Minecraft launcher and pick the **Arnold — Better Adventures+** profile. If the installer can see the launcher it offers a button for that and closes itself once the launcher has started. Otherwise it tells you the profile name. Finish closes the installer. By default the pack lives in its own folder under `arnold-packs`, not in the shared Minecraft folder.
 
 <details>
 <summary><b>Windows says "Windows protected your PC"</b></summary>
@@ -57,6 +57,10 @@ Right-click (or Control-click) the app, choose **Open**, then confirm with **Ope
 ## 🗺️ Roadmap: 3.0
 
 Installer 3.0 replaces the separate Windows and Mac/Linux scripts with one app for all three systems. It adds one-click rollback, self-updating, Minecraft and Fabric detection, clear error messages and an install log you can share. It is being built here and is not released yet.
+
+## Credits
+
+Pack art: Matcha Flavoured icon by Klei Wright, used unmodified under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/). [Source on Modrinth](https://modrinth.com/resourcepack/matcha-flavoured).
 
 ## 🔨 Contributing
 

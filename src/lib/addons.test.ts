@@ -105,7 +105,6 @@ describe("addon toggles", () => {
       createElement(Kit, {
         selected: "recommended",
         quality: "ultra",
-        ocean: true,
         addons: rows,
         recommendation: mockRecommendation(),
         plan: mockPlan(selection()),

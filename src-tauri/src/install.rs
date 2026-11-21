@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use serde::Serialize;
@@ -20,11 +20,47 @@ use crate::local_source::copy_local_settings;
 use crate::log::append_install_log;
 use crate::manifest::{component_by_id, lite_preset, Manifest};
 use crate::plan::{match_glob, InstallPlan, PlanFile};
+use crate::profiles::{ProfileSpec, ProfileTargets, TlWrite};
 use crate::quality::{apply_quality, quality_snapshot_paths, record_quality_files, QualityLevel};
 use crate::state::{
     hash_file, installer_dir, load_state, record_file, save_state, InstalledComponent,
     InstalledState,
 };
+
+#[derive(Debug, Clone)]
+pub struct InstallTarget {
+    pub pack_dir: PathBuf,
+    pub launcher_roots: Vec<PathBuf>,
+    pub profiles: ProfileTargets,
+    pub spec: ProfileSpec,
+    pub require_vanilla: bool,
+    /// Keeps the pre-pack install path: versions and the legacy profile stay in `pack_dir`.
+    pub legacy_same_folder: bool,
+}
+
+impl InstallTarget {
+    pub fn same_folder(game_dir: &Path) -> Self {
+        Self {
+            pack_dir: game_dir.to_path_buf(),
+            launcher_roots: vec![game_dir.to_path_buf()],
+            profiles: ProfileTargets {
+                official: Some(game_dir.to_path_buf()),
+                tlauncher: None,
+                also_pack_dir: false,
+            },
+            spec: ProfileSpec {
+                key: crate::fabric::ARNOLD_PROFILE_KEY.into(),
+                name: crate::fabric::ARNOLD_PROFILE_NAME.into(),
+                version_id: String::new(),
+                game_dir: game_dir.to_path_buf(),
+                java_args: String::new(),
+                update_legacy_in_place: false,
+            },
+            require_vanilla: true,
+            legacy_same_folder: true,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -450,9 +486,84 @@ fn running_download(
     }
 }
 
+fn install_loader_and_profiles<F, L>(
+    target: &InstallTarget,
+    plan: &InstallPlan,
+    manifest: &Manifest,
+    fetcher: &F,
+    staging: &Path,
+    system_ram_gb: f64,
+    emit_log: &L,
+) -> Result<(), AppError>
+where
+    F: Fetcher,
+    L: Fn(&str, &str, u8, &str, Option<String>),
+{
+    let version_id = if let Some(loader) = &plan.loader {
+        let staged = staging.join("loader.json");
+        let bytes = if staged.is_file() {
+            fs::read(&staged)?
+        } else {
+            let fetched = fetcher.fetch_loader(&manifest.loader.url)?;
+            verify_sha512(&fetched, &manifest.loader.sha512)?;
+            fetched
+        };
+        for root in &target.launcher_roots {
+            if crate::fabric::existing_fabric_for(root, &manifest.minecraft).is_none() {
+                crate::fabric::write_version_profile(root, &loader.id, &bytes)?;
+            }
+        }
+        loader.id.clone()
+    } else {
+        target
+            .launcher_roots
+            .iter()
+            .find_map(|root| crate::fabric::existing_fabric_for(root, &manifest.minecraft))
+            .unwrap_or_else(|| manifest.loader.id.clone())
+    };
+    let mut spec = target.spec.clone();
+    if spec.version_id.is_empty() {
+        spec.version_id = version_id.clone();
+    }
+    if spec.java_args.is_empty() {
+        spec.java_args = crate::fabric::java_args_for_ram(system_ram_gb);
+    }
+    let backup = installer_dir(&target.pack_dir).join("launcher-backups");
+    if let Some(root) = &target.profiles.official {
+        emit_log(
+            "profile",
+            "Writing the launcher profile",
+            92,
+            "running",
+            None,
+        );
+        crate::profiles::upsert_official(root, &spec, &backup)?;
+    }
+    if target.profiles.also_pack_dir {
+        crate::profiles::upsert_official(&target.pack_dir, &spec, &backup)?;
+    }
+    if let Some(root) = &target.profiles.tlauncher {
+        if let TlWrite::SkippedUnknownShape =
+            crate::profiles::upsert_tlauncher(root, &spec, &backup)?
+        {
+            emit_log(
+                "profile",
+                &format!(
+                    "Choose version {version_id} and folder {} in TLauncher yourself",
+                    target.pack_dir.display()
+                ),
+                94,
+                "skipped",
+                Some(version_id),
+            );
+        }
+    }
+    Ok(())
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn run_install<F: Fetcher>(
-    game_dir: &Path,
+    target: &InstallTarget,
     plan: &InstallPlan,
     manifest: &Manifest,
     fetcher: &F,
@@ -461,6 +572,7 @@ pub fn run_install<F: Fetcher>(
     system_ram_gb: f64,
     progress: &dyn Fn(ProgressEvent),
 ) -> Result<String, AppError> {
+    let game_dir = target.pack_dir.as_path();
     let run_id = format!("run-{}", crate::state::now_stamp());
     let emit_log = |step: &str, message: &str, percent: u8, status: &str, file: Option<String>| {
         let event = ProgressEvent {
@@ -493,11 +605,18 @@ pub fn run_install<F: Fetcher>(
         if game_running_with(&live_minecraft_processes()) {
             return Err(AppError::GameRunning);
         }
-        if !vanilla_jar_exists(game_dir, &manifest.minecraft) {
-            return Err(AppError::McMissing {
-                version: manifest.minecraft.clone(),
-                path: game_dir.display().to_string(),
-            });
+        if target.require_vanilla {
+            let root = target
+                .launcher_roots
+                .first()
+                .map(PathBuf::as_path)
+                .unwrap_or(game_dir);
+            if !vanilla_jar_exists(root, &manifest.minecraft) {
+                return Err(AppError::McMissing {
+                    version: manifest.minecraft.clone(),
+                    path: root.display().to_string(),
+                });
+            }
         }
 
         emit_log("prepare", "Preparing install", 2, "running", None);
@@ -783,28 +902,41 @@ pub fn run_install<F: Fetcher>(
             }
         }
 
-        if let Some(loader) = &plan.loader {
+        if target.legacy_same_folder {
+            if let Some(loader) = &plan.loader {
+                emit_log("fabric", "Installing Fabric 26.3", 90, "running", None);
+                let staged = staging.join("loader.json");
+                if staged.is_file() {
+                    let bytes = fs::read(&staged)?;
+                    crate::fabric::write_version_profile(game_dir, &loader.id, &bytes)?;
+                    crate::fabric::upsert_launcher_profile(game_dir, &loader.id, system_ram_gb)?;
+                } else {
+                    install_loader(
+                        game_dir,
+                        &manifest.loader,
+                        fetcher,
+                        system_ram_gb,
+                        &manifest.minecraft,
+                    )?;
+                }
+            } else if !crate::fabric::arnold_profile_present(game_dir) {
+                if let Some(existing_id) =
+                    crate::fabric::existing_fabric_for(game_dir, &manifest.minecraft)
+                {
+                    crate::fabric::upsert_launcher_profile(game_dir, &existing_id, system_ram_gb)?;
+                }
+            }
+        } else {
             emit_log("fabric", "Installing Fabric 26.3", 90, "running", None);
-            let staged = staging.join("loader.json");
-            if staged.is_file() {
-                let bytes = fs::read(&staged)?;
-                crate::fabric::write_version_profile(game_dir, &loader.id, &bytes)?;
-                crate::fabric::upsert_launcher_profile(game_dir, &loader.id, system_ram_gb)?;
-            } else {
-                install_loader(
-                    game_dir,
-                    &manifest.loader,
-                    fetcher,
-                    system_ram_gb,
-                    &manifest.minecraft,
-                )?;
-            }
-        } else if !crate::fabric::arnold_profile_present(game_dir) {
-            if let Some(existing_id) =
-                crate::fabric::existing_fabric_for(game_dir, &manifest.minecraft)
-            {
-                crate::fabric::upsert_launcher_profile(game_dir, &existing_id, system_ram_gb)?;
-            }
+            install_loader_and_profiles(
+                target,
+                plan,
+                manifest,
+                fetcher,
+                &staging,
+                system_ram_gb,
+                &emit_log,
+            )?;
         }
 
         emit_log("state", "Recording state.json", 96, "running", None);
@@ -869,13 +1001,14 @@ pub fn run_install<F: Fetcher>(
 }
 
 pub fn repair_tracked<F: Fetcher>(
-    game_dir: &Path,
+    target: &InstallTarget,
     manifest: &Manifest,
     fetcher: &F,
     cancel: &AtomicBool,
     system_ram_gb: f64,
     progress: &dyn Fn(ProgressEvent),
 ) -> Result<String, AppError> {
+    let game_dir = target.pack_dir.as_path();
     let state = load_state(game_dir)?
         .ok_or_else(|| AppError::State("nothing is recorded to repair".into()))?;
     let mut add = Vec::new();
@@ -931,7 +1064,7 @@ pub fn repair_tracked<F: Fetcher>(
         bytes: 0,
     };
     run_install(
-        game_dir,
+        target,
         &plan,
         manifest,
         fetcher,
@@ -1022,7 +1155,7 @@ mod tests {
         let plan = basic_plan(&manifest);
         let events = Mutex::new(Vec::new());
         let run = run_install(
-            game,
+            &InstallTarget::same_folder(game),
             &plan,
             &manifest,
             &fetcher,
@@ -1057,7 +1190,7 @@ mod tests {
         let url = &plan.add[0].url;
         fetcher.insert(url, b"tampered".to_vec());
         let err = run_install(
-            game,
+            &InstallTarget::same_folder(game),
             &plan,
             &manifest,
             &fetcher,
@@ -1081,7 +1214,7 @@ mod tests {
         let plan = basic_plan(&manifest);
         let cancel = AtomicBool::new(true);
         let err = run_install(
-            game,
+            &InstallTarget::same_folder(game),
             &plan,
             &manifest,
             &fetcher,
@@ -1105,7 +1238,7 @@ mod tests {
         let plan = basic_plan(&manifest);
         let cancel = AtomicBool::new(false);
         let err = run_install(
-            game,
+            &InstallTarget::same_folder(game),
             &plan,
             &manifest,
             &fetcher,
@@ -1133,7 +1266,7 @@ mod tests {
         let (manifest, fetcher, _) = test_manifest_and_fetcher();
         let plan = basic_plan(&manifest);
         let err = run_install(
-            game,
+            &InstallTarget::same_folder(game),
             &plan,
             &manifest,
             &fetcher,
@@ -1180,7 +1313,7 @@ mod tests {
             }
         }
         run_install(
-            game,
+            &InstallTarget::same_folder(game),
             &plan,
             &manifest,
             &fetcher,
@@ -1210,7 +1343,7 @@ mod tests {
         }
         let plan = basic_plan(&manifest);
         run_install(
-            game,
+            &InstallTarget::same_folder(game),
             &plan,
             &manifest,
             &fetcher,
@@ -1239,7 +1372,7 @@ mod tests {
         let (manifest, fetcher, _) = test_manifest_and_fetcher();
         let plan = basic_plan(&manifest);
         run_install(
-            game,
+            &InstallTarget::same_folder(game),
             &plan,
             &manifest,
             &fetcher,
@@ -1251,7 +1384,7 @@ mod tests {
         .unwrap();
         fs::write(game.join("mods/arnold-snowfall-1.3.3.jar"), b"broken").unwrap();
         repair_tracked(
-            game,
+            &InstallTarget::same_folder(game),
             &manifest,
             &fetcher,
             &AtomicBool::new(false),
@@ -1275,7 +1408,7 @@ mod tests {
         let mut plan = basic_plan(&manifest);
         plan.quality = crate::quality::QualityLevel::Potato;
         run_install(
-            game,
+            &InstallTarget::same_folder(game),
             &plan,
             &manifest,
             &fetcher,
@@ -1358,7 +1491,7 @@ mod tests {
         let (manifest, fetcher, _) = test_manifest_and_fetcher();
         let plan = custom_pack_plan(&manifest, &["freshanimations"]);
         run_install(
-            game,
+            &InstallTarget::same_folder(game),
             &plan,
             &manifest,
             &fetcher,
@@ -1502,7 +1635,7 @@ mod tests {
         };
         let events = Mutex::new(Vec::new());
         let err = run_install(
-            game,
+            &InstallTarget::same_folder(game),
             &plan,
             &manifest,
             &wrapped,
@@ -1535,7 +1668,7 @@ mod tests {
         let wrapped = ChunkedFetcher { inner: fetcher };
         let events = Mutex::new(Vec::new());
         run_install(
-            game,
+            &InstallTarget::same_folder(game),
             &plan,
             &manifest,
             &wrapped,
@@ -1613,7 +1746,7 @@ mod tests {
     ) -> (Result<String, AppError>, Vec<ProgressEvent>) {
         let events = Mutex::new(Vec::new());
         let result = run_install(
-            game,
+            &InstallTarget::same_folder(game),
             plan,
             manifest,
             fetcher,
@@ -1712,7 +1845,7 @@ mod tests {
             .clone();
         fetcher.fail.insert(url);
         let err = run_install(
-            game,
+            &InstallTarget::same_folder(game),
             &plan,
             &manifest,
             &fetcher,
@@ -1744,7 +1877,7 @@ mod tests {
             .clone();
         fetcher.fail.insert(url);
         let err = run_install(
-            game,
+            &InstallTarget::same_folder(game),
             &plan,
             &manifest,
             &fetcher,
@@ -1770,7 +1903,7 @@ mod tests {
         let (manifest, mut fetcher, _) = test_manifest_and_fetcher();
         let plan = kit_plan(&manifest, "basic", Some("architect"));
         run_install(
-            game,
+            &InstallTarget::same_folder(game),
             &plan,
             &manifest,
             &fetcher,
@@ -1792,7 +1925,7 @@ mod tests {
             .clone();
         fetcher.fail.insert(url);
         let err = repair_tracked(
-            game,
+            &InstallTarget::same_folder(game),
             &manifest,
             &fetcher,
             &AtomicBool::new(false),
@@ -1818,7 +1951,7 @@ mod tests {
         let (manifest, mut fetcher, _) = test_manifest_and_fetcher();
         let plan = kit_plan(&manifest, "basic", Some("architect"));
         run_install(
-            game,
+            &InstallTarget::same_folder(game),
             &plan,
             &manifest,
             &fetcher,
@@ -1873,5 +2006,149 @@ mod tests {
             .expect("prior architect component");
         assert_eq!(kept.version, prior.version);
         assert_eq!(kept.name, prior.name);
+    }
+
+    fn split_target(pack: &Path, root: &Path, require_vanilla: bool) -> InstallTarget {
+        InstallTarget {
+            pack_dir: pack.to_path_buf(),
+            launcher_roots: vec![root.to_path_buf()],
+            profiles: ProfileTargets {
+                official: Some(root.to_path_buf()),
+                tlauncher: None,
+                also_pack_dir: false,
+            },
+            spec: ProfileSpec {
+                key: "arnold-pack-better-adventures-plus".into(),
+                name: "Arnold — Better Adventures+".into(),
+                version_id: String::new(),
+                game_dir: pack.to_path_buf(),
+                java_args: String::new(),
+                update_legacy_in_place: false,
+            },
+            require_vanilla,
+            legacy_same_folder: false,
+        }
+    }
+
+    #[test]
+    fn pack_files_land_in_the_pack_folder_and_the_jar_is_checked_on_the_launcher() {
+        let tmp = tempdir().unwrap();
+        let pack = tmp.path().join("pack");
+        let root = tmp.path().join("minecraft");
+        fs::create_dir_all(&pack).unwrap();
+        prepare_game(&root);
+        let (manifest, fetcher, _) = test_manifest_and_fetcher();
+        let plan = basic_plan(&manifest);
+        run_install(
+            &split_target(&pack, &root, true),
+            &plan,
+            &manifest,
+            &fetcher,
+            &AtomicBool::new(false),
+            false,
+            16.0,
+            &|_| {},
+        )
+        .unwrap();
+        assert!(pack.join("mods").read_dir().unwrap().next().is_some());
+        assert!(
+            !root.join("mods").exists() || root.join("mods").read_dir().unwrap().next().is_none()
+        );
+        let profiles: serde_json::Value =
+            serde_json::from_slice(&fs::read(root.join("launcher_profiles.json")).unwrap())
+                .unwrap();
+        let entry = &profiles["profiles"]["arnold-pack-better-adventures-plus"];
+        assert_eq!(entry["name"], "Arnold — Better Adventures+");
+        assert_eq!(entry["gameDir"], pack.display().to_string());
+    }
+
+    #[test]
+    fn missing_vanilla_jar_is_reported_on_the_launcher_root() {
+        let tmp = tempdir().unwrap();
+        let pack = tmp.path().join("pack");
+        let root = tmp.path().join("minecraft");
+        prepare_game(&pack);
+        fs::create_dir_all(&root).unwrap();
+        let (manifest, fetcher, _) = test_manifest_and_fetcher();
+        let err = run_install(
+            &split_target(&pack, &root, true),
+            &basic_plan(&manifest),
+            &manifest,
+            &fetcher,
+            &AtomicBool::new(false),
+            false,
+            16.0,
+            &|_| {},
+        )
+        .unwrap_err();
+        assert_eq!(err.code(), "E-MC-MISSING");
+        match err {
+            AppError::McMissing { path, .. } => {
+                assert!(path.contains("minecraft"), "{path}");
+            }
+            other => panic!("expected a missing jar, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn no_launcher_skips_the_jar_check_and_writes_a_profile_beside_the_pack() {
+        let tmp = tempdir().unwrap();
+        let pack = tmp.path().join("pack");
+        let root = tmp.path().join("official");
+        fs::create_dir_all(&pack).unwrap();
+        fs::create_dir_all(&root).unwrap();
+        let (manifest, fetcher, _) = test_manifest_and_fetcher();
+        let mut target = split_target(&pack, &root, false);
+        target.profiles.also_pack_dir = true;
+        target.launcher_roots = vec![root.clone(), pack.clone()];
+        run_install(
+            &target,
+            &basic_plan(&manifest),
+            &manifest,
+            &fetcher,
+            &AtomicBool::new(false),
+            false,
+            16.0,
+            &|_| {},
+        )
+        .unwrap();
+        assert!(root.join("launcher_profiles.json").is_file());
+        assert!(pack.join("launcher_profiles.json").is_file());
+    }
+
+    #[test]
+    fn unknown_tlauncher_profile_shape_does_not_fail_the_install() {
+        let tmp = tempdir().unwrap();
+        let pack = tmp.path().join("pack");
+        let root = tmp.path().join("minecraft");
+        fs::create_dir_all(&pack).unwrap();
+        prepare_game(&root);
+        let original = b"[1,2,3]".to_vec();
+        fs::write(root.join("TlauncherProfiles.json"), &original).unwrap();
+        let (manifest, fetcher, _) = test_manifest_and_fetcher();
+        let mut target = split_target(&pack, &root, true);
+        target.profiles.tlauncher = Some(root.clone());
+        let events = Mutex::new(Vec::new());
+        run_install(
+            &target,
+            &basic_plan(&manifest),
+            &manifest,
+            &fetcher,
+            &AtomicBool::new(false),
+            false,
+            16.0,
+            &|event| events.lock().unwrap().push(event),
+        )
+        .unwrap();
+        assert_eq!(
+            fs::read(root.join("TlauncherProfiles.json")).unwrap(),
+            original
+        );
+        let skipped = events.lock().unwrap().iter().any(|event| {
+            event.step == "profile"
+                && event.status == "skipped"
+                && event.message.contains("TLauncher")
+        });
+        assert!(skipped);
     }
 }

@@ -1,7 +1,7 @@
 [package]
 name = "arnold-client-mods"
 version = "3.2.0"
-description = "Optional looks and effects for the Arnold server"
+description = "For the Arnold server · Minecraft 26.3"
 authors = ["Arnold Client Mods"]
 license = "Apache-2.0"
 edition = "2021"
