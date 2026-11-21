@@ -411,6 +411,12 @@ mod tests {
         assert!(plan.components.contains(&"base".into()));
         assert!(plan.components.contains(&"sodium".into()));
         assert!(plan.components.contains(&"shaders".into()));
+        for id in ["dietplus", "glitchcore", "sereneseasons"] {
+            assert!(
+                plan.components.iter().any(|item| item == id),
+                "custom must lock {id}"
+            );
+        }
         assert!(
             !plan.warnings.iter().any(|w| w.contains("Deck")),
             "server Shipwright 0.11.2 meets Deck 0.11.1: {warnings:?}",
@@ -684,6 +690,8 @@ mod tests {
             "lithium",
             "clumps",
             "dietplus",
+            "glitchcore",
+            "sereneseasons",
             "base",
         ] {
             assert!(
@@ -691,13 +699,7 @@ mod tests {
                 "basic missing {id}"
             );
         }
-        for id in [
-            "coolrain",
-            "flashback",
-            "appleskin",
-            "miniature",
-            "glitchcore",
-        ] {
+        for id in ["coolrain", "flashback", "appleskin", "miniature"] {
             assert!(
                 !plan.components.iter().any(|item| item == id),
                 "basic has {id}"

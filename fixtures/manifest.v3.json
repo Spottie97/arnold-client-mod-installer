@@ -369,6 +369,55 @@
       ]
     },
     {
+      "id": "glitchcore",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base"
+      ],
+      "requiredInAllKits": true,
+      "name": "GlitchCore",
+      "version": "26.3.0.0.5",
+      "description": "Library needed by Serene Seasons. The server runs it too, so every kit installs it.",
+      "license": "LicenseRef-All-Rights-Reserved",
+      "files": [
+        {
+          "file": "GlitchCore-fabric-26.3-26.3.0.0.5.jar",
+          "dest": "mods",
+          "match": "GlitchCore-fabric-*.jar",
+          "url": "https://cdn.modrinth.com/data/s3dmwKy5/versions/kfFeDnrp/GlitchCore-fabric-26.3-26.3.0.0.5.jar",
+          "sha512": "f975535e561285898163e7512008fe61ffaac66b6fc60a4e4763d0f2279617f75900d7a2ab2708d8dc348337119df61d2783aa101a9f1a24020f99888aa0d457",
+          "size": 339788,
+          "sha1": "33efbdb5c192e8af21f6e1ee3c2799682bd4adf8"
+        }
+      ]
+    },
+    {
+      "id": "sereneseasons",
+      "group": "arnold",
+      "kind": "download",
+      "requires": [
+        "base",
+        "glitchcore"
+      ],
+      "requiredInAllKits": true,
+      "name": "Serene Seasons",
+      "version": "26.1.2.0.7",
+      "description": "Seasons for the Arnold server: changing colours, temperature and crop growth. The server runs it too, so every kit installs it.",
+      "license": "LicenseRef-All-Rights-Reserved",
+      "files": [
+        {
+          "file": "SereneSeasons-fabric-26.3-26.1.2.0.7.jar",
+          "dest": "mods",
+          "match": "SereneSeasons-fabric-*.jar",
+          "url": "https://cdn.modrinth.com/data/e0bNACJD/versions/V9PxJPuw/SereneSeasons-fabric-26.3-26.1.2.0.7.jar",
+          "sha512": "f0ef802ab4a7d95df76855100656f3c0f65c7954b52330d7e3c224a0900359d8e8db8953dde3aca52231a5a90428e9925cac99ca01b22485d4af37640620069c",
+          "size": 410505,
+          "sha1": "6b3513d4f7c35cea1222143a2d2b66928d9de939"
+        }
+      ]
+    },
+    {
       "id": "appleskin",
       "group": "arnold",
       "kind": "download",
@@ -2829,6 +2878,8 @@
         "ships",
         "snow",
         "dietplus",
+        "glitchcore",
+        "sereneseasons",
         "badoptimizations",
         "modernfix",
         "lithium",
@@ -2894,6 +2945,8 @@
         "ships",
         "snow",
         "dietplus",
+        "glitchcore",
+        "sereneseasons",
         "appleskin",
         "badoptimizations",
         "modernfix",
@@ -3009,6 +3062,8 @@
         "ships",
         "snow",
         "dietplus",
+        "glitchcore",
+        "sereneseasons",
         "appleskin",
         "badoptimizations",
         "modernfix",
