@@ -38,7 +38,27 @@ pub fn explorer_select_arg(path: &Path) -> OsString {
     arg
 }
 
-#[allow(clippy::needless_return)] // cfg ladder
+pub fn open_url(url: &str) -> Result<(), AppError> {
+    let mut command = match std::env::consts::OS {
+        "windows" => {
+            let mut command = command("explorer.exe");
+            command.arg(url);
+            command
+        }
+        "macos" => {
+            let mut command = command("open");
+            command.arg(url);
+            command
+        }
+        _ => {
+            let mut command = command("xdg-open");
+            command.arg(url);
+            command
+        }
+    };
+    spawn_detached(&mut command).map_err(|err| AppError::Io(err.to_string()))
+}
+
 pub fn reveal_path(path: &Path) -> Result<(), AppError> {
     if path.as_os_str().is_empty() || !path.exists() {
         return Err(reveal_error(&format!(
@@ -50,13 +70,13 @@ pub fn reveal_path(path: &Path) -> Result<(), AppError> {
     {
         spawn_detached(command("explorer").arg(explorer_select_arg(path)))
             .map_err(|err| reveal_error(&err.to_string()))?;
-        return Ok(());
+        Ok(())
     }
     #[cfg(target_os = "macos")]
     {
         spawn_detached(command("open").arg("-R").arg(path))
             .map_err(|err| reveal_error(&err.to_string()))?;
-        return Ok(());
+        Ok(())
     }
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {

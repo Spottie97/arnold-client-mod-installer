@@ -78,4 +78,28 @@ describe("mergeProgress", () => {
     const doneAgain = event({ step: "done", status: "done", percent: 100, message: "again" });
     expect(mergeProgress([done], doneAgain)).toEqual([done, doneAgain]);
   });
+
+  it("does not merge a skipped row into a following running row", () => {
+    const running = event({
+      step: "download",
+      status: "running",
+      file: "architect.jar",
+      message: "Downloading The Architect",
+    });
+    const skipped = event({
+      step: "download",
+      status: "skipped",
+      file: "architect.jar",
+      message: "Skipped optional The Architect 0.3.2: download failed",
+    });
+    const next = event({
+      step: "download",
+      status: "running",
+      file: "next.jar",
+      message: "Downloading next",
+    });
+    expect(mergeProgress([running], skipped)).toEqual([running, skipped]);
+    expect(mergeProgress([skipped], next)).toEqual([skipped, next]);
+    expect(mergeProgress([running, skipped], next)).toEqual([running, skipped, next]);
+  });
 });

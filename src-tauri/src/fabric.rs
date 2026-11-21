@@ -43,6 +43,14 @@ pub fn java_args_for_ram(system_ram_gb: f64) -> String {
     )
 }
 
+pub fn version_json_present(game_dir: &Path, version_id: &str) -> bool {
+    game_dir
+        .join("versions")
+        .join(version_id)
+        .join(format!("{version_id}.json"))
+        .is_file()
+}
+
 pub fn existing_fabric_for(game_dir: &Path, minecraft: &str) -> Option<String> {
     let versions = game_dir.join("versions");
     let entries = fs::read_dir(versions).ok()?;
@@ -66,7 +74,9 @@ pub fn arnold_profile_present(game_dir: &Path) -> bool {
     let Ok(text) = fs::read_to_string(path) else {
         return false;
     };
-    text.contains(ARNOLD_PROFILE_NAME) || text.contains(ARNOLD_PROFILE_KEY)
+    text.contains(ARNOLD_PROFILE_NAME)
+        || text.contains(ARNOLD_PROFILE_KEY)
+        || text.contains("arnold-pack-")
 }
 
 pub fn install_loader<F: Fetcher>(

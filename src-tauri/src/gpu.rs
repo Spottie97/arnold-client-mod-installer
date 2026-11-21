@@ -669,10 +669,10 @@ mod dxgi_probe {
         adapter_luid: Luid,
     }
 
-    type HRESULT = i32;
+    type Hresult = i32;
     type ReleaseFn = unsafe extern "system" fn(*mut c_void) -> u32;
-    type EnumAdaptersFn = unsafe extern "system" fn(*mut c_void, u32, *mut *mut c_void) -> HRESULT;
-    type GetDescFn = unsafe extern "system" fn(*mut c_void, *mut AdapterDesc) -> HRESULT;
+    type EnumAdaptersFn = unsafe extern "system" fn(*mut c_void, u32, *mut *mut c_void) -> Hresult;
+    type GetDescFn = unsafe extern "system" fn(*mut c_void, *mut AdapterDesc) -> Hresult;
 
     #[repr(C)]
     #[allow(dead_code)]

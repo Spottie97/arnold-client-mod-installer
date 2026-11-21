@@ -555,6 +555,28 @@ fn merge_colon_options(existing: &str, updates: &BTreeMap<String, String>, owned
     } else {
         "\n"
     };
+    if !owned {
+        // Not ours: keep every byte the player wrote and only append missing keys.
+        let present: Vec<&str> = existing
+            .lines()
+            .filter_map(|line| line.split_once(':').map(|(key, _)| key))
+            .filter(|key| !key.starts_with('#'))
+            .collect();
+        let mut out = existing.to_string();
+        for (key, value) in updates {
+            if present.contains(&key.as_str()) {
+                continue;
+            }
+            if !out.is_empty() && !out.ends_with('\n') {
+                out.push_str(ending);
+            }
+            out.push_str(key);
+            out.push(':');
+            out.push_str(value);
+            out.push_str(ending);
+        }
+        return out;
+    }
     let mut present = BTreeMap::new();
     let mut lines: Vec<String> = Vec::new();
     for line in existing.split_inclusive(['\n']) {
@@ -1075,6 +1097,22 @@ mod tests {
         let next = merge_colon_options(existing, &updates, false);
         assert!(next.contains("renderDistance:32"));
         assert!(next.contains("cloudStatus:true"));
+    }
+
+    #[test]
+    fn options_txt_keeps_player_bytes_and_only_appends_missing_keys() {
+        let mut updates = BTreeMap::new();
+        updates.insert("renderDistance".into(), "6".into());
+        updates.insert("cloudStatus".into(), "fast".into());
+        // Every key already set, no trailing newline: not one byte changes.
+        let full = "renderDistance:32\r\nfov:0.5\ncloudStatus:true";
+        assert_eq!(merge_colon_options(full, &updates, false), full);
+        // A missing key is appended after the untouched player text.
+        let partial = "renderDistance:32\r\nfov:0.5";
+        assert_eq!(
+            merge_colon_options(partial, &updates, false),
+            "renderDistance:32\r\nfov:0.5\r\ncloudStatus:fast\r\n"
+        );
     }
 
     #[test]

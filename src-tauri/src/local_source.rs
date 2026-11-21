@@ -147,7 +147,16 @@ fn same_dir(left: &Path, right: &Path) -> bool {
 }
 
 pub fn folder_has_signed_manifest(path: &Path) -> bool {
-    path.join("manifest.json").is_file() && path.join("manifest.json.sig").is_file()
+    let manifest = path.join("manifest.json").is_file() && path.join("manifest.json.sig").is_file();
+    let packs = path.join("packs.json").is_file() && path.join("packs.json.sig").is_file();
+    manifest || packs
+}
+
+pub fn load_local_index(
+    dir: &Path,
+    public_key_hex: &str,
+) -> Result<crate::packs::PackIndexLoad, AppError> {
+    crate::packs::load_local_index(dir, public_key_hex)
 }
 
 fn is_mods_prefixed(name: &str) -> bool {
@@ -343,6 +352,23 @@ impl<F: Fetcher> Fetcher for LocalAwareFetcher<F> {
             return read_body(file, MAX_BODY_BYTES, Some(total), on_bytes);
         }
         self.inner.fetch_with_progress(url, kind, on_bytes)
+    }
+
+    fn fetch_with_status(
+        &self,
+        url: &str,
+        kind: FetchKind,
+        on_bytes: &mut dyn FnMut(u64, Option<u64>, &str) -> bool,
+    ) -> Result<Vec<u8>, AppError> {
+        if is_file_url(url) {
+            let path = resolve_local_path(url, self.root_for(url)?)?;
+            let file = fs::File::open(&path)?;
+            let total = file.metadata()?.len();
+            return read_body(file, MAX_BODY_BYTES, Some(total), &mut |done, reported| {
+                on_bytes(done, reported, "")
+            });
+        }
+        self.inner.fetch_with_status(url, kind, on_bytes)
     }
 
     fn local_root(&self) -> Option<&Path> {
@@ -746,5 +772,96 @@ mod tests {
             fs::read_to_string(game.join("config/arnold-snow-client.properties")).unwrap(),
             "quality=ultra\n"
         );
+    }
+
+    fn write_index(dir: &Path, manifest_url: &str, sig_url: &str) {
+        let body = serde_json::json!({
+            "kind": "arnold-pack-index",
+            "schema": 1,
+            "indexVersion": "local",
+            "minAppVersion": "3.2.0",
+            "packs": [{
+                "id": "better-adventures-plus",
+                "name": "Better Adventures+",
+                "minecraft": "26.3",
+                "manifestUrl": manifest_url,
+                "manifestSigUrl": sig_url,
+                "art": "matcha-flavoured"
+            }]
+        });
+        let bytes = serde_json::to_vec(&body).unwrap();
+        fs::write(dir.join("packs.json"), &bytes).unwrap();
+        fs::write(dir.join("packs.json.sig"), sign_bytes(&bytes)).unwrap();
+    }
+
+    #[test]
+    fn packs_index_resolves_relative_manifests_inside_the_folder() {
+        let tmp = tempdir().unwrap();
+        let dir = tmp.path().join("mods");
+        let pack = dir.join("better-adventures-plus");
+        fs::create_dir_all(&pack).unwrap();
+        fs::write(pack.join("manifest.json"), BUNDLED_MANIFEST_JSON).unwrap();
+        fs::write(
+            pack.join("manifest.json.sig"),
+            BUNDLED_MANIFEST_SIG_HEX.trim(),
+        )
+        .unwrap();
+        write_index(
+            &dir,
+            "better-adventures-plus/manifest.json",
+            "better-adventures-plus/manifest.json.sig",
+        );
+        let loaded = load_local_index(&dir, TEST_MANIFEST_PUBLIC_KEY_HEX).unwrap();
+        assert_eq!(loaded.source, "local");
+        assert!(loaded.index.packs[0].manifest_url.starts_with("file:"));
+        let fetcher = LocalAwareFetcher::new(MapFetcher::default(), Some(dir.clone()));
+        let manifest = crate::packs::load_pack_manifest(
+            &fetcher,
+            &loaded.index.packs[0],
+            &tmp.path().join("cache"),
+            TEST_MANIFEST_PUBLIC_KEY_HEX,
+        );
+        assert_ne!(manifest.source, "error");
+        assert_eq!(manifest.manifest.manifest_version, "2026.11.7");
+    }
+
+    #[test]
+    fn relative_manifest_url_cannot_escape_the_folder() {
+        let tmp = tempdir().unwrap();
+        let dir = tmp.path().join("mods");
+        fs::create_dir_all(&dir).unwrap();
+        let outside = tmp.path().join("secret");
+        fs::create_dir_all(&outside).unwrap();
+        fs::write(outside.join("manifest.json"), b"{}").unwrap();
+        write_index(
+            &dir,
+            "../secret/manifest.json",
+            "../secret/manifest.json.sig",
+        );
+        let err = load_local_index(&dir, TEST_MANIFEST_PUBLIC_KEY_HEX).unwrap_err();
+        assert_eq!(err.code(), "E-URL-NOT-ALLOWED");
+    }
+
+    #[test]
+    fn missing_packs_index_synthesizes_ba_plus() {
+        let tmp = tempdir().unwrap();
+        fs::write(tmp.path().join("manifest.json"), BUNDLED_MANIFEST_JSON).unwrap();
+        fs::write(
+            tmp.path().join("manifest.json.sig"),
+            BUNDLED_MANIFEST_SIG_HEX.trim(),
+        )
+        .unwrap();
+        let loaded = load_local_index(tmp.path(), TEST_MANIFEST_PUBLIC_KEY_HEX).unwrap();
+        assert_eq!(loaded.source, "local-synth");
+        assert_eq!(loaded.index.packs[0].id, "better-adventures-plus");
+        assert!(loaded.index.packs[0].manifest_url.starts_with("file:"));
+    }
+
+    #[test]
+    fn folder_with_only_pack_files_counts_as_signed() {
+        let tmp = tempdir().unwrap();
+        fs::write(tmp.path().join("packs.json"), b"{}").unwrap();
+        fs::write(tmp.path().join("packs.json.sig"), b"aa").unwrap();
+        assert!(folder_has_signed_manifest(tmp.path()));
     }
 }

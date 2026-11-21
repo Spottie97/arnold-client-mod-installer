@@ -115,4 +115,14 @@ mod tests {
             assert!(throttle.should_emit(&terminal, start));
         }
     }
+
+    #[test]
+    fn skipped_status_always_emits() {
+        let start = Instant::now();
+        let mut throttle = ProgressThrottle::new(PROGRESS_MIN_GAP);
+        assert!(throttle.should_emit(&sample("download", Some("a.jar"), "running", 40), start));
+        let skipped = sample("download", Some("a.jar"), "skipped", 40);
+        assert!(throttle.should_emit(&skipped, start));
+        assert!(throttle.should_emit(&skipped, start));
+    }
 }

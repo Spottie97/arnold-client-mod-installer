@@ -15,6 +15,10 @@ export function parseQuality(value: string | null | undefined): QualityLevel | n
   return null;
 }
 
+export function qualityLabel(level: QualityLevel): string {
+  return qualityRow(undefined, level).label;
+}
+
 export function snowLiteForQuality(level: QualityLevel): boolean {
   return level === "potato" || level === "lite";
 }

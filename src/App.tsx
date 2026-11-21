@@ -1,42 +1,55 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "./components/AppShell";
 import { Tour } from "./components/Tour";
 import {
   asErrorPayload,
+  beginInstallRequest,
   cancelInstall,
+  endInstallRequest,
   confirmImport,
   copyDiagnostics,
+  copyFromOldFolder,
   detect,
-  detectLauncher,
   detectLegacy,
+  onFolderSwitched,
   exportLog,
   finishApp,
   getLocalSource,
   getManifest,
   getPrefs,
   listInstalled,
+  listPacks,
+  listPackStates,
   listSnapshots,
   listenProgress,
-  openLauncher,
   pickLocalSource,
+  play,
   revealPath,
   plan,
   repairInstall,
-  runInstall,
+  rollback,
   scanHardware,
-  setGameDir,
+  setLauncherPrefs,
   setQuality,
   setTourDone,
 } from "./lib/api";
 import { addonRows, freshAddonFlags, savedAddonFlags } from "./lib/addons";
 import { pickBanner, type LocalSourceInfo } from "./lib/localSource";
+import { createDestinationFlow } from "./lib/destinationFlow";
+import { folderSwitchNotice } from "./lib/folderSwitch";
+import { minecraftBlocksInstall, planMatchesDestination } from "./lib/installGate";
+import { indexPackStates } from "./lib/libraryStatus";
+import { playPack } from "./lib/playPack";
 import { mergeProgress } from "./lib/progress";
-import { parseQuality, snowLiteForQuality } from "./lib/quality";
+import { parseQuality, qualityLabel, snowLiteForQuality } from "./lib/quality";
+import { packSubtitle } from "./lib/version";
 import { TOUR_TIPS } from "./lib/tour";
 import { updateBadges } from "./lib/updates";
 import { missingMinecraftError } from "./mock/backend";
 import { Custom } from "./screens/Custom";
 import { Done } from "./screens/Done";
+import { Library } from "./screens/Library";
+import { PackDetails } from "./screens/PackDetails";
 import { ErrorScreen } from "./screens/ErrorScreen";
 import { ImportScreen } from "./screens/Import";
 import { Kit } from "./screens/Kit";
@@ -45,14 +58,16 @@ import { Manage } from "./screens/Manage";
 import { Progress } from "./screens/Progress";
 import { Scan } from "./screens/Scan";
 import { Settings } from "./screens/Settings";
-import { Welcome } from "./screens/Welcome";
 import type {
   Detection,
   ErrorPayload,
   ImportOffer,
   InstallPlan,
   InstalledState,
+  LauncherKind,
   Manifest,
+  PackIndexLoad,
+  Prefs,
   ProgressEvent,
   QualityLevel,
   Recommendation,
@@ -63,6 +78,7 @@ import { assertNever } from "./types";
 
 const SCREENS: Screen[] = [
   "welcome",
+  "pack",
   "scan",
   "kit",
   "custom",
@@ -91,6 +107,7 @@ function emptyPlan(): InstallPlan {
     quality: "normal",
     kit: "recommended",
     components: [],
+    optionalComponents: [],
     warnings: [],
     bytes: 0,
   };
@@ -112,16 +129,20 @@ export default function App() {
   const [snowLite, setSnowLite] = useState(false);
   const [quality, setQualityLevel] = useState<QualityLevel>("normal");
   const [currentPlan, setCurrentPlan] = useState<InstallPlan>(emptyPlan());
+  const [installReady, setInstallReady] = useState(false);
+  const [installedByPack, setInstalledByPack] = useState<Record<string, InstalledState | null>>({});
   const [progress, setProgress] = useState<ProgressEvent | null>(null);
   const [progressLog, setProgressLog] = useState<ProgressEvent[]>([]);
   const [error, setError] = useState<ErrorPayload | null>(null);
   const [tourStep, setTourStep] = useState<number | null>(null);
   const [importOffer, setImportOffer] = useState<ImportOffer | null>(null);
+  const [importRetry, setImportRetry] = useState<(() => Promise<void>) | null>(null);
   const [replaceCollisions, setReplaceCollisions] = useState(false);
-  const [launcher, setLauncher] = useState<{ available: boolean; note: string } | null>(null);
-  const [launcherFailed, setLauncherFailed] = useState(false);
+  const [library, setLibrary] = useState<PackIndexLoad | null>(null);
+  const [prefs, setPrefs] = useState<Prefs>({ tourDone: false, useDefaultFolder: false });
   const [logPath, setLogPath] = useState<string | null>(null);
   const [logError, setLogError] = useState<string | null>(null);
+  const [folderNotice, setFolderNotice] = useState<string | null>(null);
 
   const go = (next: Screen) => {
     setScreen(next);
@@ -150,21 +171,11 @@ export default function App() {
   }, [screen, tourStep]);
 
   useEffect(() => {
-    if (screen !== "done") return;
-    let alive = true;
-    void detectLauncher().then((status) => {
-      if (alive) setLauncher(status);
-    });
-    return () => {
-      alive = false;
-    };
-  }, [screen]);
-
-  useEffect(() => {
     let alive = true;
     void (async () => {
       try {
-        const [load, d, r, inst, snaps, prefs, legacy, local] = await Promise.all([
+        const packs = await listPacks().catch(() => null);
+        const [load, d, r, inst, snaps, storedPrefs, legacy, local] = await Promise.all([
           getManifest(),
           detect(),
           scanHardware(),
@@ -175,6 +186,8 @@ export default function App() {
           getLocalSource(),
         ]);
         if (!alive) return;
+        if (packs) setLibrary(packs);
+        setPrefs(storedPrefs);
         setManifest(load.manifest);
         setLocalSource(local);
         setOfflineBanner(load.offline ? load.message ?? "Using the last good mod list (offline)." : null);
@@ -193,8 +206,15 @@ export default function App() {
             savedAddonFlags(load.manifest, inst ? inst.components.map((item) => item.id) : null),
           ),
         );
-        if (!prefs.tourDone) setTourStep(0);
-        if (legacy?.found && !legacy.alreadyAdopted && !inst) {
+        if (!storedPrefs.tourDone) setTourStep(0);
+        if (d.needsFolderChoice) {
+          go("pack");
+        } else if (
+          legacy?.found &&
+          !legacy.alreadyAdopted &&
+          !inst &&
+          d.folderMode === "default"
+        ) {
           setImportOffer(legacy);
           go("import");
         }
@@ -220,56 +240,207 @@ export default function App() {
     [kit, customIds, ocean, addonFlags, snowLite, quality],
   );
 
+  const installContext = useMemo(
+    () =>
+      JSON.stringify({
+        pack: prefs.selectedPack ?? null,
+        useDefault: Boolean(prefs.useDefaultFolder),
+        locations: prefs.packLocations ?? {},
+        lastGameDir: prefs.lastGameDir ?? null,
+        writeOfficial: prefs.launchers?.writeOfficial ?? null,
+        writeTlauncher: prefs.launchers?.writeTlauncher ?? null,
+      }),
+    [prefs],
+  );
+  const requestKey = `${installContext}|${JSON.stringify(selection)}`;
+  const [loadedKey, setLoadedKey] = useState("");
+  const [reloadToken, setReloadToken] = useState(0);
+  const loadGeneration = useRef(0);
+  const seenContext = useRef(installContext);
+  const installAllowed = installReady && loadedKey === requestKey;
+
   useEffect(() => {
+    const generation = ++loadGeneration.current;
+    const key = requestKey;
+    const contextChanged = seenContext.current !== installContext;
+    seenContext.current = installContext;
+    setInstallReady(false);
+    if (contextChanged) {
+      setCurrentPlan(emptyPlan());
+      setInstalled(null);
+      setInstalledByPack({});
+      setSnapshots([]);
+    }
+    void (async () => {
+      try {
+        const [load, freshDetection, inst, snaps, states] = await Promise.all([
+          getManifest(),
+          detect(),
+          listInstalled(),
+          listSnapshots(),
+          listPackStates(),
+        ]);
+        if (generation !== loadGeneration.current) return;
+        setManifest(load.manifest);
+        setOfflineBanner(
+          load.offline ? load.message ?? "Using the last good mod list (offline)." : null,
+        );
+        setDetection(freshDetection);
+        setInstalled(inst);
+        setSnapshots(snaps);
+        setInstalledByPack(indexPackStates(states));
+        const next = await plan(selection);
+        if (generation !== loadGeneration.current) return;
+        setCurrentPlan(next);
+        const matches = planMatchesDestination(
+          next,
+          freshDetection,
+          prefs.selectedPack ?? freshDetection.packId,
+        );
+        setInstallReady(matches);
+        setLoadedKey(matches ? key : "");
+      } catch (err) {
+        if (generation !== loadGeneration.current) return;
+        setInstallReady(false);
+        setLoadedKey("");
+        setError(asErrorPayload(err));
+      }
+    })();
+  }, [requestKey, installContext, selection, prefs.selectedPack, reloadToken]);
+
+  useEffect(() => {
+    let stop: (() => void) | undefined;
     let alive = true;
-    void plan(selection).then((next) => {
-      if (alive) setCurrentPlan(next);
+    void onFolderSwitched((entry) => {
+      if (!alive) return;
+      const notice = folderSwitchNotice(entry, (id) => {
+        if (id === "better-adventures-plus") return "Better Adventures+";
+        return library?.index.packs.find((pack) => pack.id === id)?.name ?? id;
+      });
+      if (notice) setFolderNotice(notice);
+      void listPackStates().then((states) => {
+        if (alive) setInstalledByPack(indexPackStates(states));
+      });
+    }).then((unlisten) => {
+      if (!alive) {
+        unlisten();
+        return;
+      }
+      stop = unlisten;
     });
     return () => {
       alive = false;
+      stop?.();
     };
-  }, [selection]);
+  }, [library]);
 
   const badges = useMemo(
     () => (manifest ? updateBadges(manifest, installed) : []),
     [manifest, installed],
   );
 
+  const invalidateInstall = () => {
+    loadGeneration.current += 1;
+    setInstallReady(false);
+    setLoadedKey("");
+    setCurrentPlan(emptyPlan());
+    setReloadToken((token) => token + 1);
+  };
+
+  const flow = createDestinationFlow({
+    invalidate: invalidateInstall,
+    detect: () => detect(),
+    replan: async () => {
+      loadGeneration.current += 1;
+      setInstallReady(false);
+      setLoadedKey("");
+      const next = await plan(selection);
+      setCurrentPlan(next);
+      return next;
+    },
+  });
+
+  const routeOccupied = async (err: unknown, retry: () => Promise<void>): Promise<boolean> => {
+    const offer = await flow.occupiedImportOffer(err, prefs.selectedPack ?? detection?.packId);
+    if (!offer) return false;
+    setImportOffer(offer);
+    setImportRetry(() => retry);
+    go("import");
+    return true;
+  };
+
   const startInstall = async (nextPlan = currentPlan, replace = replaceCollisions) => {
-    if (detection && !detection.minecraftVersionInstalled) {
+    if (detection?.needsFolderChoice) {
+      go("pack");
+      return;
+    }
+    if (detection && minecraftBlocksInstall(detection)) {
       setError(missingMinecraftError(detection.gameDir ?? "(no game folder)"));
       go("error");
       return;
     }
-    setProgressLog([]);
-    setProgress({
-      runId: "",
-      step: "prepare",
-      status: "running",
-      percent: 1,
-      message: "Starting install",
-    });
-    go("progress");
-    const stop = await listenProgress((event) => {
-      setProgress(event);
-      setProgressLog((rows) => mergeProgress(rows, event));
-    });
+    let runId: string | null;
     try {
-      await runInstall(nextPlan, replace);
+      runId = await flow.install(nextPlan, detection, prefs.selectedPack, replace, {
+        onStart: () => {
+          setProgressLog([]);
+          setProgress({
+            runId: "",
+            step: "prepare",
+            status: "running",
+            percent: 1,
+            message: "Starting install",
+          });
+          go("progress");
+        },
+        onProgress: (event) => {
+          setProgress(event);
+          setProgressLog((rows) => mergeProgress(rows, event));
+        },
+      });
+    } catch (err) {
+      const payload = asErrorPayload(err);
+      if (payload.code === "E-CANCELLED") {
+        go("kit");
+        return;
+      }
+      if (
+        await routeOccupied(err, async () => {
+          invalidateInstall();
+          go("kit");
+        })
+      ) {
+        return;
+      }
+      setError(payload);
+      setReplaceCollisions(payload.code === "P-COLLISION");
+      go("error");
+      return;
+    }
+    if (runId === null) {
+      go("kit");
+      return;
+    }
+    try {
       setProgress((current) =>
         current
           ? { ...current, percent: 100, status: "done" }
           : {
-              runId: "",
+              runId,
               step: "done",
               status: "done",
               percent: 100,
               message: "Install finished",
             },
       );
-      const [inst, snaps] = await Promise.all([listInstalled(), listSnapshots()]);
+      const [inst, snaps, states] = await Promise.all([
+        listInstalled(),
+        listSnapshots(),
+        listPackStates(),
+      ]);
       setInstalled(inst);
       setSnapshots(snaps);
+      setInstalledByPack(indexPackStates(states));
       go("done");
     } catch (err) {
       const payload = asErrorPayload(err);
@@ -280,56 +451,45 @@ export default function App() {
       setError(payload);
       setReplaceCollisions(payload.code === "P-COLLISION");
       go("error");
-    } finally {
-      stop();
     }
   };
 
-  const startRecommended = async () => {
-    if (!recommendation || !manifest) return;
-    const flags = freshAddonFlags(manifest, null);
-    const next = await plan({
-      kit: recommendation.kit,
-      customComponents: [],
-      ocean: recommendation.recommendOcean,
-      addons: flags,
-      snowLite: snowLiteForQuality(recommendation.quality),
-      quality: recommendation.quality,
-    });
-    setCurrentPlan(next);
-    setKit(recommendation.kit === "full" ? "recommended" : recommendation.kit);
-    setQualityLevel(recommendation.quality);
-    setSnowLite(snowLiteForQuality(recommendation.quality));
-    setOcean(recommendation.recommendOcean);
-    setAddonFlags(flags);
-    await startInstall(next, false);
-  };
-
   const startRepair = async () => {
+    const requestId = beginInstallRequest();
     setProgressLog([]);
     go("progress");
-    const stop = await listenProgress((event) => {
-      setProgress(event);
-      setProgressLog((rows) => mergeProgress(rows, event));
-    });
     try {
-      await repairInstall();
-      go("done");
-    } catch (err) {
-      setError(asErrorPayload(err));
-      go("error");
+      const stop = await listenProgress((event) => {
+        setProgress(event);
+        setProgressLog((rows) => mergeProgress(rows, event));
+      });
+      try {
+        await repairInstall(requestId);
+        go("done");
+      } catch (err) {
+        setError(asErrorPayload(err));
+        go("error");
+      } finally {
+        stop();
+      }
     } finally {
-      stop();
+      endInstallRequest(requestId);
     }
   };
 
   const chooseFolder = async () => {
     const path = window.prompt("Game folder", detection?.gameDir ?? "") ?? "";
     if (!path) return;
-    const next = await setGameDir(path);
-    setDetection(next);
-    if (!next.minecraftVersionInstalled) {
-      setError(missingMinecraftError(next.gameDir ?? path));
+    try {
+      const { detection: next } = await flow.setGameDir(path);
+      setDetection(next);
+      setPrefs(await getPrefs());
+      if (minecraftBlocksInstall(next)) {
+        setError(missingMinecraftError(next.gameDir ?? path));
+        go("error");
+      }
+    } catch (err) {
+      setError(asErrorPayload(err));
       go("error");
     }
   };
@@ -383,7 +543,8 @@ export default function App() {
     onBackWelcome: () => go("welcome"),
     onBackKit: () => go("kit"),
     onBackScan: () => go("scan"),
-    onCustom: () => go("custom"),
+    onCustom: () => go("pack"),
+    installReady: installAllowed,
     onInstall: () => void startInstall(),
     onCancel: () => {
       void cancelInstall();
@@ -398,20 +559,11 @@ export default function App() {
       go("welcome");
     },
     onFolder: () => void chooseFolder(),
-    launcherAvailable: Boolean(launcher?.available),
+    launcherAvailable: detection ? playOpenable(detection, prefs) : false,
+    playLabel: detection ? playLabelFor(detection, prefs) : "Minecraft Launcher",
+    qualityName: qualityLabel(quality),
     onOpenLauncher: () => {
-      void openLauncher().then((result) => {
-        if (result.opened) {
-          void finishApp();
-          return;
-        }
-        setLauncherFailed(true);
-        if (result.note) {
-          setLauncher((current) =>
-            current ? { ...current, note: result.note } : { available: false, note: result.note },
-          );
-        }
-      });
+      void play();
     },
     onFinish: () => {
       void finishApp();
@@ -461,14 +613,52 @@ export default function App() {
   switch (screen) {
     case "welcome":
       body = (
-        <Welcome
+        <Library
+          library={library}
           detection={detection}
-          installed={installed}
-          recommendation={recommendation}
-          badges={badges}
+          installedByPack={installedByPack}
           localSource={localSource}
+          onOpen={(id) => {
+            void (async () => {
+              try {
+                const { result, detection: next } = await flow.selectPack(id);
+                setPrefs(result);
+                setDetection(next);
+                go("pack");
+              } catch (err) {
+                setError(asErrorPayload(err));
+                go("error");
+              }
+            })();
+          }}
+          onInstall={(id) => {
+            void (async () => {
+              try {
+                const { result, detection: fresh } = await flow.selectPack(id);
+                setPrefs(result);
+                setDetection(fresh);
+                go(fresh.needsFolderChoice ? "pack" : "scan");
+              } catch (err) {
+                setError(asErrorPayload(err));
+                go("error");
+              }
+            })();
+          }}
+          onPlay={(id) => {
+            void (async () => {
+              try {
+                const next = await playPack(id, {
+                  selectPack: (packId) => flow.selectPack(packId).then((opened) => opened.result),
+                  play,
+                });
+                setPrefs(next);
+              } catch (err) {
+                setError(asErrorPayload(err));
+                go("error");
+              }
+            })();
+          }}
           onHelp={() => go("help")}
-          onInstallRecommended={() => void startRecommended()}
           onPickLocalSource={() => {
             void pickLocalSource()
               .then(async (info) => {
@@ -488,10 +678,50 @@ export default function App() {
         />
       );
       break;
+    case "pack":
+      body = (
+        <PackDetails
+          pack={
+            library?.index.packs.find((item) => item.id === (prefs.selectedPack ?? detection.packId)) ??
+            library?.index.packs[0] ?? {
+              id: "better-adventures-plus",
+              name: "Better Adventures+",
+              minecraft: "26.3",
+              displayVersion: manifest.manifestVersion,
+              manifestUrl: "",
+              manifestSigUrl: "",
+              art: "matcha-flavoured",
+            }
+          }
+          detection={detection}
+          installed={installed}
+          canCopy={Boolean(prefs.lastGameDir) && detection.folderMode === "own"}
+          onChoose={(choice) => {
+            const apply = () =>
+              flow.chooseFolder(choice).then(({ result, detection: next }) => {
+                setPrefs(result);
+                setDetection(next);
+              });
+            void apply().catch(async (err: unknown) => {
+              if (await routeOccupied(err, apply)) return;
+              setError(asErrorPayload(err));
+              go("error");
+            });
+          }}
+          onCopy={(item) => copyFromOldFolder(item)}
+        />
+      );
+      break;
     case "scan":
       body = (
         <Scan
           recommendation={recommendation}
+          detection={detection}
+          quality={quality}
+          onQuality={(next) => {
+            setQualityLevel(next);
+            setSnowLite(snowLiteForQuality(next));
+          }}
           onRescan={() => {
             void scanHardware().then(setRecommendation);
           }}
@@ -503,20 +733,20 @@ export default function App() {
         <Kit
           selected={kit}
           quality={quality}
-          ocean={ocean}
           addons={rows}
           recommendation={recommendation}
           plan={currentPlan}
           table={manifest.qualityPresets}
-          onSelect={(next) => {
-            setKit(next);
-            if (next === "custom") go("custom");
-          }}
+          onSelect={setKit}
           onQuality={(next) => {
             setQualityLevel(next);
             setSnowLite(snowLiteForQuality(next));
           }}
           onAddon={onAddon}
+          onOptions={() => {
+            setKit(kit === "custom" ? "custom" : kit);
+            go("custom");
+          }}
         />
       );
       break;
@@ -527,6 +757,7 @@ export default function App() {
           selected={currentPlan.components}
           snowLite={snowLite}
           plan={currentPlan}
+          quality={quality}
           addons={rows}
           onToggle={(id) => {
             setCustomIds((ids) =>
@@ -546,10 +777,23 @@ export default function App() {
       body = (
         <Done
           plan={currentPlan}
-          launcherNote={launcher?.note ?? null}
-          showLauncherNote={Boolean(launcher) && (!launcher?.available || launcherFailed)}
+          detection={detection}
+          packName={
+            library?.index.packs.find((item) => item.id === detection.packId)?.name ??
+            "Better Adventures+"
+          }
+          playLabel={playLabelFor(detection, prefs)}
+          profileNote={
+            prefs.packLocations?.[detection.packId ?? ""] === "ownFolder" && prefs.lastGameDir
+              ? "The previous profile is still in the launcher."
+              : null
+          }
           logPath={logPath}
           logError={logError}
+          skipped={progressLog.filter((entry) => entry.status === "skipped")}
+          onOpenFolder={() => {
+            if (detection.packDir) void revealPath(detection.packDir);
+          }}
           onCopyLogPath={() => void copyLogPath()}
           onOpenLogFolder={() => void openLogFolder()}
         />
@@ -595,12 +839,27 @@ export default function App() {
             }
           }
           onConfirm={() => {
-            void confirmImport().then((state) => {
-              setInstalled(state);
-              go("welcome");
-            });
+            void (async () => {
+              try {
+                const retry = importRetry;
+                setImportRetry(null);
+                if (retry) {
+                  await flow.adoptThen(retry);
+                } else {
+                  setInstalled(await confirmImport());
+                  go("welcome");
+                }
+                setInstalled(await listInstalled());
+              } catch (err) {
+                setError(asErrorPayload(err));
+                go("error");
+              }
+            })();
           }}
-          onSkip={() => go("welcome")}
+          onSkip={() => {
+            setImportRetry(null);
+            go("welcome");
+          }}
         />
       );
       break;
@@ -610,6 +869,55 @@ export default function App() {
           manifest={manifest}
           quality={quality}
           recommended={recommendation.quality}
+          detection={detection}
+          prefs={prefs}
+          snapshots={snapshots}
+          onUseDefault={(enabled) => {
+            const apply = () =>
+              flow.useDefaultFolder(enabled).then(({ result, detection: next }) => {
+                setPrefs(result);
+                setDetection(next);
+              });
+            void apply().catch(async (err: unknown) => {
+              if (await routeOccupied(err, apply)) return;
+              setError(asErrorPayload(err));
+              go("error");
+            });
+          }}
+          onChooseFolder={(choice) => {
+            const apply = () =>
+              flow.chooseFolder(choice).then(({ result, detection: next }) => {
+                setPrefs(result);
+                setDetection(next);
+              });
+            void apply().catch(async (err: unknown) => {
+              if (await routeOccupied(err, apply)) return;
+              setError(asErrorPayload(err));
+              go("error");
+            });
+          }}
+          onPickGameDir={() => void chooseFolder()}
+          onLauncherWrite={(which, enabled) => {
+            invalidateInstall();
+            const next = {
+              ...prefs.launchers,
+              writeOfficial: which === "official" ? enabled : prefs.launchers?.writeOfficial,
+              writeTlauncher: which === "tLauncher" ? enabled : prefs.launchers?.writeTlauncher,
+            };
+            void setLauncherPrefs(next).then(setPrefs);
+          }}
+          onPlayTarget={(kind: LauncherKind) => {
+            void setLauncherPrefs({ ...prefs.launchers, play: kind }).then(setPrefs);
+          }}
+          onRestore={(id) => {
+            void rollback(id).then(async (state) => {
+              setInstalled(state);
+              setSnapshots(await listSnapshots());
+            });
+          }}
+          onOpenFolder={() => {
+            if (detection.packDir) void revealPath(detection.packDir);
+          }}
           onSnowLite={setSnowLite}
           onQuality={(next) => {
             setQualityLevel(next);
@@ -649,13 +957,62 @@ export default function App() {
       <AppShell
         screen={screen}
         footer={footer}
-        banner={pickBanner(localSource, offlineBanner)}
+        banner={folderNotice ?? pickBanner(localSource, offlineBanner)}
         bannerDetail={localSource?.enabled && localSource.dir ? localSource.dir : null}
+        subtitle={screenSubtitle(screen, quality, kit, manifest.manifestVersion)}
       >
+        {folderNotice ? (
+          <div className="mb-3 flex justify-end">
+            <button type="button" className="btn-secondary" onClick={() => setFolderNotice(null)}>
+              Dismiss
+            </button>
+          </div>
+        ) : null}
         {body}
       </AppShell>
     </>
   );
+}
+
+function playOpenable(detection: Detection, prefs: Prefs): boolean {
+  const official = Boolean(detection.launchers?.official);
+  const tlauncher = Boolean(detection.launchers?.tlauncher?.openTarget);
+  if (prefs.launchers?.play === "tLauncher") return tlauncher;
+  if (prefs.launchers?.play === "official") return official;
+  return official || tlauncher;
+}
+
+function playLabelFor(detection: Detection, prefs: Prefs): string {
+  const official = Boolean(detection.launchers?.official);
+  const tlauncher = Boolean(detection.launchers?.tlauncher?.openTarget);
+  if (prefs.launchers?.play === "tLauncher" && tlauncher) return "TLauncher";
+  if (official) return "Minecraft Launcher";
+  if (tlauncher) return "TLauncher";
+  return "Minecraft Launcher";
+}
+
+function kitTitle(kit: string): string {
+  if (kit === "basic") return "Basic";
+  if (kit === "full") return "Full";
+  if (kit === "recommended") return "Recommended";
+  return "this setup";
+}
+
+function screenSubtitle(
+  screen: Screen,
+  quality: QualityLevel,
+  kit: string,
+  manifestVersion: string,
+): string {
+  const pack = "Better Adventures+";
+  const version = manifestVersion || "2026.11.7";
+  if (screen === "welcome" || screen === "settings" || screen === "manage" || screen === "help" || screen === "import") {
+    return packSubtitle("For the Arnold server", "Minecraft 26.3");
+  }
+  if (screen === "kit") return packSubtitle(pack, `${qualityLabel(quality)} quality`);
+  if (screen === "custom") return packSubtitle(pack, `${kitTitle(kit)} · ${qualityLabel(quality)} quality`);
+  if (screen === "progress" || screen === "error") return packSubtitle(pack, kitTitle(kit));
+  return packSubtitle(pack, version);
 }
 
 function footerFor(
@@ -670,6 +1027,7 @@ function footerFor(
     onBackKit: () => void;
     onBackScan: () => void;
     onCustom: () => void;
+    installReady: boolean;
     onInstall: () => void;
     onCancel: () => void;
     onExport: () => void;
@@ -677,6 +1035,8 @@ function footerFor(
     onRetry: () => void;
     onFolder: () => void;
     launcherAvailable: boolean;
+    playLabel: string;
+    qualityName: string;
     onOpenLauncher: () => void;
     onFinish: () => void;
     onHelpBack: () => void;
@@ -687,22 +1047,38 @@ function footerFor(
     case "welcome":
       return (
         <>
-          <button type="button" className="btn-secondary" onClick={actions.onManage}>
-            Manage / Uninstall
+          <button type="button" className="btn-secondary" onClick={actions.onSettings}>
+            Settings
+          </button>
+          {actions.already && actions.launcherAvailable ? (
+            <button type="button" className="btn-secondary" onClick={actions.onOpenLauncher}>
+              Play
+            </button>
+          ) : null}
+          <button type="button" className="btn-primary" onClick={actions.onCustom}>
+            Open Better Adventures+
+          </button>
+        </>
+      );
+    case "pack":
+      return (
+        <>
+          <button type="button" className="btn-secondary" onClick={actions.onBackWelcome}>
+            All packs
           </button>
           <button type="button" className="btn-primary" onClick={actions.onUpdate}>
-            {actions.already ? "Update mods →" : "Scan this PC →"}
+            Continue to This PC
           </button>
         </>
       );
     case "scan":
       return (
         <>
-          <button type="button" className="btn-secondary" onClick={actions.onBackWelcome}>
-            ← Back
+          <button type="button" className="btn-secondary" onClick={() => actions.onCustom()}>
+            Pack details
           </button>
           <button type="button" className="btn-primary" onClick={actions.onScanNext}>
-            Choose a kit →
+            Use {actions.qualityName} quality
           </button>
         </>
       );
@@ -710,27 +1086,31 @@ function footerFor(
       return (
         <>
           <button type="button" className="btn-secondary" onClick={actions.onBackScan}>
-            ← Back
+            This PC
           </button>
-          {actions.kit === "custom" ? (
-            <button type="button" className="btn-primary" onClick={actions.onCustom}>
-              Customise →
-            </button>
-          ) : (
-            <button type="button" className="btn-primary" onClick={actions.onInstall}>
-              Install {actions.kit === "recommended" ? "Recommended" : actions.kit} →
-            </button>
-          )}
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={actions.onInstall}
+            disabled={!actions.installReady}
+          >
+            Install {kitTitle(actions.kit)}
+          </button>
         </>
       );
     case "custom":
       return (
         <>
           <button type="button" className="btn-secondary" onClick={actions.onBackKit}>
-            ← Back
+            Kit
           </button>
-          <button type="button" className="btn-primary" onClick={actions.onInstall}>
-            Install custom →
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={actions.onInstall}
+            disabled={!actions.installReady}
+          >
+            Install this setup
           </button>
         </>
       );
@@ -743,20 +1123,20 @@ function footerFor(
     case "done":
       return (
         <>
-          <button type="button" className="btn-secondary" onClick={actions.onExport}>
-            Export log
+          <button type="button" className="btn-secondary" onClick={actions.onSettings}>
+            Settings
           </button>
-          <button type="button" className="btn-secondary" onClick={actions.onCopy}>
-            Copy diagnostics
+          <button type="button" className="btn-secondary" onClick={actions.onBackWelcome}>
+            All packs
           </button>
-          {actions.launcherAvailable ? (
-            <button type="button" className="btn-secondary" onClick={actions.onOpenLauncher}>
-              Open Minecraft Launcher
-            </button>
-          ) : null}
-          <button type="button" className="btn-primary" onClick={actions.onFinish}>
+          <button type="button" className="btn-secondary" onClick={actions.onFinish}>
             Finish
           </button>
+          {actions.launcherAvailable ? (
+            <button type="button" className="btn-primary" onClick={actions.onOpenLauncher}>
+              Play in {actions.playLabel}
+            </button>
+          ) : null}
         </>
       );
     case "error":

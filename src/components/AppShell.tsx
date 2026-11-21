@@ -10,12 +10,14 @@ export function AppShell({
   footer,
   banner,
   bannerDetail,
+  subtitle,
 }: {
   screen: Screen;
   children: ReactNode;
   footer: ReactNode;
   banner?: string | null;
   bannerDetail?: string | null;
+  subtitle?: string;
 }) {
   return (
     <div className="app-bg flex min-h-screen flex-col text-text">
@@ -23,8 +25,10 @@ export function AppShell({
         <div className="flex items-center gap-3">
           <ShieldLogo size={40} />
           <div>
-            <div className="font-heading text-xl text-text">Arnold Client Mods</div>
-            <div className="text-sm text-muted">{headerTagline()}</div>
+            <h1 className="font-body text-xl font-semibold tracking-[0.03em] text-text">
+              Arnold Client Mods
+            </h1>
+            <div className="text-sm text-muted">{subtitle ?? headerTagline()}</div>
           </div>
         </div>
         <StepPills screen={screen} />

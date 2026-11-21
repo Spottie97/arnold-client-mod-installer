@@ -746,15 +746,109 @@ pub fn fetch_remote_manifest<F: Fetcher>(
     fetch_remote_manifest_with_key(fetcher, active_manifest_public_key()?)
 }
 
+pub fn fetch_signed_manifest_with_key<F: Fetcher>(
+    fetcher: &F,
+    manifest_url: &str,
+    sig_url: &str,
+    public_key_hex: &str,
+) -> Result<(Manifest, Vec<u8>, Vec<u8>), AppError> {
+    let bytes = fetcher.fetch(manifest_url)?;
+    let sig_raw = fetcher.fetch(sig_url)?;
+    let signature = decode_signature(&sig_raw)?;
+    let manifest = parse_and_verify(&bytes, &signature, public_key_hex)?;
+    Ok((manifest, bytes, signature))
+}
+
 pub fn fetch_remote_manifest_with_key<F: Fetcher>(
     fetcher: &F,
     public_key_hex: &str,
 ) -> Result<(Manifest, Vec<u8>, Vec<u8>), AppError> {
-    let bytes = fetcher.fetch(REMOTE_MANIFEST_URL)?;
-    let sig_raw = fetcher.fetch(REMOTE_MANIFEST_SIG_URL)?;
-    let signature = decode_signature(&sig_raw)?;
-    let manifest = parse_and_verify(&bytes, &signature, public_key_hex)?;
-    Ok((manifest, bytes, signature))
+    fetch_signed_manifest_with_key(
+        fetcher,
+        REMOTE_MANIFEST_URL,
+        REMOTE_MANIFEST_SIG_URL,
+        public_key_hex,
+    )
+}
+
+pub fn load_manifest_from_urls<F: Fetcher>(
+    fetcher: &F,
+    manifest_url: &str,
+    sig_url: &str,
+    cache_dir: &Path,
+    public_key_hex: &str,
+    bundled_fallback: bool,
+) -> ManifestLoad {
+    match fetch_signed_manifest_with_key(fetcher, manifest_url, sig_url, public_key_hex) {
+        Ok((manifest, bytes, signature)) => {
+            let _ = write_manifest_cache(cache_dir, &bytes, &signature);
+            ManifestLoad {
+                manifest,
+                source: "remote".into(),
+                offline: false,
+                message: None,
+                local_source: false,
+                local_source_dir: None,
+            }
+        }
+        Err(remote_err) => match load_cached_manifest_with_key(cache_dir, public_key_hex) {
+            Ok(manifest) => ManifestLoad {
+                manifest,
+                source: "cache".into(),
+                offline: true,
+                message: Some(format!(
+                    "Using the last good mod list (offline). {remote_err}"
+                )),
+                local_source: false,
+                local_source_dir: None,
+            },
+            Err(_) if bundled_fallback => match load_bundled_manifest_with_key(public_key_hex) {
+                Ok(manifest) => ManifestLoad {
+                    manifest,
+                    source: "bundled".into(),
+                    offline: true,
+                    message: Some(format!(
+                        "Using the bundled mod list. Remote fetch failed: {remote_err}"
+                    )),
+                    local_source: false,
+                    local_source_dir: None,
+                },
+                Err(bundled_err) => {
+                    unavailable_manifest(remote_err.to_string(), bundled_err.to_string())
+                }
+            },
+            Err(cache_err) => unavailable_manifest(remote_err.to_string(), cache_err.to_string()),
+        },
+    }
+}
+
+fn unavailable_manifest(remote_err: String, bundled_err: String) -> ManifestLoad {
+    ManifestLoad {
+        manifest: Manifest {
+            schema: MANIFEST_SCHEMA,
+            manifest_version: "unavailable".into(),
+            min_app_version: "3.0.0".into(),
+            minecraft: "26.3".into(),
+            current_server_shipwright: None,
+            loader: Loader {
+                id: "missing".into(),
+                url: "https://cdn.modrinth.com/missing".into(),
+                sha512: "0".repeat(128),
+            },
+            components: Vec::new(),
+            kits: BTreeMap::new(),
+            addons: BTreeMap::new(),
+            recommend: None,
+            quality_presets: None,
+        },
+        source: "error".into(),
+        offline: true,
+        message: Some(format!(
+            "No signed mod list is available. {remote_err}; bundled: {bundled_err}"
+        )),
+        local_source: false,
+        local_source_dir: None,
+    }
 }
 
 pub(crate) fn decode_signature(raw: &[u8]) -> Result<Vec<u8>, AppError> {
@@ -787,69 +881,14 @@ pub fn load_best_manifest_with_key<F: Fetcher>(
     cache_dir: &Path,
     public_key_hex: &str,
 ) -> ManifestLoad {
-    match fetch_remote_manifest_with_key(fetcher, public_key_hex) {
-        Ok((manifest, bytes, signature)) => {
-            let _ = write_manifest_cache(cache_dir, &bytes, &signature);
-            ManifestLoad {
-                manifest,
-                source: "remote".into(),
-                offline: false,
-                message: None,
-                local_source: false,
-                local_source_dir: None,
-            }
-        }
-        Err(remote_err) => match load_cached_manifest_with_key(cache_dir, public_key_hex) {
-            Ok(manifest) => ManifestLoad {
-                manifest,
-                source: "cache".into(),
-                offline: true,
-                message: Some(format!(
-                    "Using the last good mod list (offline). {remote_err}"
-                )),
-                local_source: false,
-                local_source_dir: None,
-            },
-            Err(_) => match load_bundled_manifest_with_key(public_key_hex) {
-                Ok(manifest) => ManifestLoad {
-                    manifest,
-                    source: "bundled".into(),
-                    offline: true,
-                    message: Some(format!(
-                        "Using the bundled mod list. Remote fetch failed: {remote_err}"
-                    )),
-                    local_source: false,
-                    local_source_dir: None,
-                },
-                Err(bundled_err) => ManifestLoad {
-                    manifest: Manifest {
-                        schema: MANIFEST_SCHEMA,
-                        manifest_version: "unavailable".into(),
-                        min_app_version: "3.0.0".into(),
-                        minecraft: "26.3".into(),
-                        current_server_shipwright: None,
-                        loader: Loader {
-                            id: "missing".into(),
-                            url: "https://cdn.modrinth.com/missing".into(),
-                            sha512: "0".repeat(128),
-                        },
-                        components: Vec::new(),
-                        kits: BTreeMap::new(),
-                        addons: BTreeMap::new(),
-                        recommend: None,
-                        quality_presets: None,
-                    },
-                    source: "error".into(),
-                    offline: true,
-                    message: Some(format!(
-                        "No signed mod list is available. {remote_err}; bundled: {bundled_err}"
-                    )),
-                    local_source: false,
-                    local_source_dir: None,
-                },
-            },
-        },
-    }
+    load_manifest_from_urls(
+        fetcher,
+        REMOTE_MANIFEST_URL,
+        REMOTE_MANIFEST_SIG_URL,
+        cache_dir,
+        public_key_hex,
+        true,
+    )
 }
 
 pub fn default_cache_dir() -> std::path::PathBuf {

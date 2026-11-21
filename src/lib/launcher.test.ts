@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { LAUNCHER_NOTE } from "./api";
+import { launcherNote } from "./api";
 
 describe("launcher note", () => {
   it("names the profile the installer writes", () => {
-    expect(LAUNCHER_NOTE).toBe(
-      "Open Minecraft and choose the 'Arnold – Fabric 26.3' profile.",
+    expect(launcherNote("Better Adventures+", "Minecraft Launcher")).toBe(
+      "Open Minecraft Launcher and choose the 'Arnold — Better Adventures+' profile.",
     );
   });
 });

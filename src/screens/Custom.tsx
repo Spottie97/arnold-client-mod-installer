@@ -1,10 +1,12 @@
 import { AddonToggles } from "../components/AddonToggles";
 import type { AddonRow } from "../lib/addons";
-import type { Component, InstallPlan, Manifest } from "../types";
+import { qualityLabel } from "../lib/quality";
+import type { Component, InstallPlan, Manifest, QualityLevel } from "../types";
 
 const GROUPS: { id: Component["group"]; title: string }[] = [
+  { id: "base", title: "Mods" },
   { id: "arnold", title: "Arnold" },
-  { id: "shaders", title: "Performance & Shaders" },
+  { id: "shaders", title: "Shaders & add-ons" },
   { id: "ocean", title: "Ocean" },
 ];
 
@@ -13,6 +15,7 @@ export function Custom({
   selected,
   snowLite,
   plan,
+  quality,
   addons,
   onToggle,
   onAddon,
@@ -22,6 +25,7 @@ export function Custom({
   selected: string[];
   snowLite: boolean;
   plan: InstallPlan;
+  quality: QualityLevel;
   addons: AddonRow[];
   onToggle: (id: string) => void;
   onAddon: (id: string, on: boolean) => void;
@@ -29,7 +33,12 @@ export function Custom({
 }) {
   return (
     <div className="flex flex-1 flex-col">
-      <h1 className="mt-4 font-heading text-4xl text-gold">Custom picker</h1>
+      <h2 className="mt-2 font-heading text-4xl text-gold">Options</h2>
+      <p className="mt-2 text-base text-muted">
+        {plan.kit === "basic" ? "Basic" : plan.kit === "full" ? "Full" : "Recommended"} kit ·{" "}
+        {qualityLabel(quality)} quality. Locked items are required to join, or required for this
+        kit, and cannot be turned off.
+      </p>
       <div className="mt-6 space-y-5">
         {GROUPS.map((group) => (
           <section key={group.id} className="panel">

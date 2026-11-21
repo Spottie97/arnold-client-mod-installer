@@ -1,12 +1,18 @@
 import type { LocalSourceInfo } from "./localSource";
 import type {
+  CopyReport,
+  DestinationEntry,
   Detection,
   ErrorPayload,
   ImportOffer,
   InstallPlan,
   InstalledState,
+  PackInstallState,
+  LauncherPrefs,
+  LauncherReport,
   Manifest,
   ManifestLoad,
+  PackIndexLoad,
   Prefs,
   ProgressEvent,
   QualityLevel,
@@ -19,6 +25,7 @@ import {
   mockDetection,
   mockInstalled,
   mockManifest,
+  mockPackIndex,
   mockPlan,
   mockRecommendation,
   mockSnapshots,
@@ -97,7 +104,21 @@ export async function listInstalled(): Promise<InstalledState | null> {
   try {
     return await invoke<InstalledState | null>("list_installed");
   } catch {
-    return mockInstalled();
+    return null;
+  }
+}
+
+export async function listPackStates(): Promise<PackInstallState[]> {
+  if (!isTauri()) {
+    return mockPackIndex().index.packs.map((pack) => ({
+      packId: pack.id,
+      installed: pack.id === "better-adventures-plus" ? mockInstalled() : null,
+    }));
+  }
+  try {
+    return await invoke<PackInstallState[]>("list_pack_states");
+  } catch {
+    return [];
   }
 }
 
@@ -120,22 +141,72 @@ export async function setGameDir(path: string): Promise<Detection> {
   return invoke<Detection>("set_game_dir", { path });
 }
 
+/**
+ * One id per install or repair the player starts. `install`, `repair` and
+ * `cancel` all carry it, so a Cancel pressed before the backend worker has
+ * registered its flag is still honoured, and never leaks into the next run.
+ */
+interface InstallRequest {
+  id: string;
+  cancelled: boolean;
+}
+
+let activeRequest: InstallRequest | null = null;
+let requestSeq = 0;
+
+export const CANCELLED_PAYLOAD: ErrorPayload = {
+  code: "E-CANCELLED",
+  title: "Install cancelled",
+  hint: "Nothing was left half-applied. Your game folder is as it was before this run.",
+  detail: "Cancelled before the install started.",
+};
+
+function newRequestId(): string {
+  requestSeq += 1;
+  const random =
+    globalThis.crypto?.randomUUID?.() ??
+    `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  return `req-${requestSeq}-${random}`;
+}
+
+/** Call when the player starts an install or repair, before anything async. */
+export function beginInstallRequest(): string {
+  const id = newRequestId();
+  activeRequest = { id, cancelled: false };
+  return id;
+}
+
+/** Call when that install or repair has settled. */
+export function endInstallRequest(id: string): void {
+  if (activeRequest?.id === id) activeRequest = null;
+}
+
+function cancelledLocally(id: string | undefined): boolean {
+  return id !== undefined && activeRequest?.id === id && activeRequest.cancelled;
+}
+
 export async function runInstall(
   nextPlan: InstallPlan,
   replaceCollisions = false,
+  requestId?: string,
 ): Promise<string> {
+  if (cancelledLocally(requestId)) throw CANCELLED_PAYLOAD;
   if (!isTauri()) return "mock-run";
-  return invoke<string>("install", { plan: nextPlan, replaceCollisions });
+  return invoke<string>("install", { plan: nextPlan, replaceCollisions, requestId });
 }
 
 export async function cancelInstall(): Promise<void> {
+  const request = activeRequest;
+  if (request) request.cancelled = true;
   if (!isTauri()) return;
-  await invoke("cancel");
+  // With an id the backend keeps the cancel even if its worker has not started yet.
+  await invoke("cancel", request ? { requestId: request.id } : {});
 }
 
-export async function repairInstall(): Promise<string> {
+export async function repairInstall(requestId?: string): Promise<string> {
+  if (cancelledLocally(requestId)) throw CANCELLED_PAYLOAD;
   if (!isTauri()) return "mock-repair";
-  return invoke<string>("repair");
+  return invoke<string>("repair", { requestId });
 }
 
 export async function listenProgress(onEvent: (event: ProgressEvent) => void): Promise<() => void> {
@@ -143,6 +214,17 @@ export async function listenProgress(onEvent: (event: ProgressEvent) => void): P
   const { listen } = await import("@tauri-apps/api/event");
   const unlisten = await listen<ProgressEvent>("install://progress", (event) => {
     onEvent(event.payload);
+  });
+  return unlisten;
+}
+
+export async function onFolderSwitched(
+  cb: (entry: DestinationEntry) => void,
+): Promise<() => void> {
+  if (!isTauri()) return () => undefined;
+  const { listen } = await import("@tauri-apps/api/event");
+  const unlisten = await listen<DestinationEntry>("pack://folder-switched", (event) => {
+    cb(event.payload);
   });
   return unlisten;
 }
@@ -167,8 +249,11 @@ export async function copyDiagnostics(): Promise<string> {
   return invoke<string>("copy_diagnostics");
 }
 
-export const LAUNCHER_NOTE =
-  "Open Minecraft and choose the 'Arnold – Fabric 26.3' profile.";
+export function launcherNote(packName: string, launcherLabel: string): string {
+  return `Open ${launcherLabel} and choose the 'Arnold — ${packName}' profile.`;
+}
+
+export const LAUNCHER_NOTE = launcherNote("Better Adventures+", "Minecraft Launcher");
 
 export interface LauncherAvailability {
   available: boolean;
@@ -225,8 +310,64 @@ export async function confirmImport(): Promise<InstalledState> {
   return invoke<InstalledState>("confirm_import");
 }
 
+export async function listPacks(): Promise<PackIndexLoad> {
+  if (!isTauri()) return mockPackIndex();
+  return invoke<PackIndexLoad>("list_packs");
+}
+
+export async function selectPack(id: string): Promise<Prefs> {
+  if (!isTauri()) return { lastGameDir: null, tourDone: true, selectedPack: id };
+  return invoke<Prefs>("select_pack", { id });
+}
+
+export async function choosePackFolder(choice: "keep" | "fresh"): Promise<Prefs> {
+  if (!isTauri()) {
+    return {
+      lastGameDir: null,
+      tourDone: true,
+      packLocations: { "better-adventures-plus": choice === "keep" ? "defaultFolder" : "ownFolder" },
+    };
+  }
+  return invoke<Prefs>("choose_pack_folder", { choice });
+}
+
+export async function copyFromOldFolder(item: "options" | "servers" | "saves"): Promise<CopyReport> {
+  if (!isTauri()) return { item, copied: [item], skipped: [] };
+  return invoke<CopyReport>("copy_from_old_folder", { item });
+}
+
+export async function setUseDefaultFolder(enabled: boolean): Promise<Prefs> {
+  if (!isTauri()) return { lastGameDir: null, tourDone: true, useDefaultFolder: enabled };
+  return invoke<Prefs>("set_use_default_folder", { enabled });
+}
+
+export async function setLauncherPrefs(launchers: LauncherPrefs): Promise<Prefs> {
+  if (!isTauri()) return { lastGameDir: null, tourDone: true, launchers };
+  return invoke<Prefs>("set_launcher_prefs", { prefs: launchers });
+}
+
+export async function detectLaunchers(): Promise<LauncherReport> {
+  if (!isTauri()) return mockDetection().launchers as LauncherReport;
+  return invoke<LauncherReport>("detect_launchers");
+}
+
+export async function play(): Promise<LauncherOpenResult> {
+  if (!isTauri()) return { opened: false, note: LAUNCHER_NOTE };
+  return invoke<LauncherOpenResult>("play");
+}
+
+export async function openCreditLink(which: "matcha-source" | "cc-by-nc-sa-4"): Promise<void> {
+  if (!isTauri()) return;
+  await invoke("open_credit_link", { which });
+}
+
+export async function rollback(snapshotId: string): Promise<InstalledState> {
+  if (!isTauri()) return mockInstalled();
+  return invoke<InstalledState>("rollback", { snapshotId });
+}
+
 export async function getPrefs(): Promise<Prefs> {
-  if (!isTauri()) return { lastGameDir: null, tourDone: false };
+  if (!isTauri()) return { lastGameDir: null, tourDone: false, useDefaultFolder: false };
   try {
     return await invoke<Prefs>("get_prefs");
   } catch {

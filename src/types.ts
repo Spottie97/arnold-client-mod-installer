@@ -1,5 +1,6 @@
 export type Screen =
   | "welcome"
+  | "pack"
   | "scan"
   | "kit"
   | "custom"
@@ -124,6 +125,80 @@ export interface Detection {
   fabric: { installed: boolean; profileId?: string | null; willInstall: boolean };
   gameRunning: boolean;
   importedFromLegacy: boolean;
+  packId?: string;
+  packDir?: string | null;
+  launcherRoot?: string;
+  folderMode?: string;
+  needsFolderChoice?: LegacyInstall | null;
+  launchers?: LauncherReport;
+  /** False when no selected launcher needs a vanilla jar before install. */
+  requireVanilla?: boolean;
+}
+
+export interface LegacyInstall {
+  root: string;
+  manifestVersion?: string | null;
+  kit?: string | null;
+}
+
+export type LauncherKind = "official" | "tLauncher";
+
+export type FoundLauncher =
+  | "windowsStore"
+  | "macApp"
+  | "linuxNative"
+  | "linuxFlatpak"
+  | { windowsClassic: string };
+
+export interface TLauncherFound {
+  openTarget?: string | null;
+  gameDir: string;
+  verified: boolean;
+}
+
+export interface LauncherReport {
+  official?: FoundLauncher | null;
+  officialRoot: string;
+  tlauncher?: TLauncherFound | null;
+  playDefault?: LauncherKind | null;
+}
+
+export interface LauncherPrefs {
+  writeOfficial?: boolean | null;
+  writeTlauncher?: boolean | null;
+  play?: LauncherKind | null;
+}
+
+export interface PackEntry {
+  id: string;
+  name: string;
+  minecraft: string;
+  displayVersion?: string | null;
+  manifestUrl: string;
+  manifestSigUrl: string;
+  manifestSha512?: string | null;
+  art?: string | null;
+  minAppVersion?: string | null;
+}
+
+export interface PackIndexLoad {
+  index: {
+    kind: string;
+    schema: number;
+    indexVersion: string;
+    minAppVersion: string;
+    packs: PackEntry[];
+  };
+  source: string;
+  message?: string | null;
+}
+
+export type PackLocation = "ownFolder" | "defaultFolder";
+
+export interface CopyReport {
+  item: string;
+  copied: string[];
+  skipped: string[];
 }
 
 export interface Hardware {
@@ -176,8 +251,17 @@ export interface InstallPlan {
   quality: QualityLevel;
   kit: string;
   components: string[];
+  /** Present only because an add-on toggle is on. Omitted plans treat every file as required. */
+  optionalComponents?: string[];
   warnings: string[];
   bytes: number;
+  packId?: string;
+  packDir?: string;
+}
+
+export interface PackInstallState {
+  packId: string;
+  installed: InstalledState | null;
 }
 
 export interface InstalledState {
@@ -189,6 +273,37 @@ export interface InstalledState {
   components: { id: string; version: string; name: string }[];
   files: { path: string; sha512: string; componentId: string }[];
   updatedAt: string;
+  packId?: string | null;
+}
+
+export type OwnerSource = "marker" | "state" | "legacy-ba-plus" | "empty";
+
+export type FolderOwner =
+  | { kind: "empty" }
+  | { kind: "marked"; packId: string }
+  | { kind: "inferred"; packId: string; source: OwnerSource }
+  | { kind: "ambiguous"; reason: string }
+  | { kind: "occupied"; files: string[] };
+
+export interface SwitchReport {
+  from: string;
+  to: string;
+  restored: boolean;
+  flagged: string[];
+  legacy: boolean;
+  stashPath: string;
+  partialRestore: boolean;
+  conflicts: string[];
+  savedCopies: string[];
+}
+
+export interface DestinationEntry {
+  packId: string;
+  path: string;
+  mode: string;
+  ownerBefore?: FolderOwner | null;
+  switch?: SwitchReport | null;
+  adopted: boolean;
 }
 
 export interface SnapshotMeta {
@@ -235,6 +350,10 @@ export interface ImportOffer {
 export interface Prefs {
   lastGameDir?: string | null;
   tourDone: boolean;
+  selectedPack?: string | null;
+  useDefaultFolder?: boolean;
+  packLocations?: Record<string, PackLocation>;
+  launchers?: LauncherPrefs;
 }
 
 export interface UpdateBadge {

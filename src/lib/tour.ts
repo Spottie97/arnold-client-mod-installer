@@ -9,6 +9,6 @@ export const TOUR_TIPS = [
   },
   {
     title: "Pick Arnold – Fabric 26.3",
-    body: "After install, open the Minecraft Launcher and choose the Arnold – Fabric 26.3 profile. Vanilla friends can still join.",
+    body: "After install, open the Minecraft Launcher and choose the Arnold — Better Adventures+ profile.",
   },
 ] as const;

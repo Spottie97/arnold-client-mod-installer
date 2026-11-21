@@ -1,9 +1,11 @@
 import type { Screen } from "../types";
 
 const STEPS: { id: Screen; label: string }[] = [
-  { id: "welcome", label: "Welcome" },
-  { id: "scan", label: "Scan" },
+  { id: "welcome", label: "Packs" },
+  { id: "pack", label: "Details" },
+  { id: "scan", label: "This PC" },
   { id: "kit", label: "Kit" },
+  { id: "custom", label: "Options" },
   { id: "progress", label: "Install" },
   { id: "done", label: "Done" },
 ];
@@ -16,16 +18,19 @@ function activeIndex(screen: Screen): number {
     case "import":
     case "settings":
       return 0;
-    case "scan":
+    case "pack":
       return 1;
-    case "kit":
-    case "custom":
+    case "scan":
       return 2;
+    case "kit":
+      return 3;
+    case "custom":
+      return 4;
     case "progress":
     case "error":
-      return 3;
+      return 5;
     case "done":
-      return 4;
+      return 6;
     default: {
       const _exhaustive: never = screen;
       return _exhaustive;
@@ -42,9 +47,7 @@ export function StepPills({ screen }: { screen: Screen }) {
         return (
           <span
             key={step.id}
-            className={`pill font-heading ${
-              active ? "bg-accent text-white" : "bg-[#2a2438] text-muted"
-            }`}
+            className={`pill ${active ? "bg-accent text-white" : "bg-[#2a2438] text-muted"}`}
             aria-current={active ? "step" : undefined}
           >
             {step.label}
