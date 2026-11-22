@@ -302,7 +302,7 @@ pub fn builtin_index() -> PackIndex {
             id: BA_PLUS_PACK_ID.into(),
             name: "Better Adventures+".into(),
             minecraft: "26.3".into(),
-            display_version: Some("2026.11.7".into()),
+            display_version: Some("2026.11.8".into()),
             manifest_url: manifest::REMOTE_MANIFEST_URL.into(),
             manifest_sig_url: manifest::REMOTE_MANIFEST_SIG_URL.into(),
             manifest_sha512: None,

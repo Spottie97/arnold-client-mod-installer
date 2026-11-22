@@ -991,7 +991,7 @@ function screenSubtitle(
   manifestVersion: string,
 ): string {
   const pack = "Better Adventures+";
-  const version = manifestVersion || "2026.11.7";
+  const version = manifestVersion || "2026.11.8";
   if (screen === "welcome" || screen === "settings" || screen === "manage" || screen === "help" || screen === "import") {
     return packSubtitle("For the Arnold server", "Minecraft 26.3");
   }

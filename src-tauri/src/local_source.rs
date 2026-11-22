@@ -657,9 +657,9 @@ mod tests {
         fs::create_dir_all(&macos).unwrap();
         let exe = macos.join("arnold-client-mods");
         fs::write(&exe, b"").unwrap();
-        touch_manifest(&root.join("mods-2026.11.7"));
+        touch_manifest(&root.join("mods-2026.11.8"));
         let found = detect_local_source(&search_roots_for_exe_on(&exe, HostOs::Macos)).unwrap();
-        assert!(found.ends_with("mods-2026.11.7"), "{}", found.display());
+        assert!(found.ends_with("mods-2026.11.8"), "{}", found.display());
     }
 
     #[test]
@@ -816,7 +816,7 @@ mod tests {
             TEST_MANIFEST_PUBLIC_KEY_HEX,
         );
         assert_ne!(manifest.source, "error");
-        assert_eq!(manifest.manifest.manifest_version, "2026.11.7");
+        assert_eq!(manifest.manifest.manifest_version, "2026.11.8");
     }
 
     #[test]

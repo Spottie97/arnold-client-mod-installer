@@ -215,7 +215,7 @@ export function missingMinecraftError(gameDir: string): ErrorPayload {
     code: "E-MC-MISSING",
     title: "Minecraft 26.3 isn't installed yet",
     hint: "Open the Minecraft Launcher, press Play once on Latest release (26.3), close the game, then press Try again.",
-    detail: `detected: versions/26.3/26.3.jar not found in ${gameDir}\nmanifest 2026.11.7 (signature ok) · app ${APP_VERSION} · Windows 11 23H2`,
+    detail: `detected: versions/26.3/26.3.jar not found in ${gameDir}\nmanifest 2026.11.8 (signature ok) · app ${APP_VERSION} · Windows 11 23H2`,
   };
 }
 
@@ -269,7 +269,7 @@ export function mockPackIndex() {
           id: "better-adventures-plus",
           name: "Better Adventures+",
           minecraft: "26.3",
-          displayVersion: "2026.11.7",
+          displayVersion: "2026.11.8",
           manifestUrl: "https://example.invalid/manifest.json",
           manifestSigUrl: "https://example.invalid/manifest.json.sig",
           art: "matcha-flavoured",
