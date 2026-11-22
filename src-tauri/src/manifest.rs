@@ -918,7 +918,7 @@ mod tests {
     fn bundled_fixture_verifies_with_embedded_test_key() {
         let manifest = load_bundled_manifest_with_key(TEST_MANIFEST_PUBLIC_KEY_HEX).unwrap();
         assert_eq!(manifest.schema, 3);
-        assert_eq!(manifest.manifest_version, "2026.11.7");
+        assert_eq!(manifest.manifest_version, "2026.11.8");
         assert_eq!(manifest.minecraft, "26.3");
         assert_eq!(
             manifest.current_server_shipwright.as_deref(),
@@ -1078,7 +1078,7 @@ mod tests {
     fn github_release_files_use_the_tag_publish_checks() {
         let manifest = load_fixture_manifest().unwrap();
         let tag = crate::download::ARNOLD_RELEASE_TAG;
-        assert_eq!(tag, "mods-2026.11.7");
+        assert_eq!(tag, "mods-2026.11.8");
         let prefix = format!(
             "https://github.com/{}/{}/releases/download/{tag}/",
             crate::download::RELEASE_OWNER,
@@ -1598,8 +1598,8 @@ mod tests {
 
         let ships = by_id("shippyships");
         assert_eq!(ships.name, "Shippy Ships");
-        // Modrinth labels this release 1.0.28.3. The jar filename still says 1.0.28.2.
-        assert_eq!(ships.version, "1.0.28.3");
+        // Label matches the jar filename (1.0.28.2), even though Modrinth calls the release 1.0.28.3.
+        assert_eq!(ships.version, "1.0.28.2");
         assert_eq!(ships.group, ComponentGroup::Arnold);
         assert!(ships.required_in_all_kits);
         assert_eq!(
@@ -2475,7 +2475,7 @@ mod tests {
                 .find(|component| component.id == id)
                 .unwrap_or_else(|| panic!("missing {id}"))
         };
-        let prefix = "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.7/";
+        let prefix = "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.8/";
         let pins: [CosmeticPin<'_>; 4] = [
             (
                 "unboundthirdperson",

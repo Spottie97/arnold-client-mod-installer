@@ -360,7 +360,7 @@ mod tests {
     #[test]
     fn fixture_minus_resourcepacks_parses_on_the_6362dfe_schema_and_leaves_architect_off() {
         let manifest = parse_legacy(&fixture_without_resourcepacks()).expect("6362dfe schema");
-        assert_eq!(manifest.min_app_version, "3.2.0");
+        assert_eq!(manifest.min_app_version, "3.3.0");
         assert_eq!(manifest.minecraft, "26.3");
         assert!(manifest.addons.contains_key("architect"));
         assert!(manifest.addons.contains_key("ocean"));
@@ -486,7 +486,7 @@ mod tests {
         assert!(err.contains("sao_aincrad"), "{err}");
     }
 
-    /// 3.0.x and app-v3.1.0 fall back to cache/bundled on this manifest; see `minAppVersion` 3.2.0.
+    /// 3.0.x and app-v3.1.0 fall back to cache/bundled on this manifest (resourcepacks needs 3.2.0+).
     #[test]
     fn bundled_fixture_with_resourcepacks_fails_on_the_6362dfe_schema() {
         let err = parse_legacy(BUNDLED_MANIFEST_JSON).unwrap_err();

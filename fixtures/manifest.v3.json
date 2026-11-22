@@ -1,12 +1,12 @@
 {
   "schema": 3,
-  "manifestVersion": "2026.11.7",
-  "minAppVersion": "3.2.0",
+  "manifestVersion": "2026.11.8",
+  "minAppVersion": "3.3.0",
   "minecraft": "26.3",
   "currentServerShipwright": "0.11.2",
   "loader": {
     "id": "fabric-loader-0.20.1-26.3",
-    "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.7/fabric-loader-0.20.1-26.3.json",
+    "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.8/fabric-loader-0.20.1-26.3.json",
     "sha512": "babd24cc307a2654b95026e3a82d83e60028d9dfc2974531b45f51498352372637091ee062d7d7b29580a7c2ed8f7bccbaf69acd20d061422ed4d9c7c06436a1"
   },
   "components": [
@@ -111,7 +111,7 @@
           "file": "arnold-deck-client-0.11.1.jar",
           "dest": "mods",
           "match": "arnold-deck-client-*.jar",
-          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.7/arnold-deck-client-0.11.1.jar",
+          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.8/arnold-deck-client-0.11.1.jar",
           "sha512": "a5619fffe5e4008054340f8f2bb6b40a30861b2763404b7f398534831907bdfce3fbdb15f307c1d52ecaf4e51522e47f70c7c25267b0206769108b43660b0b58",
           "size": 11243
         }
@@ -198,7 +198,7 @@
           "file": "arnold-ships-client-0.10.3.jar",
           "dest": "mods",
           "match": "arnold-ships-client-*.jar",
-          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.7/arnold-ships-client-0.10.3.jar",
+          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.8/arnold-ships-client-0.10.3.jar",
           "sha512": "bf6a3a5a3395b46e69a16144af682b9610b0868bd40b0ae531698705c1c16f552b41eb914176564cbf2f4406dcb8e4c2cb0cb71b47663f5534a22c5b252f7249",
           "size": 7460714
         }
@@ -221,7 +221,7 @@
           "file": "dietplus-fabric-2.2.0+26.3.jar",
           "dest": "mods",
           "match": "dietplus-fabric-*.jar",
-          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.7/dietplus-fabric-2.2.0+26.3.jar",
+          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.8/dietplus-fabric-2.2.0+26.3.jar",
           "sha512": "605ceff04a93b8a243c351d0ff8f27e58e2088b24dfc95f6e07564a4e7dda941c6e9799fc453576d1d855679bb39c38c8ab198e5c04d18661f1ec4f08a8126c9",
           "size": 873679
         }
@@ -530,7 +530,7 @@
       ],
       "requiredInAllKits": true,
       "name": "Shippy Ships",
-      "version": "1.0.28.3",
+      "version": "1.0.28.2",
       "description": "Buildable sailing ships by Caesius_Leo. The server runs it too, so every kit installs it. Fetched from Modrinth, never rehosted.",
       "license": "LicenseRef-Custom-License---Limited-Rights-Granted",
       "files": [
@@ -2786,7 +2786,7 @@
           "file": "UnboundThirdPerson-mc26.3-v1.0.6-fabric-no-zoom-animation.jar",
           "dest": "mods",
           "match": "UnboundThirdPerson-*.jar",
-          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.7/UnboundThirdPerson-mc26.3-v1.0.6-fabric-no-zoom-animation.jar",
+          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.8/UnboundThirdPerson-mc26.3-v1.0.6-fabric-no-zoom-animation.jar",
           "sha512": "d804757fbf4b934109c19556f0d7959a5005f19d4e62993d2213caa54e9cb3cc6a870e0430c44a3481ff7ae58be67bd9a95cc620c58598ae3c9a603013410d15",
           "size": 422446,
           "sha1": "8d3123a17ac6f2358640abd1a65f6a1e4ba9046d"
@@ -2812,7 +2812,7 @@
           "file": "plane_advancements-1.6-mc26.3-no-toolbar.jar",
           "dest": "mods",
           "match": "plane_advancements-*.jar",
-          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.7/plane_advancements-1.6-mc26.3-no-toolbar.jar",
+          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.8/plane_advancements-1.6-mc26.3-no-toolbar.jar",
           "sha512": "91363f134aa0a0ea4f2780a4bf5f1cf82ecca9c06fb8f51699b253c87d7b63fd3d012918f78f1622b365537c2b9181292f3f54ef66a32e5b104fe159b2f4c178",
           "size": 404997,
           "sha1": "a9d206ff3174597a4b6600bc49e742859219cd88"
@@ -2838,7 +2838,7 @@
           "file": "audio_hotkeys-1.0.14+26.3-no-overlay.jar",
           "dest": "mods",
           "match": "audio_hotkeys-*.jar",
-          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.7/audio_hotkeys-1.0.14+26.3-no-overlay.jar",
+          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.8/audio_hotkeys-1.0.14+26.3-no-overlay.jar",
           "sha512": "3a8e391f62e0a0ee91b88f373729462482d82ed17f75f354240de4ec7bade924ccd90606c2b64afa8b0044c35bb1ba8a7ff6339aebf40c2f41600ce7fa10defb",
           "size": 51677,
           "sha1": "8e81b2d01ca9a66913f8da1a9c7e45eed8e7d7ec"
@@ -2861,7 +2861,7 @@
           "file": "weatherglass-0.6.0-26.3-fabric.jar",
           "dest": "mods",
           "match": "weatherglass-*.jar",
-          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.7/weatherglass-0.6.0-26.3-fabric.jar",
+          "url": "https://github.com/Spottie97/arnold-client-mod-installer/releases/download/mods-2026.11.8/weatherglass-0.6.0-26.3-fabric.jar",
           "sha512": "98df091fc6082772f7025c0117faa629abef9c3bc0989a5f8a9eaf83972bd5cf0b4d5dc058bfdba2bf372e60f2af79711eb55ace1e3afb8ff031b367f4cff4c7",
           "size": 622512,
           "sha1": "5ebc52e155265980d507d587b4475dfed49c2713"

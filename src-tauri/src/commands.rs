@@ -1301,7 +1301,7 @@ mod tests {
     fn pending_local_load_uses_bundled_ba_plus_list() {
         let loaded = pending_local_load().unwrap();
         assert_eq!(loaded.source, "bundled");
-        assert_eq!(loaded.manifest.manifest_version, "2026.11.7");
+        assert_eq!(loaded.manifest.manifest_version, "2026.11.8");
         assert!(loaded.local_source);
         assert!(loaded.local_source_dir.is_none());
     }

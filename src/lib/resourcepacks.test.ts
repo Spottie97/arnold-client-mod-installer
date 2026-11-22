@@ -31,7 +31,9 @@ describe("BA+ resource packs", () => {
     }
   });
 
-  it("needs installer 3.2.0", () => {
-    expect(manifest.minAppVersion).toBe("3.2.0");
+  // 3.2.0 added the resourcepacks dest; 3.3.0 also removes leftover Snowfall jars.
+  // minAppVersion is a marker, not a gate: no released installer refuses a manifest on it.
+  it("marks installer 3.3.0", () => {
+    expect(manifest.minAppVersion).toBe("3.3.0");
   });
 });

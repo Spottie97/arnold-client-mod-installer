@@ -36,7 +36,7 @@ The workflow only uploads that artifact. It does not create a release or a tag.
 2. Download `arnold-client-mods-macos-universal` (public) or
    `arnold-client-mods-macos-universal-local-source` (test build).
    Both run on Apple Silicon and Intel Macs.
-3. Inside: `Arnold Client Mods_3.2.0_universal.dmg` and
+3. Inside: `Arnold Client Mods_3.3.0_universal.dmg` and
    `Arnold-Client-Mods-macos-universal.app.zip`.
 
 These builds are **not signed or notarized** (there is no Apple Developer ID yet), so
@@ -55,13 +55,13 @@ Copy the app out of the dmg into a normal folder, put the signed tester folder
 beside it, and clear quarantine so macOS does not run it from a hidden copy:
 
     ~/ArnoldTest/Arnold Client Mods.app
-    ~/ArnoldTest/mods-2026.11.7/manifest.json
-    ~/ArnoldTest/mods-2026.11.7/manifest.json.sig
+    ~/ArnoldTest/mods-2026.11.8/manifest.json
+    ~/ArnoldTest/mods-2026.11.8/manifest.json.sig
 
     xattr -dr com.apple.quarantine ~/ArnoldTest/"Arnold Client Mods.app"
 
 If the folder is not found, the app asks for it. You can also run
-`open -a ~/ArnoldTest/"Arnold Client Mods.app" --args --local-source ~/ArnoldTest/mods-2026.11.7`.
+`open -a ~/ArnoldTest/"Arnold Client Mods.app" --args --local-source ~/ArnoldTest/mods-2026.11.8`.
 
 ### Where it installs on a Mac
 
@@ -183,7 +183,7 @@ also change the folder later.
 - A jar whose SHA-512 does not match the signed list is discarded
   (`E-HASH-MISMATCH`).
 - A `file://` path that leaves the folder is rejected (`E-URL-NOT-ALLOWED`).
-- Diagnostics show `manifestSource: local` and `manifest: 2026.11.7` when the folder is in use,
+- Diagnostics show `manifestSource: local` and `manifest: 2026.11.8` when the folder is in use,
   and `manifestSource: bundled` when no folder is chosen (install stays blocked).
   The public installer always uses the live signed list and ignores this folder.
 

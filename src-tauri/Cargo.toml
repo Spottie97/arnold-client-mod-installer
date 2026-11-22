@@ -1,6 +1,6 @@
 [package]
 name = "arnold-client-mods"
-version = "3.2.0"
+version = "3.3.0"
 description = "For the Arnold server · Minecraft 26.3"
 authors = ["Arnold Client Mods"]
 license = "Apache-2.0"

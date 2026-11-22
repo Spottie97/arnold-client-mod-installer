@@ -9,7 +9,7 @@ pub const TEST_PRIVATE_KEY_HEX: &str =
     "48ab0651056657627942de64e86d5435d7391e1ecd922679081c2fbadc376c98";
 pub const TEST_PUBLIC_KEY_HEX: &str =
     "b44547ef0ceb7e4bac652ab9b73b46b2ff3d86d27196a479b674be29e87fdbef";
-pub const DEFAULT_TAG: &str = "mods-2026.11.7";
+pub const DEFAULT_TAG: &str = "mods-2026.11.8";
 
 fn sha512_hex(data: &[u8]) -> String {
     hex::encode(Sha512::digest(data))

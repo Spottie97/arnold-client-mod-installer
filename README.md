@@ -23,7 +23,7 @@ The Arnold server runs Better Adventures+ 1.64, so every kit installs the Better
 | **Full** | Gaming PCs | Everything in Basic, plus the Better Adventures+ client mods (including Better Snow Coverage), shaders (Iris + Complementary Reimagined, Miniature), AppleSkin food info and the Ocean mods |
 | **Custom** | Tinkerers | Pick mods one by one. Arnold Decks and the mods needed to join always stay on |
 
-Full and Recommended also put the six Better Adventures+ resource packs in your `resourcepacks` folder. Turn them on in Minecraft under Options → Resource Packs. Installer 3.2.0 or newer is needed for this mod list.
+Full and Recommended also put the six Better Adventures+ resource packs in your `resourcepacks` folder. Turn them on in Minecraft under Options → Resource Packs. Installer 3.2.0 or newer is needed for the resource packs. Use 3.3.0 or newer so leftover Snowfall jars are cleaned up.
 
 Not sure? The installer scans your PC and recommends a kit.
 
