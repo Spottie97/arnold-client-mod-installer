@@ -1598,8 +1598,8 @@ mod tests {
 
         let ships = by_id("shippyships");
         assert_eq!(ships.name, "Shippy Ships");
-        // Modrinth labels this release 1.0.28.3. The jar filename still says 1.0.28.2.
-        assert_eq!(ships.version, "1.0.28.3");
+        // Label matches the jar filename (1.0.28.2), even though Modrinth calls the release 1.0.28.3.
+        assert_eq!(ships.version, "1.0.28.2");
         assert_eq!(ships.group, ComponentGroup::Arnold);
         assert!(ships.required_in_all_kits);
         assert_eq!(

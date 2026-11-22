@@ -17,6 +17,8 @@ First installer release after 3.2.0. Bundled mod list: manifest **2026.11.8** (`
   Waystones, Cultural Delights, Xaero's Minimap and World Map, Traveler's Backpack and Animal Feeding Trough.
   Shippy Ships and Ingenium API are also included as staging candidates. All of them come from the Modrinth CDN
   and are pinned by sha512.
+- **Shippy Ships label fixed:** it now shows 1.0.28.2, the same as the jar it installs. The jar and its hashes
+  have not changed.
 - **Better Adventures+ 1.64 stays as it was:** the server-side BA+ mods are locked in every kit, the BA+ client
   mods are in Full and Recommended, and the six BA+ resource packs go to `resourcepacks` (Full and Recommended).
 - **Diet+ 2.2.0** is in every kit. **AppleSkin 3.0.10** is in Full and Recommended.

@@ -530,7 +530,7 @@
       ],
       "requiredInAllKits": true,
       "name": "Shippy Ships",
-      "version": "1.0.28.3",
+      "version": "1.0.28.2",
       "description": "Buildable sailing ships by Caesius_Leo. The server runs it too, so every kit installs it. Fetched from Modrinth, never rehosted.",
       "license": "LicenseRef-Custom-License---Limited-Rights-Granted",
       "files": [
